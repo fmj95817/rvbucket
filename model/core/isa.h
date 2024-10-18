@@ -3,6 +3,7 @@
 
 #include "types.h"
 
+#pragma pack(1)
 typedef enum rv32i_opcode {
     OPCODE_LUI = 0b0110111,
     OPCODE_AUIPC = 0b0010111,
@@ -62,61 +63,67 @@ typedef enum rv32i_store_funct3 {
     STORE_FUNCT3_SW = 0b010
 } rv32i_store_funct3_t;
 
+typedef struct rv32i_inst_r {
+    u32 opcode : 7;
+    u32 rd : 5;
+    u32 funct3 : 3;
+    u32 rs1 : 5;
+    u32 rs2 : 5;
+    u32 funct7 : 7;
+} rv32i_inst_r_t;
+
+typedef struct rv32i_inst_i {
+    u32 opcode : 7;
+    u32 rd : 5;
+    u32 funct3 : 3;
+    u32 rs1 : 5;
+    u32 imm_11_0 : 12;
+} rv32i_inst_i_t;
+
+typedef struct rv32i_inst_s {
+    u32 opcode : 7;
+    u32 imm_4_0 : 5;
+    u32 funct3 : 3;
+    u32 rs1 : 5;
+    u32 rs2 : 5;
+    u32 imm_11_5 : 7;
+} rv32i_inst_s_t;
+
+typedef struct rv32i_inst_b {
+    u32 opcode : 7;
+    u32 imm_11 : 1;
+    u32 imm_4_1 : 4;
+    u32 funct3 : 3;
+    u32 rs1 : 5;
+    u32 rs2 : 5;
+    u32 imm_10_5 : 6;
+    u32 imm_12 : 1;
+} rv32i_inst_b_t;
+
+typedef struct rv32i_inst_u {
+    u32 opcode : 7;
+    u32 rd : 5;
+    u32 imm_31_12 : 20;
+} rv32i_inst_u_t;
+
+typedef struct rv32i_inst_j {
+    u32 opcode : 7;
+    u32 rd : 5;
+    u32 imm_19_12 : 8;
+    u32 imm_11 : 1;
+    u32 imm_10_1 : 10;
+    u32 imm_20 : 1;
+} rv32i_inst_j_t;
+
 typedef union rv32i_inst {
-    struct {
-        u32 opcode : 7;
-
-        union {
-            struct {
-                u32 rd : 5;
-                u32 funct3 : 3;
-                u32 rs1 : 5;
-                u32 rs2 : 5;
-                u32 funct7 : 7;
-            } r_type;
-
-            struct {
-                u32 rd : 5;
-                u32 funct3 : 3;
-                u32 rs1 : 5;
-                u32 imm_11_0 : 12;
-            } i_type;
-
-            struct {
-                u32 imm_4_0 : 5;
-                u32 funct3 : 3;
-                u32 rs1 : 5;
-                u32 rs2 : 5;
-                u32 imm_11_5 : 7;
-            } s_type;
-
-            struct {
-                u32 imm_11 : 1;
-                u32 imm_4_1 : 4;
-                u32 funct3 : 3;
-                u32 rs1 : 5;
-                u32 rs2 : 5;
-                u32 imm_10_5 : 6;
-                u32 imm_12 : 1;
-            } b_type;
-
-            struct {
-                u32 rd : 5;
-                u32 imm_31_12 : 20;
-            } u_type;
-
-            struct {
-                u32 rd : 5;
-                u32 imm_19_12 : 8;
-                u32 imm_11 : 1;
-                u32 imm_10_1 : 10;
-                u32 imm_20 : 1;
-            } j_type;
-        } args;
-
-    } encoding;
-
+    rv32i_inst_r_t r;
+    rv32i_inst_i_t i;
+    rv32i_inst_s_t s;
+    rv32i_inst_b_t b;
+    rv32i_inst_u_t u;
+    rv32i_inst_j_t j;
     u32 raw;
 } rv32i_inst_t;
+#pragma pack()
 
 #endif

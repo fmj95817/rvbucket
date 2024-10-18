@@ -37,9 +37,10 @@ bool rom_read(rom_t *rom, u32 addr, u32 *data)
 bus_rsp_t rom_bus_req_handler(rom_t *rom, u32 base_addr, const bus_req_t *req)
 {
     DBG_CHECK(req->addr >= base_addr);
-    u32 addr = req->addr - base_addr;
 
+    u32 addr = req->addr - base_addr;
     bus_rsp_t rsp;
+
     if (req->cmd == BUS_CMD_READ) {
         rsp.ok = rom_read(rom, addr, &rsp.data);
     } else {
