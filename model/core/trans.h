@@ -9,6 +9,7 @@ typedef struct ifu2exu_trans {
     struct {
         rv32i_inst_t inst;
         u32 pc;
+        bool is_boot_code;
     } req;
     struct {
         bool taken;

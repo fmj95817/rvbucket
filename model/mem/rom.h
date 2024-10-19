@@ -9,7 +9,7 @@ typedef struct rom {
     u8 *data;
 } rom_t;
 
-extern void rom_construct(rom_t *rom, u32 size);
+extern void rom_construct(rom_t *rom, u32 size, const void *data, u32 data_size);
 extern void rom_reset(rom_t *rom);
 extern void rom_free(rom_t *rom);
 

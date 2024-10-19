@@ -18,6 +18,5 @@ extern void exu_reset(exu_t *exu);
 extern void exu_free(exu_t *exu);
 
 extern void exu_exec(exu_t *exu, ifu2exu_trans_t *t);
-extern void exu_dump(exu_t *exu);
 
 #endif

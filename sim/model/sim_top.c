@@ -4,7 +4,7 @@
 #include <string.h>
 
 typedef struct program {
-    size_t size;
+    u32 size;
     void *code;
 } program_t;
 
@@ -14,7 +14,7 @@ static program_t read_program(const char *path)
 
     FILE *fp = fopen(path, "r");
     fseek(fp, 0L, SEEK_END);
-    program.size = ftell(fp);
+    program.size = (u32)ftell(fp);
     fseek(fp, 0L, SEEK_SET);
 
     program.code = malloc(program.size);
@@ -22,6 +22,14 @@ static program_t read_program(const char *path)
     fclose(fp);
 
     return program;
+}
+
+static void soc_burn_program(soc_t *soc, const char *path)
+{
+    program_t program = read_program(path);
+    rom_burn(&soc->flash, &program.size, 0, 4);
+    rom_burn(&soc->flash, program.code, 4, program.size);
+    free(program.code);
 }
 
 static void uart_output_show(uart_output_t *output, bool *end_sim)
@@ -57,11 +65,7 @@ int main(int argc, char *argv[])
 
     soc_t soc;
     soc_construct(&soc, &uart_output, &log_sys);
-
-    program_t program = read_program(argv[1]);
-    ram_load(&soc.tcm, program.code, 0, program.size);
-    free(program.code);
-
+    soc_burn_program(&soc, argv[1]);
     soc_reset(&soc);
 
     bool end_sim = false;

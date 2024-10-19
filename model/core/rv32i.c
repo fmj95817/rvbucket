@@ -3,13 +3,11 @@
 #include "exu.h"
 #include "dbg.h"
 
-void rv32i_construct(rv32i_t *s, bus_if_t *bus_if, u32 reset_pc, log_sys_t *log_sys)
+void rv32i_construct(rv32i_t *s, bus_if_t *bus_if, u32 reset_pc, log_sys_t *log_sys, u32 boot_rom_base, u32 boot_rom_size)
 {
-    ifu_construct(&s->ifu, &s->lsu, reset_pc);
+    ifu_construct(&s->ifu, &s->lsu, reset_pc, boot_rom_base, boot_rom_size);
     exu_construct(&s->exu, &s->lsu, log_sys);
     lsu_construct(&s->lsu, bus_if);
-
-    s->log_sys = log_sys;
 }
 
 void rv32i_reset(rv32i_t *s)
@@ -28,8 +26,6 @@ void rv32i_free(rv32i_t *s)
 
 void rv32i_exec(rv32i_t *s)
 {
-    exu_dump(&s->exu);
-
     ifu2exu_trans_t ifu2exu;
     ifu_exec(&s->ifu, &ifu2exu);
     exu_exec(&s->exu, &ifu2exu);

@@ -2,12 +2,33 @@
 
 set -e
 
+TC="/home/mfeng/opt/rv32i-tc/bin/riscv32-unknown-elf"
+CC="${TC}-gcc"
+OBJCOPY="${TC}-objcopy"
+OBJDUMP="${TC}-objdump"
+
+function build_bootloader {
+    local LD="${TC}-ld"
+
+    local BL="./sdk/bootloader"
+    local output_dir="build/sw/bootloader"
+    mkdir -p "${output_dir}"
+
+    local obj="${output_dir}/boot.o"
+    local elf="${output_dir}/boot.elf"
+    local bin="${output_dir}/boot.bin"
+    local dis="${output_dir}/boot.S"
+
+    ${CC} -march=rv32i -c -o "${obj}" "${BL}/boot.S"
+    ${LD} -T "${BL}/boot.lds" -o "${elf}" "${obj}"
+    ${OBJCOPY} -S "${elf}" -O binary "${bin}"
+    ${OBJDUMP} -D "${elf}" > "${dis}"
+    ./tools/bin2arr.py "${bin}" > model/boot.c
+}
+
 function build_sw_case {
-    local TC="/home/mfeng/opt/rv32i-tc/bin/riscv32-unknown-elf"
-    local CC="${TC}-gcc"
     local LD="${TC}-gcc"
-    local OBJCOPY="${TC}-objcopy"
-    local OBJDUMP="${TC}-objdump"
+
     local CRT="./sdk/crt"
     local COMPILE_OPTIONS=(-Wall -O2 -fPIC -march=rv32i -I./sdk)
 
@@ -59,6 +80,8 @@ if [ "${1}" = "rtl" ]; then
         ../../sim/rtl/sim_top.sv;
     cd ../..
 elif [ "${1}" = "model" ]; then
+    build_bootloader
+
     mkdir -p build/model
     gcc \
         -O3 \

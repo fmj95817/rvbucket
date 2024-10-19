@@ -26,4 +26,6 @@ typedef union { s64 s; u64 u; } i64;
 #define MiB (1024 * 1024)
 #define GiB (1024 * 1024 * 1024)
 
+#define ADDR_IN(addr, base, size) ((addr >= base) && (addr < (base + size)))
+
 #endif

@@ -754,6 +754,31 @@ DECL_GROUP_HANDLER(sys)
     }
 }
 
+static inline void print_split_line(FILE *fp, bool newline)
+{
+    DBG_FPRINT(fp, "------------------------------------------------------------------------------\n");
+    if (newline) {
+        DBG_FPRINT(fp, "\n");
+    }
+}
+
+static void exu_dump(exu_t *exu, u32 pc)
+{
+    FILE *trace = exu->log_sys->trace;
+
+    print_split_line(trace, false);
+    DBG_FPRINT(trace, "x0/zero  = %08x   x1/ra = %08x   x2/sp  = %08x   x3/gp  = %08x\n", exu->gpr[0], exu->gpr[1], exu->gpr[2], exu->gpr[3]);
+    DBG_FPRINT(trace, "x4/tp    = %08x   x5/t0 = %08x   x6/t1  = %08x   x7/t2  = %08x\n", exu->gpr[4], exu->gpr[5], exu->gpr[6], exu->gpr[7]);
+    DBG_FPRINT(trace, "x8/s0/fp = %08x   x9/s1 = %08x  x10/a0  = %08x  x11/a1  = %08x\n", exu->gpr[8], exu->gpr[9], exu->gpr[10], exu->gpr[11]);
+    DBG_FPRINT(trace, "x12/a2   = %08x  x13/a3 = %08x  x14/a4  = %08x  x15/a5  = %08x\n", exu->gpr[12], exu->gpr[13], exu->gpr[14], exu->gpr[15]);
+    DBG_FPRINT(trace, "x16/a6   = %08x  x17/a7 = %08x  x18/s2  = %08x  x19/s3  = %08x\n", exu->gpr[16], exu->gpr[17], exu->gpr[18], exu->gpr[19]);
+    DBG_FPRINT(trace, "x20/s4   = %08x  x21/s5 = %08x  x22/s6  = %08x  x23/s7  = %08x\n", exu->gpr[20], exu->gpr[21], exu->gpr[22], exu->gpr[23]);
+    DBG_FPRINT(trace, "x24/s8   = %08x  x25/s9 = %08x  x26/s10 = %08x  x27/s11 = %08x\n", exu->gpr[24], exu->gpr[25], exu->gpr[26], exu->gpr[27]);
+    DBG_FPRINT(trace, "x28/t3   = %08x  x29/t4 = %08x  x30/t5  = %08x  x31/t6  = %08x\n", exu->gpr[28], exu->gpr[29], exu->gpr[30], exu->gpr[31]);
+
+    DBG_FPRINT(trace, "pc = %08x\n", pc);
+}
+
 void exu_exec(exu_t *exu, ifu2exu_trans_t *t)
 {
     static inst_handler_t opcode_handlers[128] = {
@@ -770,7 +795,12 @@ void exu_exec(exu_t *exu, ifu2exu_trans_t *t)
         [OPCODE_SYSTEM] = GET_HANDLER(sys)
     };
 
-    DBG_FPRINT(exu->log_sys->trace, "pc = %08x\n", t->req.pc);
+    FILE *trace = exu->log_sys->trace;
+    if (t->req.is_boot_code) {
+        exu->log_sys->trace = NULL;
+    }
+
+    exu_dump(exu, t->req.pc);
 
     t->rsp.taken = false;
     t->rsp.abs_jump = false;
@@ -783,23 +813,8 @@ void exu_exec(exu_t *exu, ifu2exu_trans_t *t)
         DBG_CHECK(0);
     }
 
-    DBG_FPRINT(exu->log_sys->trace, "--------------------------"
-        "----------------------------------------------------\n\n");
-}
-
-void exu_dump(exu_t *exu)
-{
-    FILE *trace = exu->log_sys->trace;
-
-    DBG_FPRINT(trace, "------------------------------------------------------------------------------\n");
-    DBG_FPRINT(trace, "x0/zero  = %08x   x1/ra = %08x   x2/sp  = %08x   x3/gp  = %08x\n", exu->gpr[0], exu->gpr[1], exu->gpr[2], exu->gpr[3]);
-    DBG_FPRINT(trace, "x4/tp    = %08x   x5/t0 = %08x   x6/t1  = %08x   x7/t2  = %08x\n", exu->gpr[4], exu->gpr[5], exu->gpr[6], exu->gpr[7]);
-    DBG_FPRINT(trace, "x8/s0/fp = %08x   x9/s1 = %08x  x10/a0  = %08x  x11/a1  = %08x\n", exu->gpr[8], exu->gpr[9], exu->gpr[10], exu->gpr[11]);
-    DBG_FPRINT(trace, "x12/a2   = %08x  x13/a3 = %08x  x14/a4  = %08x  x15/a5  = %08x\n", exu->gpr[12], exu->gpr[13], exu->gpr[14], exu->gpr[15]);
-    DBG_FPRINT(trace, "x16/a6   = %08x  x17/a7 = %08x  x18/s2  = %08x  x19/s3  = %08x\n", exu->gpr[16], exu->gpr[17], exu->gpr[18], exu->gpr[19]);
-    DBG_FPRINT(trace, "x20/s4   = %08x  x21/s5 = %08x  x22/s6  = %08x  x23/s7  = %08x\n", exu->gpr[20], exu->gpr[21], exu->gpr[22], exu->gpr[23]);
-    DBG_FPRINT(trace, "x24/s8   = %08x  x25/s9 = %08x  x26/s10 = %08x  x27/s11 = %08x\n", exu->gpr[24], exu->gpr[25], exu->gpr[26], exu->gpr[27]);
-    DBG_FPRINT(trace, "x28/t3   = %08x  x29/t4 = %08x  x30/t5  = %08x  x31/t6  = %08x\n", exu->gpr[28], exu->gpr[29], exu->gpr[30], exu->gpr[31]);
+    print_split_line(exu->log_sys->trace, true);
+    exu->log_sys->trace = trace;
 }
 
 void exu_construct(exu_t *exu, lsu_t *lsu, log_sys_t *log_sys)

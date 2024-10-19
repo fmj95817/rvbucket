@@ -3,11 +3,16 @@
 #include <string.h>
 #include "dbg.h"
 
-void rom_construct(rom_t *rom, u32 size)
+void rom_construct(rom_t *rom, u32 size, const void *data, u32 data_size)
 {
     rom->size = size;
     rom->data = malloc(size + 3);
     DBG_CHECK(rom->data);
+
+    if (data != NULL) {
+        DBG_CHECK(data_size <= size);
+        memcpy(rom->data, data, data_size);
+    }
 }
 
 void rom_reset(rom_t *rom) {}

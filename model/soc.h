@@ -7,10 +7,12 @@
 #include "mem/rom.h"
 #include "io/uart.h"
 #include "dbg.h"
+
 typedef struct soc {
     rv32i_t cpu;
-    ram_t tcm;
+    rom_t boot_rom;
     rom_t flash;
+    ram_t tcm;
     uart_t uart;
     log_sys_t *log_sys;
 } soc_t;
