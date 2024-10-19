@@ -1,14 +1,22 @@
 #include "uart.h"
-#include <stdio.h>
 #include "dbg.h"
 
-void uart_construct(uart_t *uart) {}
-void uart_reset(uart_t *uart) {}
+void uart_construct(uart_t *uart, uart_output_t *output)
+{
+    uart->output = output;
+}
+
+void uart_reset(uart_t *uart)
+{
+    uart->output->valid = false;
+}
+
 void uart_free(uart_t *uart) {}
 
 static void uart_output(uart_t *uart)
 {
-    putchar(uart->ch);
+    uart->output->ch = uart->ch;
+    uart->output->valid = true;
 }
 
 bool uart_write(uart_t *uart, u32 addr, u32 data, u8 strobe)
@@ -37,9 +45,4 @@ bus_rsp_t uart_bus_req_handler(uart_t *uart, u32 base_addr, const bus_req_t *req
     }
 
     return rsp;
-}
-
-bool uart_end_sim(uart_t *uart)
-{
-    return uart->ch == 0x10;
 }

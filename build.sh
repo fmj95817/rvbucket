@@ -9,7 +9,7 @@ function build_sw_case {
     local OBJCOPY="${TC}-objcopy"
     local OBJDUMP="${TC}-objdump"
     local CRT="./sdk/crt"
-    local COMPILE_OPTIONS="-Wall -O2 -fPIC -march=rv32i -I./sdk"
+    local COMPILE_OPTIONS=(-Wall -O2 -fPIC -march=rv32i -I./sdk)
 
     local case_name="${1}"
     local case_dir="cases/${case_name}"
@@ -25,14 +25,14 @@ function build_sw_case {
     local srcs=("$(find ${case_dir} ${drivers_dir} -name *.c)")
     local objs=()
 
+    ${CC} ${COMPILE_OPTIONS[@]} -c -o "${output_dir}/start.o" "${CRT}/start.S"
+    objs+=("${output_dir}/start.o")
+
     for src in ${srcs[@]}; do
         local obj="${output_dir}/$(basename ${src} .c).o"
-        ${CC} ${COMPILE_OPTIONS} -c -o "${obj}" "${src}"
+        ${CC} ${COMPILE_OPTIONS[@]} -c -o "${obj}" "${src}"
         objs+=("${obj}")
     done
-
-    ${CC} ${COMPILE_OPTIONS} -c -o "${output_dir}/start.o" "${CRT}/start.S"
-    objs+=("${output_dir}/start.o")
 
     ${LD} -T "${CRT}/soc.lds" -nostartfiles -o "${elf}" "${objs[@]}"
     ${OBJCOPY} -S "${elf}" -O binary "${bin}"
@@ -61,6 +61,7 @@ if [ "${1}" = "rtl" ]; then
 elif [ "${1}" = "model" ]; then
     mkdir -p build/model
     gcc \
+        -O3 \
         -I./model \
         -o build/model/sim_top \
         $(find model -name *.c) \

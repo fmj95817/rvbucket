@@ -1,13 +1,13 @@
 #include "exu.h"
+#include "lsu.h"
 #include "dbg.h"
 
-#define DECL_INST_HANDLER(inst) static void \
-    inst##_handler(rv32i_t *s, const rv32i_inst_t *i, u32 *pc_offset)
+#define DECL_INST_HANDLER(inst) static void inst##_handler(exu_t *exu, ifu2exu_trans_t *t)
 #define DECL_GROUP_HANDLER(group) DECL_INST_HANDLER(group)
 #define GET_HANDLER(inst) (&inst##_handler)
-#define CALL_HANDLER(inst, s, i, o) inst##_handler(s, i, o)
+#define CALL_HANDLER(inst, exu, t) inst##_handler(exu, t)
 
-typedef void (*inst_handler_t)(rv32i_t *s, const rv32i_inst_t *i, u32 *pc_offset);
+typedef void (*inst_handler_t)(exu_t *exu, ifu2exu_trans_t *t);
 
 static inline u32 sign_ext(u32 data, u32 width)
 {
@@ -22,156 +22,210 @@ static inline u32 u_imm_decode(const rv32i_inst_t *i)
     return i->u.imm_31_12 << 12;
 }
 
-static inline u32 j_imm_decode(const rv32i_inst_t *i)
+static inline i32 j_imm_decode(const rv32i_inst_t *i)
 {
     u32 src = (i->j.imm_10_1 << 1) |
               (i->j.imm_11 << 11) |
               (i->j.imm_19_12 << 12) |
               (i->j.imm_20 << 20);
 
-    return sign_ext(src, 21);
+    i32 dst = { .u = sign_ext(src, 21) };
+    return dst;
 }
 
-static inline u32 i_imm_decode(const rv32i_inst_t *i)
+static inline i32 i_imm_decode(const rv32i_inst_t *i)
 {
-    return sign_ext(i->i.imm_11_0, 12);
+    i32 dst = { .u = sign_ext(i->i.imm_11_0, 12) };
+    return dst;
 }
 
-static inline u32 b_imm_decode(const rv32i_inst_t *i)
+static inline i32 b_imm_decode(const rv32i_inst_t *i)
 {
     u32 src = (i->b.imm_4_1 << 1) |
               (i->b.imm_10_5 << 5) |
               (i->b.imm_11 << 11) |
               (i->b.imm_12 << 12);
 
-    return sign_ext(src, 13);
+    i32 dst = { .u = sign_ext(src, 13) };
+    return dst;
 }
 
-static inline u32 s_imm_decode(const rv32i_inst_t *i)
+static inline i32 s_imm_decode(const rv32i_inst_t *i)
 {
     u32 src = (i->s.imm_4_0) |
               (i->s.imm_11_5 << 5);
 
-    return sign_ext(src, 12);
+    i32 dst = { .u = sign_ext(src, 12) };
+    return dst;
 }
 
-static inline u32 get_gpr(const rv32i_t *s, u32 i)
+static inline u32 get_gpr(const exu_t *exu, u32 i)
 {
-    return s->gpr[i];
+    return exu->gpr[i];
 }
 
-static inline void set_gpr(rv32i_t *s, u32 i, u32 val)
+static inline void set_gpr(exu_t *exu, u32 i, u32 val)
 {
     if (i > 0) {
-        s->gpr[i] = val;
+        exu->gpr[i] = val;
     }
+}
+
+static inline const char *gpr_name(u32 i)
+{
+    DBG_CHECK(i < 32);
+
+    static const char *names[] = {
+        "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
+        "s0/fp", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+        "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+        "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
+    };
+
+    return names[i];
 }
 
 DECL_INST_HANDLER(lui)
 {
-    u32 rd = i->u.rd;
-    u32 imm = u_imm_decode(i);
-    set_gpr(s, rd, imm);
+    u32 rd = t->req.inst.u.rd;
+    u32 imm = u_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, imm);
+
+    DBG_FPRINT(exu->log_sys->trace, "lui %s, 0x%08x\n", gpr_name(rd), imm);
 }
 
 DECL_INST_HANDLER(auipc)
 {
-    u32 rd = i->u.rd;
-    u32 imm = u_imm_decode(i);
-    set_gpr(s, rd, s->pc + imm);
+    u32 rd = t->req.inst.u.rd;
+    u32 imm = u_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, t->req.pc + imm);
+
+    DBG_FPRINT(exu->log_sys->trace, "auipc %s, 0x%08x\n", gpr_name(rd), imm);
 }
 
 DECL_INST_HANDLER(jal)
 {
-    u32 rd = i->j.rd;
-    u32 imm = j_imm_decode(i);
-    set_gpr(s, rd, s->pc + 4);
-    *pc_offset = imm;
+    u32 rd = t->req.inst.j.rd;
+    i32 imm = j_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, t->req.pc + 4);
+    t->rsp.taken = true;
+    t->rsp.pc_offset = imm.u;
+
+    DBG_FPRINT(exu->log_sys->trace, "jal %s, %d # 0x%08x\n",
+        gpr_name(rd), imm.s, t->req.pc + imm.u);
 }
 
 DECL_INST_HANDLER(jalr)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
 
-    set_gpr(s, rd, s->pc + 4);
-    s->pc = get_gpr(s, rs1) + imm;
-    *pc_offset = 0;
+    set_gpr(exu, rd, t->req.pc + 4);
+    t->rsp.taken = true;
+    t->rsp.abs_jump = true;
+    t->rsp.target_pc = get_gpr(exu, rs1) + imm.u;
+
+    DBG_FPRINT(exu->log_sys->trace, "jalr %s, %s, %d # 0x%08x\n",
+        gpr_name(rd), gpr_name(rs1), imm.s, t->rsp.target_pc);
 }
 
 DECL_INST_HANDLER(beq)
 {
-    u32 rs1 = i->b.rs1;
-    u32 rs2 = i->b.rs2;
-    u32 imm = b_imm_decode(i);
+    u32 rs1 = t->req.inst.b.rs1;
+    u32 rs2 = t->req.inst.b.rs2;
+    i32 imm = b_imm_decode(&t->req.inst);
 
-    if (get_gpr(s, rs1) == get_gpr(s, rs2)) {
-        *pc_offset = imm;
+    if (get_gpr(exu, rs1) == get_gpr(exu, rs2)) {
+        t->rsp.taken = true;
+        t->rsp.pc_offset = imm.u;
     }
+
+    DBG_FPRINT(exu->log_sys->trace, "beq %s, %s, %d # 0x%08x\n",
+        gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
 DECL_INST_HANDLER(bne)
 {
-    u32 rs1 = i->b.rs1;
-    u32 rs2 = i->b.rs2;
-    u32 imm = b_imm_decode(i);
+    u32 rs1 = t->req.inst.b.rs1;
+    u32 rs2 = t->req.inst.b.rs2;
+    i32 imm = b_imm_decode(&t->req.inst);
 
-    if (get_gpr(s, rs1) != get_gpr(s, rs2)) {
-        *pc_offset = imm;
+    if (get_gpr(exu, rs1) != get_gpr(exu, rs2)) {
+        t->rsp.taken = true;
+        t->rsp.pc_offset = imm.u;
     }
+
+    DBG_FPRINT(exu->log_sys->trace, "bne %s, %s, %d # 0x%08x\n",
+        gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
 DECL_INST_HANDLER(blt)
 {
-    u32 rs1 = i->b.rs1;
-    u32 rs2 = i->b.rs2;
-    u32 imm = b_imm_decode(i);
+    u32 rs1 = t->req.inst.b.rs1;
+    u32 rs2 = t->req.inst.b.rs2;
+    i32 imm = b_imm_decode(&t->req.inst);
 
-    union { s32 s; u32 u; } n1, n2;
-    n1.u = get_gpr(s, rs1);
-    n2.u = get_gpr(s, rs2);
+    i32 n1, n2;
+    n1.u = get_gpr(exu, rs1);
+    n2.u = get_gpr(exu, rs2);
 
     if (n1.s < n2.s) {
-        *pc_offset = imm;
+        t->rsp.taken = true;
+        t->rsp.pc_offset = imm.u;
     }
+
+    DBG_FPRINT(exu->log_sys->trace, "blt %s, %s, %d # 0x%08x\n",
+        gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
 DECL_INST_HANDLER(bge)
 {
-    u32 rs1 = i->b.rs1;
-    u32 rs2 = i->b.rs2;
-    u32 imm = b_imm_decode(i);
+    u32 rs1 = t->req.inst.b.rs1;
+    u32 rs2 = t->req.inst.b.rs2;
+    i32 imm = b_imm_decode(&t->req.inst);
 
-    union { s32 s; u32 u; } n1, n2;
-    n1.u = get_gpr(s, rs1);
-    n2.u = get_gpr(s, rs2);
+    i32 n1, n2;
+    n1.u = get_gpr(exu, rs1);
+    n2.u = get_gpr(exu, rs2);
 
     if (n1.s >= n2.s) {
-        *pc_offset = imm;
+        t->rsp.taken = true;
+        t->rsp.pc_offset = imm.u;
     }
+
+    DBG_FPRINT(exu->log_sys->trace, "bge %s, %s, %d # 0x%08x\n",
+        gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
 DECL_INST_HANDLER(bltu)
 {
-    u32 rs1 = i->b.rs1;
-    u32 rs2 = i->b.rs2;
-    u32 imm = b_imm_decode(i);
+    u32 rs1 = t->req.inst.b.rs1;
+    u32 rs2 = t->req.inst.b.rs2;
+    i32 imm = b_imm_decode(&t->req.inst);
 
-    if (get_gpr(s, rs1) < get_gpr(s, rs2)) {
-        *pc_offset = imm;
+    if (get_gpr(exu, rs1) < get_gpr(exu, rs2)) {
+        t->rsp.taken = true;
+        t->rsp.pc_offset = imm.u;
     }
+
+    DBG_FPRINT(exu->log_sys->trace, "bltu %s, %s, %d # 0x%08x\n",
+        gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
 DECL_INST_HANDLER(bgeu)
 {
-    u32 rs1 = i->b.rs1;
-    u32 rs2 = i->b.rs2;
-    u32 imm = b_imm_decode(i);
+    u32 rs1 = t->req.inst.b.rs1;
+    u32 rs2 = t->req.inst.b.rs2;
+    i32 imm = b_imm_decode(&t->req.inst);
 
-    if (get_gpr(s, rs1) >= get_gpr(s, rs2)) {
-        *pc_offset = imm;
+    if (get_gpr(exu, rs1) >= get_gpr(exu, rs2)) {
+        t->rsp.taken = true;
+        t->rsp.pc_offset = imm.u;
     }
+
+    DBG_FPRINT(exu->log_sys->trace, "bgeu %s, %s, %d # 0x%08x\n",
+        gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
 DECL_GROUP_HANDLER(branch)
@@ -185,9 +239,9 @@ DECL_GROUP_HANDLER(branch)
         [BRANCH_FUNCT3_BGEU] = GET_HANDLER(bgeu)
     };
 
-    inst_handler_t handler = branch_handlers[i->b.funct3];
+    inst_handler_t handler = branch_handlers[t->req.inst.b.funct3];
     if (handler) {
-        handler(s, i, pc_offset);
+        handler(exu, t);
     } else {
         DBG_CHECK(0);
     }
@@ -195,77 +249,96 @@ DECL_GROUP_HANDLER(branch)
 
 DECL_INST_HANDLER(lb)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
 
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_READ;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
-    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = get_gpr(s, rs1) + imm };
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    set_gpr(s, rd, sign_ext(rsp.data & 0xff, 8));
+    set_gpr(exu, rd, sign_ext(trans.rsp.data & 0xff, 8));
+
+    DBG_FPRINT(exu->log_sys->trace, "lb %s, %d(%s) # 0x%08x\n",
+        gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_INST_HANDLER(lh)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
 
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_READ;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
-    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = get_gpr(s, rs1) + imm };
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    set_gpr(s, rd, sign_ext(rsp.data & 0xffff, 16));
+    set_gpr(exu, rd, sign_ext(trans.rsp.data & 0xffff, 16));
+
+    DBG_FPRINT(exu->log_sys->trace, "lh %s, %d(%s) # 0x%08x\n",
+        gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_INST_HANDLER(lw)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
 
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_READ;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
-    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = get_gpr(s, rs1) + imm };
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    set_gpr(s, rd, rsp.data);
+    set_gpr(exu, rd, trans.rsp.data);
+
+    DBG_FPRINT(exu->log_sys->trace, "lw %s, %d(%s) # 0x%08x\n",
+        gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_INST_HANDLER(lbu)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
 
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_READ;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
-    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = get_gpr(s, rs1) + imm };
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    set_gpr(s, rd, rsp.data & 0xff);
+    set_gpr(exu, rd, trans.rsp.data & 0xff);
+
+    DBG_FPRINT(exu->log_sys->trace, "lbu %s, %d(%s) # 0x%08x\n",
+        gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_INST_HANDLER(lhu)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
 
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_READ;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = get_gpr(s, rs1) + imm };
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    set_gpr(exu, rd, trans.rsp.data & 0xffff);
 
-    set_gpr(s, rd, rsp.data & 0xffff);
+    DBG_FPRINT(exu->log_sys->trace, "lbu %s, %d(%s) # 0x%08x\n",
+        gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_GROUP_HANDLER(load)
@@ -278,9 +351,9 @@ DECL_GROUP_HANDLER(load)
         [LOAD_FUNCT3_LHU] = GET_HANDLER(lhu)
     };
 
-    inst_handler_t handler = load_handlers[i->i.funct3];
+    inst_handler_t handler = load_handlers[t->req.inst.i.funct3];
     if (handler) {
-        handler(s, i, pc_offset);
+        handler(exu, t);
     } else {
         DBG_CHECK(0);
     }
@@ -288,59 +361,59 @@ DECL_GROUP_HANDLER(load)
 
 DECL_INST_HANDLER(sb)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rs1 = t->req.inst.s.rs1;
+    u32 rs2 = t->req.inst.s.rs2;
+    i32 imm = s_imm_decode(&t->req.inst);
 
-    u32 rs1 = i->s.rs1;
-    u32 rs2 = i->s.rs2;
-    u32 imm = s_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_WRITE;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
+    trans.req.data = get_gpr(exu, rs2);
+    trans.req.strobe = 0b0001;
 
-    bus_req_t req = {
-        .cmd = BUS_CMD_WRITE,
-        .addr = get_gpr(s, rs1) + imm,
-        .data = get_gpr(s, rs2),
-        .strobe = 0b0001
-    };
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    DBG_FPRINT(exu->log_sys->trace, "sb %s, %d(%s) # 0x%08x\n",
+        gpr_name(rs2), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_INST_HANDLER(sh)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rs1 = t->req.inst.s.rs1;
+    u32 rs2 = t->req.inst.s.rs2;
+    i32 imm = s_imm_decode(&t->req.inst);
 
-    u32 rs1 = i->s.rs1;
-    u32 rs2 = i->s.rs2;
-    u32 imm = s_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_WRITE;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
+    trans.req.data = get_gpr(exu, rs2);
+    trans.req.strobe = 0b0011;
 
-    bus_req_t req = {
-        .cmd = BUS_CMD_WRITE,
-        .addr = get_gpr(s, rs1) + imm,
-        .data = get_gpr(s, rs2),
-        .strobe = 0b0011
-    };
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    DBG_FPRINT(exu->log_sys->trace, "sh %s, %d(%s) # 0x%08x\n",
+        gpr_name(rs2), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_INST_HANDLER(sw)
 {
-    DBG_CHECK(s->bus_if);
+    u32 rs1 = t->req.inst.s.rs1;
+    u32 rs2 = t->req.inst.s.rs2;
+    i32 imm = s_imm_decode(&t->req.inst);
 
-    u32 rs1 = i->s.rs1;
-    u32 rs2 = i->s.rs2;
-    u32 imm = s_imm_decode(i);
+    exu2lsu_trans_t trans;
+    trans.req.cmd = BUS_CMD_WRITE;
+    trans.req.addr = get_gpr(exu, rs1) + imm.u;
+    trans.req.data = get_gpr(exu, rs2);
+    trans.req.strobe = 0b1111;
 
-    bus_req_t req = {
-        .cmd = BUS_CMD_WRITE,
-        .addr = get_gpr(s, rs1) + imm,
-        .data = get_gpr(s, rs2),
-        .strobe = 0b1111
-    };
+    lsu_exu_trans_handler(exu->lsu, &trans);
+    DBG_CHECK(trans.rsp.ok);
 
-    bus_rsp_t rsp = s->bus_if->req_handler(s->bus_if->dev, &req);
-    DBG_CHECK(rsp.ok);
+    DBG_FPRINT(exu->log_sys->trace, "sw %s, %d(%s) # 0x%08x\n",
+        gpr_name(rs2), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
 DECL_GROUP_HANDLER(store)
@@ -351,9 +424,9 @@ DECL_GROUP_HANDLER(store)
         [STORE_FUNCT3_SW] = GET_HANDLER(sw)
     };
 
-    inst_handler_t handler = store_handlers[i->s.funct3];
+    inst_handler_t handler = store_handlers[t->req.inst.s.funct3];
     if (handler) {
-        handler(s, i, pc_offset);
+        handler(exu, t);
     } else {
         DBG_CHECK(0);
     }
@@ -361,92 +434,119 @@ DECL_GROUP_HANDLER(store)
 
 DECL_INST_HANDLER(addi)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
-    set_gpr(s, rd, get_gpr(s, rs1) + imm);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, get_gpr(exu, rs1) + imm.u);
+
+    DBG_FPRINT(exu->log_sys->trace, "addi %s, %s, %d\n",
+        gpr_name(rd), gpr_name(rs1), imm.s);
 }
 
 DECL_INST_HANDLER(slti)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
 
-    union { s32 s; u32 u; } n1, n2;
-    n1.u = get_gpr(s, rs1);
-    n2.u = imm;
+    i32 n1, n2;
+    n1.u = get_gpr(exu, rs1);
+    n2.u = imm.u;
 
-    set_gpr(s, rd, n1.s < n2.s ? 1 : 0);
+    set_gpr(exu, rd, n1.s < n2.s ? 1 : 0);
+
+    DBG_FPRINT(exu->log_sys->trace, "slti %s, %s, %d\n",
+        gpr_name(rd), gpr_name(rs1), imm.s);
 }
 
 DECL_INST_HANDLER(sltiu)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
-    set_gpr(s, rd, get_gpr(s, rs1) < imm ? 1 : 0);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, get_gpr(exu, rs1) < imm.u ? 1 : 0);
+
+    DBG_FPRINT(exu->log_sys->trace, "sltiu %s, %s, 0x%08x\n",
+        gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
 DECL_INST_HANDLER(xori)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
-    set_gpr(s, rd, get_gpr(s, rs1) ^ imm);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, get_gpr(exu, rs1) ^ imm.u);
+
+    DBG_FPRINT(exu->log_sys->trace, "xori %s, %s, 0x%08x\n",
+        gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
 DECL_INST_HANDLER(ori)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
-    set_gpr(s, rd, get_gpr(s, rs1) | imm);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, get_gpr(exu, rs1) | imm.u);
+
+    DBG_FPRINT(exu->log_sys->trace, "ori %s, %s, 0x%08x\n",
+        gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
 DECL_INST_HANDLER(andi)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i);
-    set_gpr(s, rd, get_gpr(s, rs1) & imm);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    i32 imm = i_imm_decode(&t->req.inst);
+    set_gpr(exu, rd, get_gpr(exu, rs1) & imm.u);
+
+    DBG_FPRINT(exu->log_sys->trace, "andi %s, %s, 0x%08x\n",
+        gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
 DECL_INST_HANDLER(slli)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i) & 0b11111;
-    set_gpr(s, rd, get_gpr(s, rs1) << imm);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    u32 imm = i_imm_decode(&t->req.inst).u & 0b11111;
+    set_gpr(exu, rd, get_gpr(exu, rs1) << imm);
+
+    DBG_FPRINT(exu->log_sys->trace, "slli %s, %s, %u\n",
+        gpr_name(rd), gpr_name(rs1), imm);
 }
 
 DECL_INST_HANDLER(srli)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i) & 0b11111;
-    set_gpr(s, rd, get_gpr(s, rs1) >> imm);
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    u32 imm = i_imm_decode(&t->req.inst).u & 0b11111;
+    set_gpr(exu, rd, get_gpr(exu, rs1) >> imm);
+
+    DBG_FPRINT(exu->log_sys->trace, "srli %s, %s, %u\n",
+        gpr_name(rd), gpr_name(rs1), imm);
 }
 
 DECL_INST_HANDLER(srai)
 {
-    u32 rd = i->i.rd;
-    u32 rs1 = i->i.rs1;
-    u32 imm = i_imm_decode(i) & 0b11111;
+    u32 rd = t->req.inst.i.rd;
+    u32 rs1 = t->req.inst.i.rs1;
+    u32 imm = i_imm_decode(&t->req.inst).u & 0b11111;
 
-    union { s32 s; u32 u; } ns, nd;
-    ns.u = get_gpr(s, rs1);
+    i32 ns, nd;
+    ns.u = get_gpr(exu, rs1);
     nd.s = ns.s >> imm;
 
-    set_gpr(s, rd, nd.u);
+    set_gpr(exu, rd, nd.u);
+
+    DBG_FPRINT(exu->log_sys->trace, "srai %s, %s, %u\n",
+        gpr_name(rd), gpr_name(rs1), imm);
 }
 
 DECL_GROUP_HANDLER(sri)
 {
-    if (i->i.imm_11_0 & 0b10000000000) {
-        CALL_HANDLER(srai, s, i, pc_offset);
+    if (t->req.inst.i.imm_11_0 & 0b10000000000) {
+        CALL_HANDLER(srai, exu, t);
     } else {
-        CALL_HANDLER(srli, s, i, pc_offset);
+        CALL_HANDLER(srli, exu, t);
     }
 }
 
@@ -463,123 +563,153 @@ DECL_GROUP_HANDLER(alu_imm)
         [ALU_IMM_FUNCT3_SRI] = GET_HANDLER(sri)
     };
 
-    alu_imm_handlers[i->i.funct3](s, i, pc_offset);
+    alu_imm_handlers[t->req.inst.i.funct3](exu, t);
 }
 
 DECL_INST_HANDLER(add)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
-    set_gpr(s, rd, get_gpr(s, rs1) + get_gpr(s, rs2));
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
+    set_gpr(exu, rd, get_gpr(exu, rs1) + get_gpr(exu, rs2));
+
+    DBG_FPRINT(exu->log_sys->trace, "add %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_INST_HANDLER(sub)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
-    set_gpr(s, rd, get_gpr(s, rs1) - get_gpr(s, rs2));
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
+    set_gpr(exu, rd, get_gpr(exu, rs1) - get_gpr(exu, rs2));
+
+    DBG_FPRINT(exu->log_sys->trace, "sub %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_GROUP_HANDLER(add_sub)
 {
-    if (i->r.funct7 & 0b100000) {
-        CALL_HANDLER(sub, s, i, pc_offset);
+    if (t->req.inst.r.funct7 & 0b100000) {
+        CALL_HANDLER(sub, exu, t);
     } else {
-        CALL_HANDLER(add, s, i, pc_offset);
+        CALL_HANDLER(add, exu, t);
     }
 }
 
 DECL_INST_HANDLER(sll)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
 
-    u32 s1 = get_gpr(s, rs1);
-    u32 s2 = get_gpr(s, rs2) & 0b11111;
-    set_gpr(s, rd, s1 << s2);
+    u32 s1 = get_gpr(exu, rs1);
+    u32 s2 = get_gpr(exu, rs2) & 0b11111;
+    set_gpr(exu, rd, s1 << s2);
+
+    DBG_FPRINT(exu->log_sys->trace, "sll %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_INST_HANDLER(slt)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
 
-    union { s32 s; u32 u; } s1, s2;
-    s1.u = get_gpr(s, rs1);
-    s2.u = get_gpr(s, rs2);
+    i32 s1, s2;
+    s1.u = get_gpr(exu, rs1);
+    s2.u = get_gpr(exu, rs2);
 
-    set_gpr(s, rd, s1.s < s2.s ? 1 : 0);
+    set_gpr(exu, rd, s1.s < s2.s ? 1 : 0);
+
+    DBG_FPRINT(exu->log_sys->trace, "slt %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_INST_HANDLER(sltu)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
-    set_gpr(s, rd, get_gpr(s, rs1) < get_gpr(s, rs2) ? 1 : 0);
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
+    set_gpr(exu, rd, get_gpr(exu, rs1) < get_gpr(exu, rs2) ? 1 : 0);
+
+    DBG_FPRINT(exu->log_sys->trace, "sltu %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_INST_HANDLER(xor)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
-    set_gpr(s, rd, get_gpr(s, rs1) ^ get_gpr(s, rs2));
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
+    set_gpr(exu, rd, get_gpr(exu, rs1) ^ get_gpr(exu, rs2));
+
+    DBG_FPRINT(exu->log_sys->trace, "xor %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_INST_HANDLER(srl)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
 
-    u32 s1 = get_gpr(s, rs1);
-    u32 s2 = get_gpr(s, rs2) & 0b11111;
-    set_gpr(s, rd, s1 >> s2);
+    u32 s1 = get_gpr(exu, rs1);
+    u32 s2 = get_gpr(exu, rs2) & 0b11111;
+    set_gpr(exu, rd, s1 >> s2);
+
+    DBG_FPRINT(exu->log_sys->trace, "srl %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_INST_HANDLER(sra)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
 
-    u32 s2 = get_gpr(s, rs2) & 0b11111;
+    u32 s2 = get_gpr(exu, rs2) & 0b11111;
 
-    union { s32 s; u32 u; } s1, d;
-    s1.u = get_gpr(s, rs1);
+    i32 s1, d;
+    s1.u = get_gpr(exu, rs1);
     d.s = s1.s >> s2;
 
-    set_gpr(s, rd, d.u);
+    set_gpr(exu, rd, d.u);
+
+    DBG_FPRINT(exu->log_sys->trace, "sra %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_GROUP_HANDLER(sr)
 {
-    if (i->r.funct7 & 0b100000) {
-        CALL_HANDLER(sra, s, i, pc_offset);
+    if (t->req.inst.r.funct7 & 0b100000) {
+        CALL_HANDLER(sra, exu, t);
     } else {
-        CALL_HANDLER(srl, s, i, pc_offset);
+        CALL_HANDLER(srl, exu, t);
     }
 }
 
 DECL_INST_HANDLER(or)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
-    set_gpr(s, rd, get_gpr(s, rs1) | get_gpr(s, rs2));
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
+    set_gpr(exu, rd, get_gpr(exu, rs1) | get_gpr(exu, rs2));
+
+    DBG_FPRINT(exu->log_sys->trace, "or %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_INST_HANDLER(and)
 {
-    u32 rd = i->r.rd;
-    u32 rs1 = i->r.rs1;
-    u32 rs2 = i->r.rs2;
-    set_gpr(s, rd, get_gpr(s, rs1) & get_gpr(s, rs2));
+    u32 rd = t->req.inst.r.rd;
+    u32 rs1 = t->req.inst.r.rs1;
+    u32 rs2 = t->req.inst.r.rs2;
+    set_gpr(exu, rd, get_gpr(exu, rs1) & get_gpr(exu, rs2));
+
+    DBG_FPRINT(exu->log_sys->trace, "and %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
 DECL_GROUP_HANDLER(alu)
@@ -595,36 +725,36 @@ DECL_GROUP_HANDLER(alu)
         [ALU_FUNCT3_AND] = GET_HANDLER(and)
     };
 
-    alu_handlers[i->i.funct3](s, i, pc_offset);
+    alu_handlers[t->req.inst.i.funct3](exu, t);
 }
 
 DECL_INST_HANDLER(fence)
 {
-
+    DBG_FPRINT(exu->log_sys->trace, "fence\n");
 }
 
 DECL_INST_HANDLER(ecall)
 {
-
+    DBG_FPRINT(exu->log_sys->trace, "ecall\n");
 }
 
 DECL_INST_HANDLER(ebreak)
 {
-
+    DBG_FPRINT(exu->log_sys->trace, "ebreak\n");
 }
 
 DECL_GROUP_HANDLER(sys)
 {
-    if (i->i.imm_11_0 == 0b000000000000) {
-        CALL_HANDLER(ecall, s, i, pc_offset);
-    } else if (i->i.imm_11_0 == 0b000000000001) {
-        CALL_HANDLER(ebreak, s, i, pc_offset);
+    if (t->req.inst.i.imm_11_0 == 0b000000000000) {
+        CALL_HANDLER(ecall, exu, t);
+    } else if (t->req.inst.i.imm_11_0 == 0b000000000001) {
+        CALL_HANDLER(ebreak, exu, t);
     } else {
         DBG_CHECK(0);
     }
 }
 
-void inst_handler(rv32i_t *s, const rv32i_inst_t *i, u32 *pc_offset)
+void exu_exec(exu_t *exu, ifu2exu_trans_t *t)
 {
     static inst_handler_t opcode_handlers[128] = {
         [OPCODE_LUI] = GET_HANDLER(lui),
@@ -640,11 +770,50 @@ void inst_handler(rv32i_t *s, const rv32i_inst_t *i, u32 *pc_offset)
         [OPCODE_SYSTEM] = GET_HANDLER(sys)
     };
 
-    u32 opcode = i->raw & 0b1111111;
+    DBG_FPRINT(exu->log_sys->trace, "pc = %08x\n", t->req.pc);
+
+    t->rsp.taken = false;
+    t->rsp.abs_jump = false;
+
+    u32 opcode = t->req.inst.raw & 0b1111111;
     inst_handler_t handler = opcode_handlers[opcode];
     if (handler) {
-        handler(s, i, pc_offset);
+        handler(exu, t);
     } else {
         DBG_CHECK(0);
     }
+
+    DBG_FPRINT(exu->log_sys->trace, "--------------------------"
+        "----------------------------------------------------\n\n");
 }
+
+void exu_dump(exu_t *exu)
+{
+    FILE *trace = exu->log_sys->trace;
+
+    DBG_FPRINT(trace, "------------------------------------------------------------------------------\n");
+    DBG_FPRINT(trace, "x0/zero  = %08x   x1/ra = %08x   x2/sp  = %08x   x3/gp  = %08x\n", exu->gpr[0], exu->gpr[1], exu->gpr[2], exu->gpr[3]);
+    DBG_FPRINT(trace, "x4/tp    = %08x   x5/t0 = %08x   x6/t1  = %08x   x7/t2  = %08x\n", exu->gpr[4], exu->gpr[5], exu->gpr[6], exu->gpr[7]);
+    DBG_FPRINT(trace, "x8/s0/fp = %08x   x9/s1 = %08x  x10/a0  = %08x  x11/a1  = %08x\n", exu->gpr[8], exu->gpr[9], exu->gpr[10], exu->gpr[11]);
+    DBG_FPRINT(trace, "x12/a2   = %08x  x13/a3 = %08x  x14/a4  = %08x  x15/a5  = %08x\n", exu->gpr[12], exu->gpr[13], exu->gpr[14], exu->gpr[15]);
+    DBG_FPRINT(trace, "x16/a6   = %08x  x17/a7 = %08x  x18/s2  = %08x  x19/s3  = %08x\n", exu->gpr[16], exu->gpr[17], exu->gpr[18], exu->gpr[19]);
+    DBG_FPRINT(trace, "x20/s4   = %08x  x21/s5 = %08x  x22/s6  = %08x  x23/s7  = %08x\n", exu->gpr[20], exu->gpr[21], exu->gpr[22], exu->gpr[23]);
+    DBG_FPRINT(trace, "x24/s8   = %08x  x25/s9 = %08x  x26/s10 = %08x  x27/s11 = %08x\n", exu->gpr[24], exu->gpr[25], exu->gpr[26], exu->gpr[27]);
+    DBG_FPRINT(trace, "x28/t3   = %08x  x29/t4 = %08x  x30/t5  = %08x  x31/t6  = %08x\n", exu->gpr[28], exu->gpr[29], exu->gpr[30], exu->gpr[31]);
+}
+
+void exu_construct(exu_t *exu, lsu_t *lsu, log_sys_t *log_sys)
+{
+    exu->lsu = lsu;
+    exu->log_sys = log_sys;
+}
+
+void exu_reset(exu_t *exu)
+{
+    exu->gpr[0] = 0;
+    for (int i = 1; i < 32; i++) {
+        exu->gpr[i] = (u32)rand();
+    }
+}
+
+void exu_free(exu_t *exu) {}

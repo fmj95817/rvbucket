@@ -29,16 +29,18 @@ static bus_rsp_t soc_bus_req_handler(void *dev, const bus_req_t *req)
     }
 }
 
-void soc_construct(soc_t *soc)
+void soc_construct(soc_t *soc, uart_output_t *uart_output, log_sys_t *log_sys)
 {
     bus_if_t *soc_bus_if = malloc(sizeof(bus_if_t));
     soc_bus_if->req_handler = &soc_bus_req_handler;
     soc_bus_if->dev = soc;
 
-    rv32i_construct(&soc->cpu, soc_bus_if, TCM_BASE_ADDR);
+    rv32i_construct(&soc->cpu, soc_bus_if, TCM_BASE_ADDR, log_sys);
     ram_construct(&soc->tcm, TCM_SIZE);
     rom_construct(&soc->flash, FLASH_SIZE);
-    uart_construct(&soc->uart);
+    uart_construct(&soc->uart, uart_output);
+
+    soc->log_sys = log_sys;
 }
 
 void soc_reset(soc_t *soc)
@@ -55,6 +57,4 @@ void soc_free(soc_t *soc)
     rom_free(&soc->flash);
     ram_free(&soc->tcm);
     uart_free(&soc->uart);
-
-    free(soc->cpu.bus_if);
 }

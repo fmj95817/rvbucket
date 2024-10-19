@@ -1,6 +1,7 @@
 #include "soc.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct program {
     size_t size;
@@ -9,21 +10,36 @@ typedef struct program {
 
 static program_t read_program(const char *path)
 {
+    program_t program;
+
     FILE *fp = fopen(path, "r");
     fseek(fp, 0L, SEEK_END);
-    size_t size = ftell(fp);
+    program.size = ftell(fp);
     fseek(fp, 0L, SEEK_SET);
 
-    void *code = malloc(size);
-    fread(code, 1, size, fp);
+    program.code = malloc(program.size);
+    fread(program.code, 1, program.size, fp);
     fclose(fp);
 
-    program_t program = {
-        .size = size,
-        .code = code
-    };
-
     return program;
+}
+
+static void uart_output_show(uart_output_t *output, bool *end_sim)
+{
+    if (output->valid) {
+        output->valid = false;
+        if (output->ch != 0x10) {
+            putchar(output->ch);
+        } else {
+            *end_sim = true;
+        }
+    }
+}
+
+static inline bool get_bool_env(const char *key)
+{
+    const char *val = getenv(key);
+    return (val != NULL && strcmp(val, "1") == 0);
 }
 
 int main(int argc, char *argv[])
@@ -32,18 +48,31 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    program_t program = read_program(argv[1]);
+    uart_output_t uart_output = { .valid = false };
+    log_sys_t log_sys = { .trace = NULL };
+
+    if (get_bool_env("GEN_TRACE")) {
+        log_sys.trace = fopen("trace.txt", "w");
+    }
 
     soc_t soc;
-    soc_construct(&soc);
+    soc_construct(&soc, &uart_output, &log_sys);
 
+    program_t program = read_program(argv[1]);
     ram_load(&soc.tcm, program.code, 0, program.size);
     free(program.code);
 
     soc_reset(&soc);
 
-    while (!uart_end_sim(&soc.uart)) {
+    bool end_sim = false;
+    while (!end_sim) {
         rv32i_exec(&soc.cpu);
+        uart_output_show(&uart_output, &end_sim);
+    }
+
+    if (log_sys.trace != NULL) {
+        fclose(log_sys.trace);
+        log_sys.trace = NULL;
     }
 
     soc_free(&soc);
