@@ -14,10 +14,9 @@ typedef struct soc {
     rom_t flash;
     ram_t tcm;
     uart_t uart;
-    log_sys_t *log_sys;
 } soc_t;
 
-extern void soc_construct(soc_t *soc, uart_output_t *uart_output, log_sys_t *log_sys);
+extern void soc_construct(soc_t *soc, uart_output_t *uart_output);
 extern void soc_reset(soc_t *soc);
 extern void soc_free(soc_t *soc);
 

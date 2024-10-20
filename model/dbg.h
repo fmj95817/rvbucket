@@ -1,22 +1,28 @@
 #ifndef DBG_H
 #define DBG_H
 
-#include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include "types.h"
 
 #define DBG_CHECK(expr) assert(expr)
+typedef enum log_module {
+    LOG_PRINT = 0,
+    LOG_TRACE = 1,
+    LOG_MOD_COUNT = LOG_TRACE + 1
+} log_module_t;
 
-#define DBG_PRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
-#define DBG_FPRINT(fp, fmt, ...) \
+extern FILE *dbg_get_log_module_fp(log_module_t mod);
+extern void dbg_disable_log_module(log_module_t mod);
+extern void dbg_enable_log_module(log_module_t mod);
+
+#define DBG_LOG(mod, fmt, ...) \
 do { \
+    FILE *fp = dbg_get_log_module_fp(mod); \
     if (fp != NULL) { \
         fprintf(fp, fmt, ##__VA_ARGS__); \
+        fflush(fp); \
     } \
 } while (0)
-
-typedef struct log_sys {
-    FILE *trace;
-} log_sys_t;
 
 #endif

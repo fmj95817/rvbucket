@@ -1,7 +1,6 @@
 #include "soc.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 typedef struct program {
     u32 size;
@@ -44,11 +43,6 @@ static void uart_output_show(uart_output_t *output, bool *end_sim)
     }
 }
 
-static inline bool get_bool_env(const char *key)
-{
-    const char *val = getenv(key);
-    return (val != NULL && strcmp(val, "1") == 0);
-}
 
 int main(int argc, char *argv[])
 {
@@ -57,14 +51,9 @@ int main(int argc, char *argv[])
     }
 
     uart_output_t uart_output = { .valid = false };
-    log_sys_t log_sys = { .trace = NULL };
-
-    if (get_bool_env("GEN_TRACE")) {
-        log_sys.trace = fopen("trace.txt", "w");
-    }
 
     soc_t soc;
-    soc_construct(&soc, &uart_output, &log_sys);
+    soc_construct(&soc, &uart_output);
     soc_burn_program(&soc, argv[1]);
     soc_reset(&soc);
 
@@ -72,11 +61,6 @@ int main(int argc, char *argv[])
     while (!end_sim) {
         rv32i_exec(&soc.cpu);
         uart_output_show(&uart_output, &end_sim);
-    }
-
-    if (log_sys.trace != NULL) {
-        fclose(log_sys.trace);
-        log_sys.trace = NULL;
     }
 
     soc_free(&soc);

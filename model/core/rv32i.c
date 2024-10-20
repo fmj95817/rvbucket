@@ -3,10 +3,10 @@
 #include "exu.h"
 #include "dbg.h"
 
-void rv32i_construct(rv32i_t *s, bus_if_t *bus_if, u32 reset_pc, log_sys_t *log_sys, u32 boot_rom_base, u32 boot_rom_size)
+void rv32i_construct(rv32i_t *s, bus_if_t *bus_if, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
 {
     ifu_construct(&s->ifu, &s->lsu, reset_pc, boot_rom_base, boot_rom_size);
-    exu_construct(&s->exu, &s->lsu, log_sys);
+    exu_construct(&s->exu, &s->lsu);
     lsu_construct(&s->lsu, bus_if);
 }
 

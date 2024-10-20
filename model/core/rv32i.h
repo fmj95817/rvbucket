@@ -13,7 +13,7 @@ typedef struct rv32i {
     lsu_t lsu;
 } rv32i_t;
 
-extern void rv32i_construct(rv32i_t *s, bus_if_t *bus_if, u32 reset_pc, log_sys_t *log_sys, u32 boot_rom_base, u32 boot_rom_size);
+extern void rv32i_construct(rv32i_t *s, bus_if_t *bus_if, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
 extern void rv32i_reset(rv32i_t *s);
 extern void rv32i_free(rv32i_t *s);
 

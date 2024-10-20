@@ -10,10 +10,9 @@
 typedef struct exu {
     lsu_t *lsu;
     u32 gpr[32];
-    log_sys_t *log_sys;
 } exu_t;
 
-extern void exu_construct(exu_t *exu, lsu_t *lsu, log_sys_t *log_sys);
+extern void exu_construct(exu_t *exu, lsu_t *lsu);
 extern void exu_reset(exu_t *exu);
 extern void exu_free(exu_t *exu);
 

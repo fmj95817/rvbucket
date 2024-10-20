@@ -8,7 +8,7 @@
 #define UART_SIZE           4
 
 #define BOOT_ROM_BASE_ADDR  0x40000000
-#define BOOT_ROM_SIZE       (16 * KiB)
+#define BOOT_ROM_SIZE       (1 * KiB)
 
 #define FLASH_BASE_ADDR     0x80000000
 #define FLASH_SIZE          (1 * MiB)
@@ -31,7 +31,7 @@ static bus_rsp_t soc_bus_req_handler(void *dev, const bus_req_t *req)
     }
 }
 
-void soc_construct(soc_t *soc, uart_output_t *uart_output, log_sys_t *log_sys)
+void soc_construct(soc_t *soc, uart_output_t *uart_output)
 {
     bus_if_t *soc_bus_if = malloc(sizeof(bus_if_t));
     soc_bus_if->req_handler = &soc_bus_req_handler;
@@ -40,13 +40,11 @@ void soc_construct(soc_t *soc, uart_output_t *uart_output, log_sys_t *log_sys)
     extern u32 g_boot_code_size;
     extern u8 g_boot_code[];
 
-    rv32i_construct(&soc->cpu, soc_bus_if, BOOT_ROM_BASE_ADDR, log_sys, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
+    rv32i_construct(&soc->cpu, soc_bus_if, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
     ram_construct(&soc->tcm, TCM_SIZE);
     rom_construct(&soc->flash, FLASH_SIZE, NULL, 0);
     rom_construct(&soc->boot_rom, BOOT_ROM_SIZE, g_boot_code, g_boot_code_size);
     uart_construct(&soc->uart, uart_output);
-
-    soc->log_sys = log_sys;
 }
 
 void soc_reset(soc_t *soc)

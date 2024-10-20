@@ -91,7 +91,7 @@ DECL_INST_HANDLER(lui)
     u32 imm = u_imm_decode(&t->req.inst);
     set_gpr(exu, rd, imm);
 
-    DBG_FPRINT(exu->log_sys->trace, "lui %s, 0x%08x\n", gpr_name(rd), imm);
+    DBG_LOG(LOG_TRACE, "lui %s, 0x%08x\n", gpr_name(rd), imm);
 }
 
 DECL_INST_HANDLER(auipc)
@@ -100,7 +100,7 @@ DECL_INST_HANDLER(auipc)
     u32 imm = u_imm_decode(&t->req.inst);
     set_gpr(exu, rd, t->req.pc + imm);
 
-    DBG_FPRINT(exu->log_sys->trace, "auipc %s, 0x%08x\n", gpr_name(rd), imm);
+    DBG_LOG(LOG_TRACE, "auipc %s, 0x%08x\n", gpr_name(rd), imm);
 }
 
 DECL_INST_HANDLER(jal)
@@ -111,7 +111,7 @@ DECL_INST_HANDLER(jal)
     t->rsp.taken = true;
     t->rsp.pc_offset = imm.u;
 
-    DBG_FPRINT(exu->log_sys->trace, "jal %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "jal %s, %d # 0x%08x\n",
         gpr_name(rd), imm.s, t->req.pc + imm.u);
 }
 
@@ -126,7 +126,7 @@ DECL_INST_HANDLER(jalr)
     t->rsp.abs_jump = true;
     t->rsp.target_pc = get_gpr(exu, rs1) + imm.u;
 
-    DBG_FPRINT(exu->log_sys->trace, "jalr %s, %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "jalr %s, %s, %d # 0x%08x\n",
         gpr_name(rd), gpr_name(rs1), imm.s, t->rsp.target_pc);
 }
 
@@ -141,7 +141,7 @@ DECL_INST_HANDLER(beq)
         t->rsp.pc_offset = imm.u;
     }
 
-    DBG_FPRINT(exu->log_sys->trace, "beq %s, %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "beq %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
@@ -156,7 +156,7 @@ DECL_INST_HANDLER(bne)
         t->rsp.pc_offset = imm.u;
     }
 
-    DBG_FPRINT(exu->log_sys->trace, "bne %s, %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "bne %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
@@ -175,7 +175,7 @@ DECL_INST_HANDLER(blt)
         t->rsp.pc_offset = imm.u;
     }
 
-    DBG_FPRINT(exu->log_sys->trace, "blt %s, %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "blt %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
@@ -194,7 +194,7 @@ DECL_INST_HANDLER(bge)
         t->rsp.pc_offset = imm.u;
     }
 
-    DBG_FPRINT(exu->log_sys->trace, "bge %s, %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "bge %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
@@ -209,7 +209,7 @@ DECL_INST_HANDLER(bltu)
         t->rsp.pc_offset = imm.u;
     }
 
-    DBG_FPRINT(exu->log_sys->trace, "bltu %s, %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "bltu %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
@@ -224,7 +224,7 @@ DECL_INST_HANDLER(bgeu)
         t->rsp.pc_offset = imm.u;
     }
 
-    DBG_FPRINT(exu->log_sys->trace, "bgeu %s, %s, %d # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "bgeu %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, t->req.pc + imm.u);
 }
 
@@ -262,7 +262,7 @@ DECL_INST_HANDLER(lb)
 
     set_gpr(exu, rd, sign_ext(trans.rsp.data & 0xff, 8));
 
-    DBG_FPRINT(exu->log_sys->trace, "lb %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "lb %s, %d(%s) # 0x%08x\n",
         gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -281,7 +281,7 @@ DECL_INST_HANDLER(lh)
 
     set_gpr(exu, rd, sign_ext(trans.rsp.data & 0xffff, 16));
 
-    DBG_FPRINT(exu->log_sys->trace, "lh %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "lh %s, %d(%s) # 0x%08x\n",
         gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -300,7 +300,7 @@ DECL_INST_HANDLER(lw)
 
     set_gpr(exu, rd, trans.rsp.data);
 
-    DBG_FPRINT(exu->log_sys->trace, "lw %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "lw %s, %d(%s) # 0x%08x\n",
         gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -319,7 +319,7 @@ DECL_INST_HANDLER(lbu)
 
     set_gpr(exu, rd, trans.rsp.data & 0xff);
 
-    DBG_FPRINT(exu->log_sys->trace, "lbu %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "lbu %s, %d(%s) # 0x%08x\n",
         gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -337,7 +337,7 @@ DECL_INST_HANDLER(lhu)
 
     set_gpr(exu, rd, trans.rsp.data & 0xffff);
 
-    DBG_FPRINT(exu->log_sys->trace, "lbu %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "lbu %s, %d(%s) # 0x%08x\n",
         gpr_name(rd), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -374,7 +374,7 @@ DECL_INST_HANDLER(sb)
     lsu_exu_trans_handler(exu->lsu, &trans);
     DBG_CHECK(trans.rsp.ok);
 
-    DBG_FPRINT(exu->log_sys->trace, "sb %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "sb %s, %d(%s) # 0x%08x\n",
         gpr_name(rs2), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -393,7 +393,7 @@ DECL_INST_HANDLER(sh)
     lsu_exu_trans_handler(exu->lsu, &trans);
     DBG_CHECK(trans.rsp.ok);
 
-    DBG_FPRINT(exu->log_sys->trace, "sh %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "sh %s, %d(%s) # 0x%08x\n",
         gpr_name(rs2), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -412,7 +412,7 @@ DECL_INST_HANDLER(sw)
     lsu_exu_trans_handler(exu->lsu, &trans);
     DBG_CHECK(trans.rsp.ok);
 
-    DBG_FPRINT(exu->log_sys->trace, "sw %s, %d(%s) # 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "sw %s, %d(%s) # 0x%08x\n",
         gpr_name(rs2), imm.s, gpr_name(rs1), trans.req.addr);
 }
 
@@ -439,7 +439,7 @@ DECL_INST_HANDLER(addi)
     i32 imm = i_imm_decode(&t->req.inst);
     set_gpr(exu, rd, get_gpr(exu, rs1) + imm.u);
 
-    DBG_FPRINT(exu->log_sys->trace, "addi %s, %s, %d\n",
+    DBG_LOG(LOG_TRACE, "addi %s, %s, %d\n",
         gpr_name(rd), gpr_name(rs1), imm.s);
 }
 
@@ -455,7 +455,7 @@ DECL_INST_HANDLER(slti)
 
     set_gpr(exu, rd, n1.s < n2.s ? 1 : 0);
 
-    DBG_FPRINT(exu->log_sys->trace, "slti %s, %s, %d\n",
+    DBG_LOG(LOG_TRACE, "slti %s, %s, %d\n",
         gpr_name(rd), gpr_name(rs1), imm.s);
 }
 
@@ -466,7 +466,7 @@ DECL_INST_HANDLER(sltiu)
     i32 imm = i_imm_decode(&t->req.inst);
     set_gpr(exu, rd, get_gpr(exu, rs1) < imm.u ? 1 : 0);
 
-    DBG_FPRINT(exu->log_sys->trace, "sltiu %s, %s, 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "sltiu %s, %s, 0x%08x\n",
         gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
@@ -477,7 +477,7 @@ DECL_INST_HANDLER(xori)
     i32 imm = i_imm_decode(&t->req.inst);
     set_gpr(exu, rd, get_gpr(exu, rs1) ^ imm.u);
 
-    DBG_FPRINT(exu->log_sys->trace, "xori %s, %s, 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "xori %s, %s, 0x%08x\n",
         gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
@@ -488,7 +488,7 @@ DECL_INST_HANDLER(ori)
     i32 imm = i_imm_decode(&t->req.inst);
     set_gpr(exu, rd, get_gpr(exu, rs1) | imm.u);
 
-    DBG_FPRINT(exu->log_sys->trace, "ori %s, %s, 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "ori %s, %s, 0x%08x\n",
         gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
@@ -499,7 +499,7 @@ DECL_INST_HANDLER(andi)
     i32 imm = i_imm_decode(&t->req.inst);
     set_gpr(exu, rd, get_gpr(exu, rs1) & imm.u);
 
-    DBG_FPRINT(exu->log_sys->trace, "andi %s, %s, 0x%08x\n",
+    DBG_LOG(LOG_TRACE, "andi %s, %s, 0x%08x\n",
         gpr_name(rd), gpr_name(rs1), imm.u);
 }
 
@@ -510,7 +510,7 @@ DECL_INST_HANDLER(slli)
     u32 imm = i_imm_decode(&t->req.inst).u & 0b11111;
     set_gpr(exu, rd, get_gpr(exu, rs1) << imm);
 
-    DBG_FPRINT(exu->log_sys->trace, "slli %s, %s, %u\n",
+    DBG_LOG(LOG_TRACE, "slli %s, %s, %u\n",
         gpr_name(rd), gpr_name(rs1), imm);
 }
 
@@ -521,7 +521,7 @@ DECL_INST_HANDLER(srli)
     u32 imm = i_imm_decode(&t->req.inst).u & 0b11111;
     set_gpr(exu, rd, get_gpr(exu, rs1) >> imm);
 
-    DBG_FPRINT(exu->log_sys->trace, "srli %s, %s, %u\n",
+    DBG_LOG(LOG_TRACE, "srli %s, %s, %u\n",
         gpr_name(rd), gpr_name(rs1), imm);
 }
 
@@ -537,7 +537,7 @@ DECL_INST_HANDLER(srai)
 
     set_gpr(exu, rd, nd.u);
 
-    DBG_FPRINT(exu->log_sys->trace, "srai %s, %s, %u\n",
+    DBG_LOG(LOG_TRACE, "srai %s, %s, %u\n",
         gpr_name(rd), gpr_name(rs1), imm);
 }
 
@@ -573,7 +573,7 @@ DECL_INST_HANDLER(add)
     u32 rs2 = t->req.inst.r.rs2;
     set_gpr(exu, rd, get_gpr(exu, rs1) + get_gpr(exu, rs2));
 
-    DBG_FPRINT(exu->log_sys->trace, "add %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "add %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -584,7 +584,7 @@ DECL_INST_HANDLER(sub)
     u32 rs2 = t->req.inst.r.rs2;
     set_gpr(exu, rd, get_gpr(exu, rs1) - get_gpr(exu, rs2));
 
-    DBG_FPRINT(exu->log_sys->trace, "sub %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "sub %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -607,7 +607,7 @@ DECL_INST_HANDLER(sll)
     u32 s2 = get_gpr(exu, rs2) & 0b11111;
     set_gpr(exu, rd, s1 << s2);
 
-    DBG_FPRINT(exu->log_sys->trace, "sll %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "sll %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -623,7 +623,7 @@ DECL_INST_HANDLER(slt)
 
     set_gpr(exu, rd, s1.s < s2.s ? 1 : 0);
 
-    DBG_FPRINT(exu->log_sys->trace, "slt %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "slt %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -634,7 +634,7 @@ DECL_INST_HANDLER(sltu)
     u32 rs2 = t->req.inst.r.rs2;
     set_gpr(exu, rd, get_gpr(exu, rs1) < get_gpr(exu, rs2) ? 1 : 0);
 
-    DBG_FPRINT(exu->log_sys->trace, "sltu %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "sltu %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -645,7 +645,7 @@ DECL_INST_HANDLER(xor)
     u32 rs2 = t->req.inst.r.rs2;
     set_gpr(exu, rd, get_gpr(exu, rs1) ^ get_gpr(exu, rs2));
 
-    DBG_FPRINT(exu->log_sys->trace, "xor %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "xor %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -659,7 +659,7 @@ DECL_INST_HANDLER(srl)
     u32 s2 = get_gpr(exu, rs2) & 0b11111;
     set_gpr(exu, rd, s1 >> s2);
 
-    DBG_FPRINT(exu->log_sys->trace, "srl %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "srl %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -677,7 +677,7 @@ DECL_INST_HANDLER(sra)
 
     set_gpr(exu, rd, d.u);
 
-    DBG_FPRINT(exu->log_sys->trace, "sra %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "sra %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -697,7 +697,7 @@ DECL_INST_HANDLER(or)
     u32 rs2 = t->req.inst.r.rs2;
     set_gpr(exu, rd, get_gpr(exu, rs1) | get_gpr(exu, rs2));
 
-    DBG_FPRINT(exu->log_sys->trace, "or %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "or %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -708,7 +708,7 @@ DECL_INST_HANDLER(and)
     u32 rs2 = t->req.inst.r.rs2;
     set_gpr(exu, rd, get_gpr(exu, rs1) & get_gpr(exu, rs2));
 
-    DBG_FPRINT(exu->log_sys->trace, "and %s, %s, %s\n",
+    DBG_LOG(LOG_TRACE, "and %s, %s, %s\n",
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
@@ -730,17 +730,17 @@ DECL_GROUP_HANDLER(alu)
 
 DECL_INST_HANDLER(fence)
 {
-    DBG_FPRINT(exu->log_sys->trace, "fence\n");
+    DBG_LOG(LOG_TRACE, "fence\n");
 }
 
 DECL_INST_HANDLER(ecall)
 {
-    DBG_FPRINT(exu->log_sys->trace, "ecall\n");
+    DBG_LOG(LOG_TRACE, "ecall\n");
 }
 
 DECL_INST_HANDLER(ebreak)
 {
-    DBG_FPRINT(exu->log_sys->trace, "ebreak\n");
+    DBG_LOG(LOG_TRACE, "ebreak\n");
 }
 
 DECL_GROUP_HANDLER(sys)
@@ -754,29 +754,25 @@ DECL_GROUP_HANDLER(sys)
     }
 }
 
-static inline void print_split_line(FILE *fp, bool newline)
+static inline void print_split_line(bool newline)
 {
-    DBG_FPRINT(fp, "------------------------------------------------------------------------------\n");
-    if (newline) {
-        DBG_FPRINT(fp, "\n");
-    }
+    DBG_LOG(LOG_TRACE, newline ?
+        "------------------------------------------------------------------------------\n\n" :
+        "------------------------------------------------------------------------------\n"
+    );
 }
 
 static void exu_dump(exu_t *exu, u32 pc)
 {
-    FILE *trace = exu->log_sys->trace;
-
-    print_split_line(trace, false);
-    DBG_FPRINT(trace, "x0/zero  = %08x   x1/ra = %08x   x2/sp  = %08x   x3/gp  = %08x\n", exu->gpr[0], exu->gpr[1], exu->gpr[2], exu->gpr[3]);
-    DBG_FPRINT(trace, "x4/tp    = %08x   x5/t0 = %08x   x6/t1  = %08x   x7/t2  = %08x\n", exu->gpr[4], exu->gpr[5], exu->gpr[6], exu->gpr[7]);
-    DBG_FPRINT(trace, "x8/s0/fp = %08x   x9/s1 = %08x  x10/a0  = %08x  x11/a1  = %08x\n", exu->gpr[8], exu->gpr[9], exu->gpr[10], exu->gpr[11]);
-    DBG_FPRINT(trace, "x12/a2   = %08x  x13/a3 = %08x  x14/a4  = %08x  x15/a5  = %08x\n", exu->gpr[12], exu->gpr[13], exu->gpr[14], exu->gpr[15]);
-    DBG_FPRINT(trace, "x16/a6   = %08x  x17/a7 = %08x  x18/s2  = %08x  x19/s3  = %08x\n", exu->gpr[16], exu->gpr[17], exu->gpr[18], exu->gpr[19]);
-    DBG_FPRINT(trace, "x20/s4   = %08x  x21/s5 = %08x  x22/s6  = %08x  x23/s7  = %08x\n", exu->gpr[20], exu->gpr[21], exu->gpr[22], exu->gpr[23]);
-    DBG_FPRINT(trace, "x24/s8   = %08x  x25/s9 = %08x  x26/s10 = %08x  x27/s11 = %08x\n", exu->gpr[24], exu->gpr[25], exu->gpr[26], exu->gpr[27]);
-    DBG_FPRINT(trace, "x28/t3   = %08x  x29/t4 = %08x  x30/t5  = %08x  x31/t6  = %08x\n", exu->gpr[28], exu->gpr[29], exu->gpr[30], exu->gpr[31]);
-
-    DBG_FPRINT(trace, "pc = %08x\n", pc);
+    DBG_LOG(LOG_TRACE, "x0/zero  = %08x   x1/ra = %08x   x2/sp  = %08x   x3/gp  = %08x\n", exu->gpr[0], exu->gpr[1], exu->gpr[2], exu->gpr[3]);
+    DBG_LOG(LOG_TRACE, "x4/tp    = %08x   x5/t0 = %08x   x6/t1  = %08x   x7/t2  = %08x\n", exu->gpr[4], exu->gpr[5], exu->gpr[6], exu->gpr[7]);
+    DBG_LOG(LOG_TRACE, "x8/s0/fp = %08x   x9/s1 = %08x  x10/a0  = %08x  x11/a1  = %08x\n", exu->gpr[8], exu->gpr[9], exu->gpr[10], exu->gpr[11]);
+    DBG_LOG(LOG_TRACE, "x12/a2   = %08x  x13/a3 = %08x  x14/a4  = %08x  x15/a5  = %08x\n", exu->gpr[12], exu->gpr[13], exu->gpr[14], exu->gpr[15]);
+    DBG_LOG(LOG_TRACE, "x16/a6   = %08x  x17/a7 = %08x  x18/s2  = %08x  x19/s3  = %08x\n", exu->gpr[16], exu->gpr[17], exu->gpr[18], exu->gpr[19]);
+    DBG_LOG(LOG_TRACE, "x20/s4   = %08x  x21/s5 = %08x  x22/s6  = %08x  x23/s7  = %08x\n", exu->gpr[20], exu->gpr[21], exu->gpr[22], exu->gpr[23]);
+    DBG_LOG(LOG_TRACE, "x24/s8   = %08x  x25/s9 = %08x  x26/s10 = %08x  x27/s11 = %08x\n", exu->gpr[24], exu->gpr[25], exu->gpr[26], exu->gpr[27]);
+    DBG_LOG(LOG_TRACE, "x28/t3   = %08x  x29/t4 = %08x  x30/t5  = %08x  x31/t6  = %08x\n", exu->gpr[28], exu->gpr[29], exu->gpr[30], exu->gpr[31]);
+    DBG_LOG(LOG_TRACE, "pc = %08x\n", pc);
 }
 
 void exu_exec(exu_t *exu, ifu2exu_trans_t *t)
@@ -795,12 +791,9 @@ void exu_exec(exu_t *exu, ifu2exu_trans_t *t)
         [OPCODE_SYSTEM] = GET_HANDLER(sys)
     };
 
-    FILE *trace = exu->log_sys->trace;
     if (t->req.is_boot_code) {
-        exu->log_sys->trace = NULL;
+        dbg_disable_log_module(LOG_TRACE);
     }
-
-    exu_dump(exu, t->req.pc);
 
     t->rsp.taken = false;
     t->rsp.abs_jump = false;
@@ -808,19 +801,22 @@ void exu_exec(exu_t *exu, ifu2exu_trans_t *t)
     u32 opcode = t->req.inst.raw & 0b1111111;
     inst_handler_t handler = opcode_handlers[opcode];
     if (handler) {
+        print_split_line(false);
+        exu_dump(exu, t->req.pc);
         handler(exu, t);
+        print_split_line(true);
     } else {
         DBG_CHECK(0);
     }
 
-    print_split_line(exu->log_sys->trace, true);
-    exu->log_sys->trace = trace;
+    if (t->req.is_boot_code) {
+        dbg_enable_log_module(LOG_TRACE);
+    }
 }
 
-void exu_construct(exu_t *exu, lsu_t *lsu, log_sys_t *log_sys)
+void exu_construct(exu_t *exu, lsu_t *lsu)
 {
     exu->lsu = lsu;
-    exu->log_sys = log_sys;
 }
 
 void exu_reset(exu_t *exu)
