@@ -5,7 +5,7 @@
 _boot:
     /* x1 = flash_addr */
     li x1, 0x80000000
-    /* x3 = tcm_addr */
+    /* x2 = tcm_addr */
     li x2, 0x10000000
 
     /* read program size to x4 */
@@ -18,7 +18,7 @@ _boot:
     li x3, 0
 
 loop:
-    /* loop copy */
+    /* while (x3 < size) */
     bge x3, x4, load_done
 
     /* read word to x6 from flash */

@@ -43,7 +43,6 @@ static void uart_output_show(uart_output_t *output, bool *end_sim)
     }
 }
 
-
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
