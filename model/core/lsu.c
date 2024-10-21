@@ -1,8 +1,9 @@
 #include "lsu.h"
+#include "dbg.h"
 
-void lsu_construct(lsu_t *lsu, bus_if_t *bus_if)
+extern void lsu_construct(lsu_t *lsu, biu_t *biu)
 {
-    lsu->bus_if = bus_if;
+    lsu->biu = biu;
 }
 
 void lsu_reset(lsu_t *lsu) {}
@@ -11,14 +12,16 @@ void lsu_free(lsu_t *lsu) {}
 
 void lsu_exu_trans_handler(lsu_t *lsu, exu2lsu_trans_t *t)
 {
-    t->rsp = lsu->bus_if->req_handler(lsu->bus_if->dev, &t->req);
-}
+    DBG_CHECK(lsu->biu);
 
-void lsu_ifu_trans_handler(lsu_t *lsu, ifu2lsu_trans_t *t)
-{
-    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = t->req.pc };
-    bus_rsp_t rsp = lsu->bus_if->req_handler(lsu->bus_if->dev, &req);
+    lsu2biu_trans_t trans;
+    trans.req.cmd = t->req.wr ? BUS_CMD_WRITE : BUS_CMD_READ;
+    trans.req.addr = t->req.addr;
+    trans.req.data = t->req.data;
+    trans.req.strobe = t->req.strobe;
 
-    t->rsp.ir = rsp.data;
-    t->rsp.ok = rsp.ok;
+    biu_lsu_trans_handler(lsu->biu, &trans);
+
+    t->rsp.data = trans.rsp.data;
+    t->rsp.ok = trans.rsp.ok;
 }

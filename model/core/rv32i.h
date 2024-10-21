@@ -5,12 +5,14 @@
 #include "ifu.h"
 #include "exu.h"
 #include "lsu.h"
+#include "biu.h"
 #include "dbg.h"
 
 typedef struct rv32i {
     ifu_t ifu;
     exu_t exu;
     lsu_t lsu;
+    biu_t biu;
 } rv32i_t;
 
 extern void rv32i_construct(rv32i_t *s, bus_if_t *bus_if, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);

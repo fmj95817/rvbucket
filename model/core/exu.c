@@ -254,7 +254,7 @@ DECL_INST_HANDLER(lb)
     i32 imm = i_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_READ;
+    trans.req.wr = false;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_exu_trans_handler(exu->lsu, &trans);
@@ -273,7 +273,7 @@ DECL_INST_HANDLER(lh)
     i32 imm = i_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_READ;
+    trans.req.wr = false;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_exu_trans_handler(exu->lsu, &trans);
@@ -292,7 +292,7 @@ DECL_INST_HANDLER(lw)
     i32 imm = i_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_READ;
+    trans.req.wr = false;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_exu_trans_handler(exu->lsu, &trans);
@@ -311,7 +311,7 @@ DECL_INST_HANDLER(lbu)
     i32 imm = i_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_READ;
+    trans.req.wr = false;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_exu_trans_handler(exu->lsu, &trans);
@@ -330,7 +330,7 @@ DECL_INST_HANDLER(lhu)
     i32 imm = i_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_READ;
+    trans.req.wr = false;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
     lsu_exu_trans_handler(exu->lsu, &trans);
     DBG_CHECK(trans.rsp.ok);
@@ -366,7 +366,7 @@ DECL_INST_HANDLER(sb)
     i32 imm = s_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_WRITE;
+    trans.req.wr = true;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
     trans.req.data = get_gpr(exu, rs2);
     trans.req.strobe = 0b0001;
@@ -385,7 +385,7 @@ DECL_INST_HANDLER(sh)
     i32 imm = s_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_WRITE;
+    trans.req.wr = true;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
     trans.req.data = get_gpr(exu, rs2);
     trans.req.strobe = 0b0011;
@@ -404,7 +404,7 @@ DECL_INST_HANDLER(sw)
     i32 imm = s_imm_decode(&t->req.inst);
 
     exu2lsu_trans_t trans;
-    trans.req.cmd = BUS_CMD_WRITE;
+    trans.req.wr = true;
     trans.req.addr = get_gpr(exu, rs1) + imm.u;
     trans.req.data = get_gpr(exu, rs2);
     trans.req.strobe = 0b1111;

@@ -19,7 +19,7 @@ typedef struct ifu2exu_trans {
     } rsp;
 } ifu2exu_trans_t;
 
-typedef struct ifu2lsu_trans {
+typedef struct ifu2biu_trans {
     struct {
         u32 pc;
     } req;
@@ -27,11 +27,24 @@ typedef struct ifu2lsu_trans {
         u32 ir;
         bool ok;
     } rsp;
-} ifu2lsu_trans_t;
+} ifu2biu_trans_t;
 
 typedef struct exu2lsu_trans {
+    struct {
+        u32 addr;
+        bool wr;
+        u32 data;
+        u8 strobe;
+    } req;
+    struct {
+        u32 data;
+        bool ok;
+    } rsp;
+} exu2lsu_trans_t;
+
+typedef struct lsu2biu_trans {
     bus_req_t req;
     bus_rsp_t rsp;
-} exu2lsu_trans_t;
+} lsu2biu_trans_t;
 
 #endif
