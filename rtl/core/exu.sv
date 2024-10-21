@@ -2,9 +2,9 @@ module exu #(
     parameter AW = 32,
     parameter DW = 32
 )(
-    input            clk,
-    input            rst_n,
-    iexec_if.slave   iexec
+    input             clk,
+    input             rst_n,
+    iexec_if_t.slave  iexec
 );
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)

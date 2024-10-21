@@ -2,17 +2,17 @@ module ifu #(
     parameter AW = 32,
     parameter DW = 32
 )(
-    input             clk,
-    input             rst_n,
-    ifetch_if.master  ifetch,
-    iexec_if.master   iexec
+    input               clk,
+    input               rst_n,
+    ifetch_if_t.master  ifetch,
+    iexec_if_t.master   iexec
 );
-    tri ifu_biu_trans = ifetch.req_vld & ifetch.req_rdy;
-    tri biu_ifu_trans = ifetch.rsp_vld & ifetch.rsp_rdy;
-    tri ifu_exu_trans = iexec.req_vld & iexec.req_rdy;
+    tri ifetch_req_hsk = ifetch.req_vld & ifetch.req_rdy;
+    tri ifetch_rsp_hsk = ifetch.rsp_vld & ifetch.rsp_rdy;
+    tri iexec_req_hsk = iexec.req_vld & iexec.req_rdy;
 
-    tri ir_valid_set = biu_ifu_trans;
-    tri ir_valid_clear = ifu_exu_trans;
+    tri ir_valid_set = ifetch_rsp_hsk;
+    tri ir_valid_clear = iexec_req_hsk;
 
     logic ir_valid;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -24,8 +24,8 @@ module ifu #(
     assign iexec.req_vld = ir_valid;
     assign ifetch.rsp_rdy = (~ir_valid) | ir_valid_clear;
 
-    tri if_req_set = ifu_biu_trans;
-    tri if_req_clear = biu_ifu_trans;
+    tri if_req_set = ifetch_req_hsk;
+    tri if_req_clear = ifetch_rsp_hsk;
 
     logic if_req;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -58,7 +58,7 @@ module ifu #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             pc <= {DW{1'b0}} + 2'd2;
-        else if (ifu_biu_trans)
+        else if (ifetch_req_hsk)
             pc <= pc_nxt;
     end
     assign ifetch.req_pc = pc_nxt;

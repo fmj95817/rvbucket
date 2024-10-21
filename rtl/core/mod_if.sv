@@ -1,4 +1,4 @@
-interface ifetch_if #(
+interface ifetch_if_t #(
     parameter AW = 32,
     parameter DW = 32
 );
@@ -21,7 +21,7 @@ interface ifetch_if #(
     );
 endinterface
 
-interface iexec_if #(
+interface iexec_if_t #(
     parameter AW = 32,
     parameter DW = 32
 );
@@ -48,8 +48,8 @@ interface iexec_if #(
     );
 endinterface
 
-interface sram_if #(
-    parameter AW = 10,
+interface sram_if_t #(
+    parameter AW = 15,
     parameter DW = 32
 );
     logic  [AW-1:0] addr;
@@ -57,11 +57,6 @@ interface sram_if #(
     logic  [DW-1:0] wdata;
     logic  [DW-1:0] rdata;
 
-    modport master (
-        output addr, wen, wdata, input rdata,
-    );
-
-    modport slave (
-        input addr, wen, wdata, output rdata
-    );
+    modport master (output addr, wen, wdata, input rdata);
+    modport slave (input addr, wen, wdata, output rdata);
 endinterface
