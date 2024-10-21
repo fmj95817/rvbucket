@@ -19,7 +19,7 @@ extern void ifu_construct(ifu_t *ifu, biu_t *biu, u32 reset_pc, u32 boot_rom_bas
 extern void ifu_reset(ifu_t *ifu);
 extern void ifu_free(ifu_t *ifu);
 
-extern void ifu_exec(ifu_t *ifu, ifu2exu_trans_t *t);
-extern void ifu_update(ifu_t *ifu, const ifu2exu_trans_t *t);
+extern void ifu_exec(ifu_t *ifu, iexec_if_t *i);
+extern void ifu_update(ifu_t *ifu, const iexec_if_t *i);
 
 #endif

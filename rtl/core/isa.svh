@@ -1,3 +1,5 @@
+package isa;
+
 typedef struct packed {
     logic [6:0] opcode;
     logic [4:0] rd;
@@ -59,3 +61,5 @@ typedef union packed {
     rv32i_inst_j_t j;
     logic [31:0] raw;
 } rv32i_inst_t;
+
+endpackage

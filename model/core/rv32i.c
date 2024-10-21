@@ -29,7 +29,7 @@ void rv32i_free(rv32i_t *s)
 
 void rv32i_exec(rv32i_t *s)
 {
-    ifu2exu_trans_t ifu2exu;
+    iexec_if_t ifu2exu;
     ifu_exec(&s->ifu, &ifu2exu);
     exu_exec(&s->exu, &ifu2exu);
     ifu_update(&s->ifu, &ifu2exu);

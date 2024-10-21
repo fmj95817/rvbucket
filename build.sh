@@ -61,8 +61,8 @@ function build_sw_case {
 }
 
 if [ "${1}" = "rtl" ]; then
-    mkdir -p build/rtl
-    cd build/rtl;
+    mkdir -p build/hw/vcs
+    cd build/hw/vcs;
     vcs \
         -full64 \
         -sverilog \
@@ -71,22 +71,20 @@ if [ "${1}" = "rtl" ]; then
         -lca -kdb \
         -top sim_top \
         -o sim_top \
-        ../../sim/rtl/model/clk_rst.sv \
-        ../../rtl/biu.sv \
-        ../../rtl/exu.sv \
-        ../../rtl/ifu.sv \
-        ../../rtl/rv32i.sv \
-        ../../sim/rtl/model/sram.sv \
-        ../../sim/rtl/sim_top.sv;
-    cd ../..
+        -timescale=1ns/1ps \
+        +incdir+../../../rtl/core \
+        $(find ../../../rtl -name *.sv) \
+        $(find ../../../sim/rtl/model -name *.sv) \
+        $(find ../../../sim/rtl/vcs -name *.sv);
+    cd ../../..
 elif [ "${1}" = "model" ]; then
     build_bootloader
 
-    mkdir -p build/model
+    mkdir -p build/hw/model
     gcc \
         -O3 \
         -I./model \
-        -o build/model/sim_top \
+        -o build/hw/model/sim_top \
         $(find model -name *.c) \
         $(find sim/model -name *.c)
 elif [ "${1}" = "sw" ]; then

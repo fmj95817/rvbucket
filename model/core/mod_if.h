@@ -1,11 +1,11 @@
-#ifndef TRANS_H
-#define TRANS_H
+#ifndef MOD_IF_H
+#define MOD_IF_H
 
 #include "types.h"
 #include "isa.h"
 #include "bus.h"
 
-typedef struct ifu2exu_trans {
+typedef struct iexec_if {
     struct {
         rv32i_inst_t inst;
         u32 pc;
@@ -17,9 +17,9 @@ typedef struct ifu2exu_trans {
         u32 pc_offset;
         u32 target_pc;
     } rsp;
-} ifu2exu_trans_t;
+} iexec_if_t;
 
-typedef struct ifu2biu_trans {
+typedef struct ifetch_if {
     struct {
         u32 pc;
     } req;
@@ -27,9 +27,9 @@ typedef struct ifu2biu_trans {
         u32 ir;
         bool ok;
     } rsp;
-} ifu2biu_trans_t;
+} ifetch_if_t;
 
-typedef struct exu2lsu_trans {
+typedef struct ldst_if {
     struct {
         u32 addr;
         bool wr;
@@ -40,11 +40,11 @@ typedef struct exu2lsu_trans {
         u32 data;
         bool ok;
     } rsp;
-} exu2lsu_trans_t;
+} ldst_if_t;
 
-typedef struct lsu2biu_trans {
+typedef struct mem_rw_if {
     bus_req_t req;
     bus_rsp_t rsp;
-} lsu2biu_trans_t;
+} mem_rw_if_t;
 
 #endif

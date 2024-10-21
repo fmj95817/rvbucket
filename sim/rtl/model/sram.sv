@@ -3,21 +3,17 @@ module sram #(
     parameter DW = 32
 )(
     input  tri             clk,
-
-    input  tri   [AW-1:0]  addr,
-    output logic [DW-1:0]  rdata,
-    input  tri   [DW-1:0]  wdata,
-    input  tri             wen
+    sram_if.slave          sram_rw,
 );
     reg [DW-1:0] mem[0:2**AW-1];
     always @(posedge clk) begin
-        if (wen)
-            mem[addr] <= wdata;
+        if (sram_rw.wen)
+            mem[sram_rw.addr] <= sram_rw.wdata;
     end
 
     always @(posedge clk) begin
         if (~wen) begin
-            rdata <= mem[addr];
+            sram_rw.rdata <= mem[addr];
         end
     end
 

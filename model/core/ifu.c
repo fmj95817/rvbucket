@@ -1,6 +1,6 @@
 #include "ifu.h"
 #include "biu.h"
-#include "trans.h"
+#include "mod_if.h"
 #include "dbg.h"
 
 void ifu_construct(ifu_t *ifu, biu_t *biu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
@@ -19,29 +19,29 @@ void ifu_reset(ifu_t *ifu)
 
 void ifu_free(ifu_t *ifu) {}
 
-void ifu_exec(ifu_t *ifu, ifu2exu_trans_t *t)
+void ifu_exec(ifu_t *ifu, iexec_if_t *i)
 {
     DBG_CHECK(ifu->biu);
 
-    ifu2biu_trans_t mem_read;
-    mem_read.req.pc = ifu->pc;
+    ifetch_if_t ifetch_if;
+    ifetch_if.req.pc = ifu->pc;
 
-    biu_ifu_trans_handler(ifu->biu, &mem_read);
-    DBG_CHECK(mem_read.rsp.ok);
+    biu_ifetch_trans_handler(ifu->biu, &ifetch_if);
+    DBG_CHECK(ifetch_if.rsp.ok);
 
-    t->req.inst.raw = mem_read.rsp.ir;
-    t->req.pc = ifu->pc;
-    t->req.is_boot_code = ADDR_IN(ifu->pc,
+    i->req.inst.raw = ifetch_if.rsp.ir;
+    i->req.pc = ifu->pc;
+    i->req.is_boot_code = ADDR_IN(ifu->pc,
         ifu->boot_rom_info.base, ifu->boot_rom_info.size);
 }
 
-void ifu_update(ifu_t *ifu, const ifu2exu_trans_t *t)
+void ifu_update(ifu_t *ifu, const iexec_if_t *i)
 {
-    if (t->rsp.taken) {
-        if (t->rsp.abs_jump) {
-            ifu->pc = t->rsp.target_pc;
+    if (i->rsp.taken) {
+        if (i->rsp.abs_jump) {
+            ifu->pc = i->rsp.target_pc;
         } else {
-            ifu->pc += t->rsp.pc_offset;
+            ifu->pc += i->rsp.pc_offset;
         }
     } else {
         ifu->pc += 4;

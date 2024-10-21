@@ -9,16 +9,16 @@ void biu_reset(biu_t *biu) {}
 
 void biu_free(biu_t *biu) {}
 
-void biu_lsu_trans_handler(biu_t *biu, lsu2biu_trans_t *t)
+void biu_mem_rw_trans_handler(biu_t *biu, mem_rw_if_t *i)
 {
-    t->rsp = biu->bus_if->req_handler(biu->bus_if->dev, &t->req);
+    i->rsp = biu->bus_if->req_handler(biu->bus_if->dev, &i->req);
 }
 
-void biu_ifu_trans_handler(biu_t *biu, ifu2biu_trans_t *t)
+void biu_ifetch_trans_handler(biu_t *biu, ifetch_if_t *i)
 {
-    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = t->req.pc };
+    bus_req_t req = { .cmd = BUS_CMD_READ, .addr = i->req.pc };
     bus_rsp_t rsp = biu->bus_if->req_handler(biu->bus_if->dev, &req);
 
-    t->rsp.ir = rsp.data;
-    t->rsp.ok = rsp.ok;
+    i->rsp.ir = rsp.data;
+    i->rsp.ok = rsp.ok;
 }
