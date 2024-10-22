@@ -7,6 +7,44 @@ CC="${TC}-gcc"
 OBJCOPY="${TC}-objcopy"
 OBJDUMP="${TC}-objdump"
 
+function build_tools {
+    mkdir -p build/tools
+    gcc -Wall -O2 -o build/tools/bin2x tools/bin2x.c
+}
+
+function build_model {
+    mkdir -p build/hw/model
+    gcc \
+        -O3 \
+        -I./model \
+        -o build/hw/model/sim_top \
+        $(find model -name *.c) \
+        $(find sim/model -name *.c)
+}
+
+function build_vcs {
+    mkdir -p build/hw/vcs
+    cd build/hw/vcs;
+    vcs \
+        -full64 \
+        -sverilog \
+        +v2k \
+        -debug_acc+all \
+        -lca -kdb \
+        -top sim_top \
+        -o sim_top \
+        -timescale=1ns/1ps \
+        +incdir+../../../rtl/core \
+        $(find ../../../rtl -name *.sv) \
+        $(find ../../../sim/rtl/model -name *.sv) \
+        $(find ../../../sim/rtl/vcs -name *.sv);
+    cd ../../..
+}
+
+function build_verilator {
+    mkdir -p build/hw/verilator
+}
+
 function build_bootloader {
     local LD="${TC}-ld"
 
@@ -23,7 +61,22 @@ function build_bootloader {
     ${LD} -T "${BL}/boot.lds" -o "${elf}" "${obj}"
     ${OBJCOPY} -S "${elf}" -O binary "${bin}"
     ${OBJDUMP} -D "${elf}" > "${dis}"
-    ./tools/bin2arr.py "${bin}" > model/boot.c
+
+    if [ "${1}" = "model" ]; then
+        ./build/tools/bin2x "${bin}" c_array > model/boot.c
+    fi
+}
+
+function build_hw {
+    build_bootloader "${1}"
+
+    if [ "${1}" = "model" ]; then
+        build_model
+    elif [ "${1}" = "vcs" ]; then
+        build_vcs
+    elif [ "${1}" = "verilator" ]; then
+        build_verilator
+    fi
 }
 
 function build_sw_case {
@@ -41,6 +94,7 @@ function build_sw_case {
 
     local elf="${output_dir}/${case_name}.elf"
     local bin="${output_dir}/${case_name}.bin"
+    local hex="${output_dir}/${case_name}.hex"
     local dis="${output_dir}/${case_name}.S"
 
     local srcs=("$(find ${case_dir} ${drivers_dir} -name *.c)")
@@ -58,35 +112,13 @@ function build_sw_case {
     ${LD} -T "${CRT}/soc.lds" -nostartfiles -o "${elf}" "${objs[@]}"
     ${OBJCOPY} -S "${elf}" -O binary "${bin}"
     ${OBJDUMP} -D "${elf}" > "${dis}"
+    ./build/tools/bin2x "${bin}" hex > "${hex}"
 }
 
-if [ "${1}" = "rtl" ]; then
-    mkdir -p build/hw/vcs
-    cd build/hw/vcs;
-    vcs \
-        -full64 \
-        -sverilog \
-        +v2k \
-        -debug_acc+all \
-        -lca -kdb \
-        -top sim_top \
-        -o sim_top \
-        -timescale=1ns/1ps \
-        +incdir+../../../rtl/core \
-        $(find ../../../rtl -name *.sv) \
-        $(find ../../../sim/rtl/model -name *.sv) \
-        $(find ../../../sim/rtl/vcs -name *.sv);
-    cd ../../..
-elif [ "${1}" = "model" ]; then
-    build_bootloader
+build_tools
 
-    mkdir -p build/hw/model
-    gcc \
-        -O3 \
-        -I./model \
-        -o build/hw/model/sim_top \
-        $(find model -name *.c) \
-        $(find sim/model -name *.c)
+if [ "${1}" = "hw" ]; then
+    build_hw "${2}"
 elif [ "${1}" = "sw" ]; then
     build_sw_case test
 fi

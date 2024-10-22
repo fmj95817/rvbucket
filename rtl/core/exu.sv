@@ -6,6 +6,7 @@ module exu #(
     input             rst_n,
     iexec_if_t.slave  iexec
 );
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             iexec.req_rdy <= 1'b0;

@@ -4,10 +4,17 @@ module sim_top;
     localparam SRAM_AW = 15;
 
     tri clk, rst_n;
-
     sram_if_t sram_rw();
 
     clk_rst u_clk_rst(.*);
     sram u_sram(.*);
     rv32i u_rv32i(.*);
+
+    initial begin
+        string path;
+        if ($value$plusargs ("program=%s", path)) begin
+            $readmemh(path, u_sram.mem);
+        end
+    end
+
 endmodule

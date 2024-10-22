@@ -57,7 +57,7 @@ module ifu #(
     tri [AW-1:0] pc_nxt = pc + (iexec.rsp_pkt.taken ? iexec.rsp_pkt.offset : pc_offset);
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            pc <= {DW{1'b0}} + 2'd2;
+            pc <= {DW{1'b0}};
         else if (ifetch_req_hsk)
             pc <= pc_nxt;
     end

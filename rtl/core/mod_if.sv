@@ -48,6 +48,37 @@ interface iexec_if_t #(
     );
 endinterface
 
+interface ldst_if_t #(
+    parameter AW = 32,
+    parameter DW = 32
+);
+    logic req_vld;
+    logic req_rdy;
+    struct packed {
+        logic [AW-1:0] addr;
+        logic          wr;
+        logic [DW-1:0] data;
+        logic [3:0]    strobe;
+    } req_pkt;
+
+    logic rsp_vld;
+    logic rsp_rdy;
+    struct packed {
+        logic [DW-1:0] data;
+        logic          ok;
+    } rsp_pkt;
+
+    modport master (
+        output req_vld, req_pkt, input req_rdy,
+        input rsp_pkt
+    );
+
+    modport slave (
+        input req_vld, req_pkt, output req_rdy,
+        output rsp_pkt
+    );
+endinterface
+
 interface sram_if_t #(
     parameter AW = 15,
     parameter DW = 32
