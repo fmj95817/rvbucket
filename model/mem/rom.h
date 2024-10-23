@@ -14,7 +14,6 @@ extern void rom_reset(rom_t *rom);
 extern void rom_free(rom_t *rom);
 
 extern void rom_burn(rom_t *rom, const void *data, u32 addr, u32 size);
-extern bool rom_read(rom_t *rom, u32 addr, u32 *data);
-extern bus_rsp_t rom_bus_req_handler(rom_t *rom, u32 base_addr, const bus_req_t *req);
+extern void rom_bus_trans_handler(rom_t *rom, u32 base_addr, bus_trans_if_t *i);
 
 #endif

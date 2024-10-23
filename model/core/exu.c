@@ -254,7 +254,7 @@ DECL_INST_HANDLER(lb)
     i32 imm = i_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = false;
+    ldst_if.req.st = false;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_ldst_trans_handler(exu->lsu, &ldst_if);
@@ -273,7 +273,7 @@ DECL_INST_HANDLER(lh)
     i32 imm = i_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = false;
+    ldst_if.req.st = false;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_ldst_trans_handler(exu->lsu, &ldst_if);
@@ -292,7 +292,7 @@ DECL_INST_HANDLER(lw)
     i32 imm = i_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = false;
+    ldst_if.req.st = false;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_ldst_trans_handler(exu->lsu, &ldst_if);
@@ -311,7 +311,7 @@ DECL_INST_HANDLER(lbu)
     i32 imm = i_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = false;
+    ldst_if.req.st = false;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
 
     lsu_ldst_trans_handler(exu->lsu, &ldst_if);
@@ -330,7 +330,7 @@ DECL_INST_HANDLER(lhu)
     i32 imm = i_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = false;
+    ldst_if.req.st = false;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
     lsu_ldst_trans_handler(exu->lsu, &ldst_if);
     DBG_CHECK(ldst_if.rsp.ok);
@@ -366,7 +366,7 @@ DECL_INST_HANDLER(sb)
     i32 imm = s_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = true;
+    ldst_if.req.st = true;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
     ldst_if.req.data = get_gpr(exu, rs2);
     ldst_if.req.strobe = 0b0001;
@@ -385,7 +385,7 @@ DECL_INST_HANDLER(sh)
     i32 imm = s_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = true;
+    ldst_if.req.st = true;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
     ldst_if.req.data = get_gpr(exu, rs2);
     ldst_if.req.strobe = 0b0011;
@@ -404,7 +404,7 @@ DECL_INST_HANDLER(sw)
     i32 imm = s_imm_decode(&i->req.inst);
 
     ldst_if_t ldst_if;
-    ldst_if.req.wr = true;
+    ldst_if.req.st = true;
     ldst_if.req.addr = get_gpr(exu, rs1) + imm.u;
     ldst_if.req.data = get_gpr(exu, rs2);
     ldst_if.req.strobe = 0b1111;

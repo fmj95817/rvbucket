@@ -8,23 +8,24 @@ typedef enum bus_cmd {
     BUS_CMD_WRITE = 1
 } bus_cmd_t;
 
-typedef struct bus_req {
-    bus_cmd_t cmd;
-    u32 addr;
-    u32 data;
-    u8 strobe;
-} bus_req_t;
+typedef struct bus_trans_if {
+    struct {
+        bus_cmd_t cmd;
+        u32 addr;
+        u32 data;
+        u8 strobe;
+    } req;
+    struct {
+        u32 data;
+        bool ok;
+    } rsp;
+} bus_trans_if_t;
 
-typedef struct bus_rsp {
-    u32 data;
-    bool ok;
-} bus_rsp_t;
-
-typedef bus_rsp_t (*bus_req_handler_t)(void *dev, const bus_req_t *req);
+typedef void (*bus_trans_handler_t)(void *dev, bus_trans_if_t *i);
 
 typedef struct bus_if {
     void *dev;
-    bus_req_handler_t req_handler;
+    bus_trans_handler_t trans_handler;
 } bus_if_t;
 
 #endif

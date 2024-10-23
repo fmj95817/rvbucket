@@ -13,28 +13,27 @@
 #define FLASH_BASE_ADDR     0x80000000
 #define FLASH_SIZE          (1 * MiB)
 
-static bus_rsp_t soc_bus_req_handler(void *dev, const bus_req_t *req)
+static void soc_bus_req_handler(void *dev, bus_trans_if_t *i)
 {
     soc_t *soc = (soc_t*)dev;
 
-    if (ADDR_IN(req->addr, TCM_BASE_ADDR, TCM_SIZE)) {
-        return ram_bus_req_handler(&soc->tcm, TCM_BASE_ADDR, req);
-    } else if (ADDR_IN(req->addr, UART_BASE_ADDR, UART_SIZE)) {
-        return uart_bus_req_handler(&soc->uart, UART_BASE_ADDR, req);
-    } else if (ADDR_IN(req->addr, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE)) {
-        return rom_bus_req_handler(&soc->boot_rom, BOOT_ROM_BASE_ADDR, req);
-    } else if (ADDR_IN(req->addr, FLASH_BASE_ADDR, FLASH_SIZE)) {
-        return rom_bus_req_handler(&soc->flash, FLASH_BASE_ADDR, req);
+    if (ADDR_IN(i->req.addr, TCM_BASE_ADDR, TCM_SIZE)) {
+        ram_bus_trans_handler(&soc->tcm, TCM_BASE_ADDR, i);
+    } else if (ADDR_IN(i->req.addr, UART_BASE_ADDR, UART_SIZE)) {
+        uart_bus_trans_handler(&soc->uart, UART_BASE_ADDR, i);
+    } else if (ADDR_IN(i->req.addr, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE)) {
+        rom_bus_trans_handler(&soc->boot_rom, BOOT_ROM_BASE_ADDR, i);
+    } else if (ADDR_IN(i->req.addr, FLASH_BASE_ADDR, FLASH_SIZE)) {
+        rom_bus_trans_handler(&soc->flash, FLASH_BASE_ADDR, i);
     } else {
-        bus_rsp_t rsp = { .ok = false };
-        return rsp;
+        i->rsp.ok = false;
     }
 }
 
 void soc_construct(soc_t *soc, uart_output_t *uart_output)
 {
     bus_if_t *soc_bus_if = malloc(sizeof(bus_if_t));
-    soc_bus_if->req_handler = &soc_bus_req_handler;
+    soc_bus_if->trans_handler = &soc_bus_req_handler;
     soc_bus_if->dev = soc;
 
     extern u32 g_boot_code_size;

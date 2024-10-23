@@ -18,6 +18,6 @@ extern void uart_reset(uart_t *uart);
 extern void uart_free(uart_t *uart);
 
 extern bool uart_write(uart_t *uart, u32 addr, u32 data, u8 strobe);
-extern bus_rsp_t uart_bus_req_handler(uart_t *uart, u32 base_addr, const bus_req_t *req);
+extern void uart_bus_trans_handler(uart_t *uart, u32 base_addr, bus_trans_if_t *i);
 
 #endif

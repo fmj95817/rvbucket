@@ -32,7 +32,7 @@ typedef struct ifetch_if {
 typedef struct ldst_if {
     struct {
         u32 addr;
-        bool wr;
+        bool st;
         u32 data;
         u8 strobe;
     } req;
@@ -41,10 +41,5 @@ typedef struct ldst_if {
         bool ok;
     } rsp;
 } ldst_if_t;
-
-typedef struct mem_rw_if {
-    bus_req_t req;
-    bus_rsp_t rsp;
-} mem_rw_if_t;
 
 #endif

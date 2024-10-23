@@ -14,6 +14,6 @@ extern void biu_reset(biu_t *biu);
 extern void biu_free(biu_t *biu);
 
 extern void biu_ifetch_trans_handler(biu_t *biu, ifetch_if_t *i);
-extern void biu_mem_rw_trans_handler(biu_t *biu, mem_rw_if_t *i);
+extern void biu_ldst_trans_handler(biu_t *biu, ldst_if_t *i);
 
 #endif

@@ -9,7 +9,7 @@ OBJDUMP="${TC}-objdump"
 
 function build_tools {
     mkdir -p build/tools
-    gcc -Wall -O2 -o build/tools/bin2x tools/bin2x.c
+    gcc -Wall -O3 -o build/tools/bin2x tools/bin2x.c
 }
 
 function build_model {
@@ -30,10 +30,11 @@ function build_vcs {
         -sverilog \
         +v2k \
         -debug_acc+all \
-        -lca -kdb \
+        -kdb \
         -top sim_top \
         -o sim_top \
         -timescale=1ns/1ps \
+        +incdir+../../../rtl \
         +incdir+../../../rtl/core \
         $(find ../../../rtl -name *.sv) \
         $(find ../../../sim/rtl/model -name *.sv) \
@@ -122,5 +123,3 @@ if [ "${1}" = "hw" ]; then
 elif [ "${1}" = "sw" ]; then
     build_sw_case test
 fi
-
-

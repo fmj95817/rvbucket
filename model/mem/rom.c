@@ -29,7 +29,7 @@ void rom_burn(rom_t *rom, const void *data, u32 addr, u32 size)
     memcpy(rom->data + addr, data, size);
 }
 
-bool rom_read(rom_t *rom, u32 addr, u32 *data)
+static bool rom_read(rom_t *rom, u32 addr, u32 *data)
 {
     if (addr >= rom->size) {
         return false;
@@ -39,19 +39,15 @@ bool rom_read(rom_t *rom, u32 addr, u32 *data)
     return true;
 }
 
-bus_rsp_t rom_bus_req_handler(rom_t *rom, u32 base_addr, const bus_req_t *req)
+void rom_bus_trans_handler(rom_t *rom, u32 base_addr, bus_trans_if_t *i)
 {
-    DBG_CHECK(req->addr >= base_addr);
+    DBG_CHECK(i->req.addr >= base_addr);
 
-    u32 addr = req->addr - base_addr;
-    bus_rsp_t rsp;
-
-    if (req->cmd == BUS_CMD_READ) {
-        rsp.ok = rom_read(rom, addr, &rsp.data);
+    u32 addr = i->req.addr - base_addr;
+    if (i->req.cmd == BUS_CMD_READ) {
+        i->rsp.ok = rom_read(rom, addr, &i->rsp.data);
     } else {
-        rsp.ok = false;
+        i->rsp.ok = false;
     }
-
-    return rsp;
 }
 

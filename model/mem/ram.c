@@ -17,14 +17,7 @@ void ram_free(ram_t *ram)
     free(ram->data);
 }
 
-void ram_load(ram_t *ram, const void *data, u32 addr, u32 size)
-{
-    DBG_CHECK(addr < ram->size);
-    DBG_CHECK(addr + size <= ram->size);
-    memcpy(ram->data + addr, data, size);
-}
-
-bool ram_read(ram_t *ram, u32 addr, u32 *data)
+static bool ram_read(ram_t *ram, u32 addr, u32 *data)
 {
     if (addr >= ram->size) {
         return false;
@@ -34,7 +27,7 @@ bool ram_read(ram_t *ram, u32 addr, u32 *data)
     return true;
 }
 
-bool ram_write(ram_t *ram, u32 addr, u32 data, u8 strobe)
+static bool ram_write(ram_t *ram, u32 addr, u32 data, u8 strobe)
 {
     if (addr >= ram->size) {
         return false;
@@ -61,20 +54,16 @@ bool ram_write(ram_t *ram, u32 addr, u32 data, u8 strobe)
     return true;
 }
 
-bus_rsp_t ram_bus_req_handler(ram_t *ram, u32 base_addr, const bus_req_t *req)
+void ram_bus_trans_handler(ram_t *ram, u32 base_addr, bus_trans_if_t *i)
 {
-    DBG_CHECK(req->addr >= base_addr);
+    DBG_CHECK(i->req.addr >= base_addr);
 
-    u32 addr = req->addr - base_addr;
-    bus_rsp_t rsp;
-
-    if (req->cmd == BUS_CMD_READ) {
-        rsp.ok = ram_read(ram, addr, &rsp.data);
-    } else if (req->cmd == BUS_CMD_WRITE) {
-        rsp.ok = ram_write(ram, addr, req->data, req->strobe);
+    u32 addr = i->req.addr - base_addr;
+    if (i->req.cmd == BUS_CMD_READ) {
+        i->rsp.ok = ram_read(ram, addr, &i->rsp.data);
+    } else if (i->req.cmd == BUS_CMD_WRITE) {
+        i->rsp.ok = ram_write(ram, addr, i->req.data, i->req.strobe);
     } else {
-        rsp.ok = false;
+        i->rsp.ok = false;
     }
-
-    return rsp;
 }
