@@ -18,7 +18,7 @@ module bti_to_sram_if #(
     tri bti_req_pend_clear = bti_rsp_hsk;
     lib_flag u_bti_req_pend_flag(clk, rst_n, bti_req_pend_set, bti_req_pend_clear, bti_req_pend_flag);
 
-    tri sram_addr = bti.req_pkt.addr[SRAM_AW+1:2];
+    tri [SRAM_AW-1:0] sram_addr = bti.req_pkt.addr[SRAM_AW+1:2];
     logic [SRAM_AW-1:0] sram_addr_pend;
     always_ff @(posedge clk) begin
         if (bti_req_hsk)

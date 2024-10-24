@@ -59,7 +59,7 @@ module ifu #(
     end
 
     logic [AW-1:0] pc;
-    tri [AW-1:0] pc_nxt = pc + (iexec.rsp_pkt.taken ? iexec.rsp_pkt.offset : { {(AW-3){1'b0}}, pc_offset });
+    tri [AW-1:0] pc_nxt = pc + { {(AW-3){1'b0}}, pc_offset };
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             pc <= {AW{1'b0}};
