@@ -31,53 +31,53 @@ endinterface
 module exu_dp(
     input           clk,
     input           rst_n,
-    exu_dp_if.slave dp_op
+    exu_dp_if.slave dp_ctrl
 );
     /* GPR */
     logic [`RV_XLEN-1:0] gprs[0:2**`RV_GPR_AW-1];
     assign gprs[0] = {`RV_XLEN{1'b0}};
 
-    assign dp_op.gpr_rdata1 = gprs[dp_op.gpr_raddr1];
-    assign dp_op.gpr_rdata2 = gprs[dp_op.gpr_raddr2];
+    assign dp_ctrl.gpr_rdata1 = gprs[dp_ctrl.gpr_raddr1];
+    assign dp_ctrl.gpr_rdata2 = gprs[dp_ctrl.gpr_raddr2];
 
     for (genvar i = 1; i < 2**`RV_GPR_AW; i++) begin : GEN_GPR
         always_ff @(posedge clk) begin
-            if ((i == dp_op.gpr_waddr) & dp_op.gpr_wen)
-                gprs[i] <= #1 dp_op.gpr_wdata;
+            if ((i == dp_ctrl.gpr_waddr) & dp_ctrl.gpr_wen)
+                gprs[i] <= #1 dp_ctrl.gpr_wdata;
         end
     end
 
     /* ALU */
-    tri signed [`RV_XLEN-1:0] alu_src1_s = dp_op.alu_src1;
-    tri signed [`RV_XLEN-1:0] alu_src2_s = dp_op.alu_src2;
-    tri  [`RV_XLEN-1:0] alu_src1_u = dp_op.alu_src1;
-    tri  [`RV_XLEN-1:0] alu_src2_u = dp_op.alu_src2;
-    tri [4:0] shift_bits = dp_op.alu_src2[4:0];
+    tri signed [`RV_XLEN-1:0] alu_src1_s = dp_ctrl.alu_src1;
+    tri signed [`RV_XLEN-1:0] alu_src2_s = dp_ctrl.alu_src2;
+    tri  [`RV_XLEN-1:0] alu_src1_u = dp_ctrl.alu_src1;
+    tri  [`RV_XLEN-1:0] alu_src2_u = dp_ctrl.alu_src2;
+    tri [4:0] shift_bits = dp_ctrl.alu_src2[4:0];
 
     always_comb begin
-        case (dp_op.alu_opcode)
+        case (dp_ctrl.alu_opcode)
             ALU_OPCODE_ADD:
-                dp_op.alu_dst = alu_src1_u + alu_src2_u;
+                dp_ctrl.alu_dst = alu_src1_u + alu_src2_u;
             ALU_OPCODE_SUB:
-                dp_op.alu_dst = alu_src1_u - alu_src2_u;
+                dp_ctrl.alu_dst = alu_src1_u - alu_src2_u;
             ALU_OPCODE_LESS_S:
-                dp_op.alu_dst = alu_src1_s < alu_src2_s ?
+                dp_ctrl.alu_dst = alu_src1_s < alu_src2_s ?
                     `RV_XLEN'd1 : `RV_XLEN'd0;
             ALU_OPCODE_LESS_U:
-                dp_op.alu_dst = alu_src1_u < alu_src2_u ?
+                dp_ctrl.alu_dst = alu_src1_u < alu_src2_u ?
                     `RV_XLEN'd1 : `RV_XLEN'd0;
             ALU_OPCODE_XOR:
-                dp_op.alu_dst = alu_src1_u ^ alu_src2_u;
+                dp_ctrl.alu_dst = alu_src1_u ^ alu_src2_u;
             ALU_OPCODE_OR:
-                dp_op.alu_dst = alu_src1_u | alu_src2_u;
+                dp_ctrl.alu_dst = alu_src1_u | alu_src2_u;
             ALU_OPCODE_AND:
-                dp_op.alu_dst = alu_src1_u & alu_src2_u;
+                dp_ctrl.alu_dst = alu_src1_u & alu_src2_u;
             ALU_OPCODE_SL:
-                dp_op.alu_dst = alu_src1_u << shift_bits;
+                dp_ctrl.alu_dst = alu_src1_u << shift_bits;
             ALU_OPCODE_SRL:
-                dp_op.alu_dst = alu_src1_u << shift_bits;
+                dp_ctrl.alu_dst = alu_src1_u >> shift_bits;
             ALU_OPCODE_SRA:
-                dp_op.alu_dst = alu_src1_s << shift_bits;
+                dp_ctrl.alu_dst = alu_src1_s >> shift_bits;
         endcase
     end
 endmodule

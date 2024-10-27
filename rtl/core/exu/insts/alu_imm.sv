@@ -3,7 +3,7 @@
 
 module alu_imm_handler(
     rv32i_i_dec_if.slave i_dec,
-    exu_dp_if.master     dp_op
+    exu_dp_if.master     dp_ctrl
 );
     logic [`ALU_OPC_SIZE] alu_opcode;
     always_comb begin
@@ -30,14 +30,14 @@ module alu_imm_handler(
         endcase
     end
 
-    assign dp_op.gpr_raddr1 = i_dec.rs1;
-    assign dp_op.gpr_waddr = i_dec.rd;
-    assign dp_op.gpr_wdata = dp_op.alu_dst;
-    assign dp_op.gpr_wen = 1'b1;
+    assign dp_ctrl.gpr_raddr1 = i_dec.rs1;
+    assign dp_ctrl.gpr_waddr = i_dec.rd;
+    assign dp_ctrl.gpr_wdata = dp_ctrl.alu_dst;
+    assign dp_ctrl.gpr_wen = 1'b1;
 
-    assign dp_op.alu_opcode = alu_opcode;
-    assign dp_op.alu_src1 = dp_op.gpr_rdata1;
-    assign dp_op.alu_src2 = i_dec.imm;
+    assign dp_ctrl.alu_opcode = alu_opcode;
+    assign dp_ctrl.alu_src1 = dp_ctrl.gpr_rdata1;
+    assign dp_ctrl.alu_src2 = i_dec.imm;
 endmodule
 
 

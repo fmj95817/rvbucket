@@ -1,5 +1,24 @@
 `include "isa.svh"
 
+interface rv32i_opc_dec_if;
+    logic lui;
+    logic auipc;
+    logic jal;
+    logic jalr;
+    logic branch;
+    logic load;
+    logic store;
+    logic alu_imm;
+    logic alu;
+    logic mem;
+    logic system;
+
+    modport master (output lui, auipc, jal, jalr,
+        branch, load, store, alu_imm, alu, mem, system);
+    modport slave (output lui, auipc, jal, jalr,
+        branch, load, store, alu_imm, alu, mem, system);
+endinterface
+
 interface rv32i_r_dec_if;
     logic [4:0] rd;
     logic [2:0] funct3;
@@ -71,7 +90,7 @@ endinterface
 
 module rv32i_isa_dec(
     input  [`RV_IR_SIZE-1:0]   ir,
-    output [`RV_OPC_SIZE-1:0]  opcode,
+    rv32i_opc_dec_if.master    opc_dec,
     rv32i_r_dec_if.master      r_dec,
     rv32i_i_dec_if.master      i_dec,
     rv32i_s_dec_if.master      s_dec,
@@ -79,7 +98,19 @@ module rv32i_isa_dec(
     rv32i_u_dec_if.master      u_dec,
     rv32i_j_dec_if.master      j_dec
 );
-    assign opcode = ir[`RV_OPC_SIZE-1:0];
+    /* opcode type */
+    tri [`RV_OPC_SIZE-1:0] opcode = ir[`RV_OPC_SIZE-1:0];
+    assign opc_dec.lui = (opcode == OPCODE_LUI);
+    assign opc_dec.auipc = (opcode == OPCODE_AUIPC);
+    assign opc_dec.jal = (opcode == OPCODE_JAL);
+    assign opc_dec.jalr = (opcode == OPCODE_JALR);
+    assign opc_dec.branch = (opcode == OPCODE_BRANCH);
+    assign opc_dec.load = (opcode == OPCODE_LOAD);
+    assign opc_dec.store = (opcode == OPCODE_STORE);
+    assign opc_dec.alu_imm = (opcode == OPCODE_ALU_IMM);
+    assign opc_dec.alu = (opcode == OPCODE_ALU);
+    assign opc_dec.mem = (opcode == OPCODE_MEM);
+    assign opc_dec.system = (opcode == OPCODE_SYSTEM);
 
     /* R-Type */
     assign r_dec.rd = ir[11:7];

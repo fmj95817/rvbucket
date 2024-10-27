@@ -2,46 +2,54 @@
 `include "exu/dp.svh"
 
 module exu_dp_mux(
-    input [`RV_OPC_SIZE-1:0] opcode,
     input                    iexec_req_hsk,
-    exu_dp_if.slave          lui_dp_op,
-    exu_dp_if.slave          alu_imm_dp_op,
-    exu_dp_if.master         dp_op
+    rv32i_opc_dec_if.slave   opc_dec,
+    exu_dp_if.slave          lui_dp_ctrl,
+    exu_dp_if.slave          auipc_dp_ctrl,
+    exu_dp_if.slave          alu_imm_dp_ctrl,
+    exu_dp_if.master         dp_ctrl
 );
-    logic gpr_wen;
-    assign dp_op.gpr_wen = gpr_wen & iexec_req_hsk;
+    assign dp_ctrl.gpr_raddr1 = (
+        ({`RV_GPR_AW{opc_dec.alu_imm}} & alu_imm_dp_ctrl.gpr_raddr1)
+    );
 
-    always_comb begin
-        dp_op.alu_opcode = {`ALU_OPC_SIZE{1'bx}};
-        dp_op.alu_src1 = {`RV_XLEN{1'bx}};
-        dp_op.alu_src2 = {`RV_XLEN{1'bx}};
+    assign dp_ctrl.gpr_waddr = (
+        ({`RV_GPR_AW{opc_dec.lui}} & lui_dp_ctrl.gpr_waddr) |
+        ({`RV_GPR_AW{opc_dec.auipc}} & auipc_dp_ctrl.gpr_waddr) |
+        ({`RV_GPR_AW{opc_dec.alu_imm}} & alu_imm_dp_ctrl.gpr_waddr)
+    );
 
-        dp_op.gpr_raddr1 = {`RV_GPR_AW{1'bx}};
-        dp_op.gpr_raddr2 = {`RV_GPR_AW{1'bx}};
-        dp_op.gpr_waddr = {`RV_GPR_AW{1'bx}};
-        dp_op.gpr_wdata = {`RV_XLEN{1'bx}};
-        gpr_wen = 1'b0;
+    assign dp_ctrl.gpr_wdata = (
+        ({`RV_XLEN{opc_dec.lui}} & lui_dp_ctrl.gpr_wdata) |
+        ({`RV_XLEN{opc_dec.auipc}} & auipc_dp_ctrl.gpr_wdata) |
+        ({`RV_XLEN{opc_dec.alu_imm}} & alu_imm_dp_ctrl.gpr_wdata)
+    );
 
-        case (opcode)
-            OPCODE_LUI: begin
-                dp_op.gpr_waddr = lui_dp_op.gpr_waddr;
-                dp_op.gpr_wdata = lui_dp_op.gpr_wdata;
-                gpr_wen = lui_dp_op.gpr_wen;
-            end
-            OPCODE_ALU_IMM: begin
-                dp_op.gpr_raddr1 = alu_imm_dp_op.gpr_raddr1;
-                dp_op.gpr_waddr = alu_imm_dp_op.gpr_waddr;
-                dp_op.gpr_wdata = alu_imm_dp_op.gpr_wdata;
-                gpr_wen = alu_imm_dp_op.gpr_wen;
+    assign dp_ctrl.gpr_wen = iexec_req_hsk & (
+        (opc_dec.lui & lui_dp_ctrl.gpr_wen) |
+        (opc_dec.auipc & auipc_dp_ctrl.gpr_wen) |
+        (opc_dec.alu_imm & alu_imm_dp_ctrl.gpr_wen)
+    );
 
-                dp_op.alu_opcode = alu_imm_dp_op.alu_opcode;
-                dp_op.alu_src1 = alu_imm_dp_op.alu_src1;
-                dp_op.alu_src2 = alu_imm_dp_op.alu_src2;
-            end
-        endcase
-    end
+    assign dp_ctrl.alu_opcode = (
+        ({`ALU_OPC_SIZE{opc_dec.auipc}} & auipc_dp_ctrl.alu_opcode) |
+        ({`ALU_OPC_SIZE{opc_dec.alu_imm}} & alu_imm_dp_ctrl.alu_opcode)
+    );
+
+    assign dp_ctrl.alu_src1 = (
+        ({`RV_XLEN{opc_dec.auipc}} & auipc_dp_ctrl.alu_src1) |
+        ({`RV_XLEN{opc_dec.alu_imm}} & alu_imm_dp_ctrl.alu_src1)
+    );
+
+    assign dp_ctrl.alu_src2 = (
+        ({`RV_XLEN{opc_dec.auipc}} & auipc_dp_ctrl.alu_src2) |
+        ({`RV_XLEN{opc_dec.alu_imm}} & alu_imm_dp_ctrl.alu_src2)
+    );
+
+    /* AUIPC */
+    assign auipc_dp_ctrl.alu_dst = dp_ctrl.alu_dst;
 
     /* OPCODE_ALU_IMM */
-    assign alu_imm_dp_op.gpr_rdata1 = dp_op.gpr_rdata1;
-    assign alu_imm_dp_op.alu_dst = dp_op.alu_dst;
+    assign alu_imm_dp_ctrl.gpr_rdata1 = dp_ctrl.gpr_rdata1;
+    assign alu_imm_dp_ctrl.alu_dst = dp_ctrl.alu_dst;
 endmodule

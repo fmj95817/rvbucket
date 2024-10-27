@@ -11,8 +11,9 @@ module exu(
 
     /* ISA decoder */
     tri [`RV_IR_SIZE-1:0] ir = iexec.req_pkt.ir;
-    tri [`RV_OPC_SIZE-1:0] opcode;
+    tri [`RV_PC_SIZE-1:0] pc = iexec.req_pkt.pc;
 
+    rv32i_opc_dec_if opc_dec();
     rv32i_r_dec_if r_dec();
     rv32i_i_dec_if i_dec();
     rv32i_s_dec_if s_dec();
@@ -23,14 +24,17 @@ module exu(
     rv32i_isa_dec u_rv32i_isa_dec(.*);
 
     /* instructions */
-    exu_dp_if lui_dp_op();
-    lui_handler u_lui_handler(u_dec, lui_dp_op);
+    exu_dp_if lui_dp_ctrl();
+    lui_handler u_lui_handler(u_dec, lui_dp_ctrl);
 
-    exu_dp_if alu_imm_dp_op();
-    alu_imm_handler u_alu_imm_handler(i_dec, alu_imm_dp_op);
+    exu_dp_if auipc_dp_ctrl();
+    auipc_handler u_auipc_handler(pc, u_dec, auipc_dp_ctrl);
+
+    exu_dp_if alu_imm_dp_ctrl();
+    alu_imm_handler u_alu_imm_handler(i_dec, alu_imm_dp_ctrl);
 
     /* data path */
-    exu_dp_if dp_op();
+    exu_dp_if dp_ctrl();
     exu_dp u_exu_dp(.*);
     exu_dp_mux u_exu_dp_mux(.*);
 
