@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static void to_c_array(const void *data, size_t size)
 {
@@ -22,6 +23,46 @@ static void to_c_array(const void *data, size_t size)
     }
 
     printf("};\n");
+}
+
+static void to_sv_rom_header(size_t size)
+{
+    int word_num = size / 4;
+    int addr_width = (int)ceilf(log2f((float)word_num));
+    printf(
+        "`ifndef BOOT_ROM_SVH\n"
+        "`define BOOT_ROM_SVH\n\n"
+        "`define BOOT_ROM_AW %d\n\n"
+        "`endif\n", addr_width
+    );
+}
+
+static void to_sv_rom_src(const void *data, size_t size)
+{
+    int word_num = size / 4;
+    int addr_width = (int)ceilf(log2f((float)word_num));
+
+    printf(
+        "module boot_rom(\n"
+        "    input tri           clk,\n"
+        "    input tri    [%d:0]  rom_addr,\n"
+        "    output logic [31:0] rom_data\n"
+        ");\n"
+        "    tri [31:0] data[0:%d];\n",
+        addr_width - 1, word_num - 1
+    );
+
+    uint32_t *word = (uint32_t *)data;
+    for (int i = 0; i < word_num; i++) {
+        printf("    assign data[%d] = 32'h%08x;\n", i, word[i]);
+    }
+
+    printf(
+        "\n    always_ff @(posedge clk) begin\n"
+        "        rom_data <= data[rom_addr];\n"
+        "    end\n"
+        "endmodule\n"
+    );
 }
 
 static void to_hex(const void *data, size_t size)
@@ -59,6 +100,10 @@ int main(int argc, char *argv[])
     const char *format = argv[2];
     if (strcmp(format, "c_array") == 0) {
         to_c_array(data, size);
+    } else if (strcmp(format, "sv_rom_header") == 0) {
+        to_sv_rom_header(size);
+    } else if (strcmp(format, "sv_rom_src") == 0) {
+        to_sv_rom_src(data, size);
     } else if (strcmp(format, "hex") == 0) {
         to_hex(data, size);
     }

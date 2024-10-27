@@ -1,6 +1,6 @@
 `include "isa.svh"
 
-interface rv32i_r_dec_if_t;
+interface rv32i_r_dec_if;
     logic [4:0] rd;
     logic [2:0] funct3;
     logic [4:0] rs1;
@@ -11,7 +11,7 @@ interface rv32i_r_dec_if_t;
     modport slave (input rd, funct3, rs1, rs2, funct7);
 endinterface
 
-interface rv32i_i_dec_if_t;
+interface rv32i_i_dec_if;
     logic [4:0] rd;
     logic [2:0] funct3;
     logic [4:0] rs1;
@@ -22,7 +22,7 @@ interface rv32i_i_dec_if_t;
     modport slave (input rd, funct3, rs1, imm_11_0, imm);
 endinterface
 
-interface rv32i_s_dec_if_t;
+interface rv32i_s_dec_if;
     logic [4:0] imm_4_0;
     logic [2:0] funct3;
     logic [4:0] rs1;
@@ -34,7 +34,7 @@ interface rv32i_s_dec_if_t;
     modport slave (input imm_4_0, funct3, rs1, rs2, imm_11_5, imm);
 endinterface
 
-interface rv32i_b_dec_if_t;
+interface rv32i_b_dec_if;
     logic       imm_11;
     logic [3:0] imm_4_1;
     logic [2:0] funct3;
@@ -48,7 +48,7 @@ interface rv32i_b_dec_if_t;
     modport slave (input imm_11, imm_4_1, funct3, rs1, rs2, imm_10_5, imm_12, imm);
 endinterface
 
-interface rv32i_u_dec_if_t;
+interface rv32i_u_dec_if;
     logic [4:0] rd;
     logic [19:0] imm_31_12;
     logic [`RV_XLEN-1:0] imm;
@@ -57,7 +57,7 @@ interface rv32i_u_dec_if_t;
     modport slave (input rd, imm_31_12, imm);
 endinterface
 
-interface rv32i_j_dec_if_t;
+interface rv32i_j_dec_if;
     logic [4:0] rd;
     logic [7:0] imm_19_12;
     logic       imm_11;
@@ -70,16 +70,16 @@ interface rv32i_j_dec_if_t;
 endinterface
 
 module rv32i_isa_dec(
-    input  [`RV_IR_SIZE-1:0]     ir,
-    output [`RV_OPCODE_SIZE-1:0] opcode,
-    rv32i_r_dec_if_t.master      r_dec,
-    rv32i_i_dec_if_t.master      i_dec,
-    rv32i_s_dec_if_t.master      s_dec,
-    rv32i_b_dec_if_t.master      b_dec,
-    rv32i_u_dec_if_t.master      u_dec,
-    rv32i_j_dec_if_t.master      j_dec
+    input  [`RV_IR_SIZE-1:0]   ir,
+    output [`RV_OPC_SIZE-1:0]  opcode,
+    rv32i_r_dec_if.master      r_dec,
+    rv32i_i_dec_if.master      i_dec,
+    rv32i_s_dec_if.master      s_dec,
+    rv32i_b_dec_if.master      b_dec,
+    rv32i_u_dec_if.master      u_dec,
+    rv32i_j_dec_if.master      j_dec
 );
-    assign opcode = ir[`RV_OPCODE_SIZE-1:0];
+    assign opcode = ir[`RV_OPC_SIZE-1:0];
 
     /* R-Type */
     assign r_dec.rd = ir[11:7];

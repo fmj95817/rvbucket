@@ -1,36 +1,23 @@
 `include "bus.svh"
 
-interface sram_if_t #(
-    parameter AW = 15,
-    parameter DW = 32
-);
-    logic  [AW-1:0] addr;
-    logic           wen;
-    logic  [DW-1:0] wdata;
-    logic  [DW-1:0] rdata;
-
-    modport master (output addr, wen, wdata, input rdata);
-    modport slave (input addr, wen, wdata, output rdata);
-endinterface
-
-interface bus_trans_if_t #(
-    parameter AW = 32,
-    parameter DW = 32
+interface bus_trans_if #(
+    parameter BTI_AW = 32,
+    parameter BTI_DW = 32
 );
     logic req_vld;
     logic req_rdy;
     struct packed {
-        bus_cmd_t        cmd;
-        logic [AW-1:0]   addr;
-        logic [DW-1:0]   data;
-        logic [DW/8-1:0] strobe;
+        bus_cmd_t            cmd;
+        logic [BTI_AW-1:0]   addr;
+        logic [BTI_DW-1:0]   data;
+        logic [BTI_DW/8-1:0] strobe;
     } req_pkt;
 
     logic rsp_vld;
     logic rsp_rdy;
     struct packed {
-        logic [DW-1:0] data;
-        logic          ok;
+        logic [BTI_DW-1:0] data;
+        logic              ok;
     } rsp_pkt;
 
     modport master (

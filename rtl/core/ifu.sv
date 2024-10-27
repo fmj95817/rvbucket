@@ -1,11 +1,10 @@
-module ifu #(
-    parameter AW = 32,
-    parameter DW = 32
-)(
-    input               clk,
-    input               rst_n,
-    ifetch_if_t.master  ifetch,
-    iexec_if_t.master   iexec
+`include "isa.svh"
+
+module ifu(
+    input            clk,
+    input            rst_n,
+    ifetch_if.master ifetch,
+    iexec_if.master  iexec
 );
     tri ifetch_req_hsk = ifetch.req_vld & ifetch.req_rdy;
     tri ifetch_rsp_hsk = ifetch.rsp_vld & ifetch.rsp_rdy;
@@ -42,10 +41,10 @@ module ifu #(
         pc_pend_set, pc_pend_clear, pc_pend_flag
     );
 
-    logic [DW-1:0] ir;
+    logic [`RV_IR_SIZE-1:0] ir;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            ir <= {DW{1'b0}};
+            ir <= {`RV_IR_SIZE{1'b0}};
         else if (ir_valid_set)
             ir <= #1 ifetch.rsp_ir;
     end
@@ -58,19 +57,19 @@ module ifu #(
             pc_offset <= #1 3'd4;
     end
 
-    logic [AW-1:0] pc;
-    tri [AW-1:0] pc_nxt = pc + { {(AW-3){1'b0}}, pc_offset };
+    logic [`RV_PC_SIZE-1:0] pc;
+    tri [`RV_PC_SIZE-1:0] pc_nxt = pc + { {(`RV_PC_SIZE-3){1'b0}}, pc_offset };
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            pc <= {AW{1'b0}};
+            pc <= {`RV_PC_SIZE{1'b0}};
         else if (ifetch_req_hsk)
             pc <= #1 pc_nxt;
     end
 
-    logic [AW-1:0] pc_of_ir;
+    logic [`RV_PC_SIZE-1:0] pc_of_ir;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            pc_of_ir <= {AW{1'b0}};
+            pc_of_ir <= {`RV_PC_SIZE{1'b0}};
         else if (iexec_req_pkt_valid_set)
             pc_of_ir <= #1 pc;
     end

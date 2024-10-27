@@ -1,11 +1,8 @@
-module lsu #(
-    parameter AW = 32,
-    parameter DW = 32
-)(
-    input               clk,
-    input               rst_n,
-    ldst_if_t.slave     ldst_src,
-    ldst_if_t.master    ldst_gen
+module lsu(
+    input           clk,
+    input           rst_n,
+    ldst_if.slave   ldst_src,
+    ldst_if.master  ldst_gen
 );
     assign ldst_gen.req_vld = ldst_src.req_vld;
     assign ldst_gen.req_pkt = ldst_src.req_pkt;

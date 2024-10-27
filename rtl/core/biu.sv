@@ -1,15 +1,11 @@
 `include "bus.svh"
 
-module biu #(
-    parameter AW = 32,
-    parameter DW = 32,
-    parameter SRAM_AW = 15
-)(
-    input                  clk,
-    input                  rst_n,
-    ifetch_if_t.slave      ifetch,
-    ldst_if_t.slave        ldst_gen,
-    bus_trans_if_t.master  bti
+module biu(
+    input               clk,
+    input               rst_n,
+    ifetch_if.slave     ifetch,
+    ldst_if.slave       ldst_gen,
+    bus_trans_if.master bti
 );
     assign bti.req_vld = ifetch.req_vld;
     assign bti.req_pkt.cmd = BUS_CMD_READ;

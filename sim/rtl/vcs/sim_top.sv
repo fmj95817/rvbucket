@@ -1,19 +1,24 @@
-module sim_top;
-    localparam AW = 32;
-    localparam DW = 32;
-    localparam SRAM_AW = 15;
+`include "isa.svh"
+`include "boot.svh"
 
-    tri clk, rst_n;
-    bus_trans_if_t bti();
+module sim_top;
+    localparam ROM_AW = 15;
+
+    tri                    clk;
+    tri                    rst_n;
+    tri [`BOOT_ROM_AW-1:0] rom_addr;
+    tri [31:0]             rom_data;
+
+    bus_trans_if #(`RV_AW, `RV_XLEN) bti();
 
     clk_rst u_clk_rst(.*);
-    bti_sram u_bti_sram(.*);
     rv32i u_rv32i(.*);
+    bti_rom #(ROM_AW, `RV_XLEN) u_bti_rom(.*);
 
     initial begin
         string path;
         if ($value$plusargs ("program=%s", path)) begin
-            $readmemh(path, u_bti_sram.u_sram.mem);
+            $readmemh(path, u_bti_rom.u_rom.data);
         end
     end
 endmodule

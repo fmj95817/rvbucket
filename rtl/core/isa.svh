@@ -1,10 +1,12 @@
 `ifndef ISA_SVH
 `define ISA_SVH
 
-`define RV_IR_SIZE 32
-`define RV_OPCODE_SIZE 7
-`define RV_XLEN    32
-`define RV_GPR_AW  5
+`define RV_PC_SIZE   32
+`define RV_IR_SIZE   32
+`define RV_XLEN      32
+`define RV_AW        32
+`define RV_OPC_SIZE  7
+`define RV_GPR_AW    5
 
 typedef enum logic [6:0] {
     OPCODE_LUI = 7'b0110111,
