@@ -120,6 +120,7 @@ function build_verilator {
     cd build/hw/verilator;
     verilator \
         --sc --exe --build --trace \
+        --no-timing \
         --top sim_top \
         +incdir+../../../rtl \
         +incdir+../../../rtl/core \
