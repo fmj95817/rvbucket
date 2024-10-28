@@ -5,7 +5,7 @@ module alu_imm_handler(
     rv32i_i_dec_if.slave i_dec,
     exu_dp_if.master     dp_ctrl
 );
-    logic [`ALU_OPC_SIZE] alu_opcode;
+    logic [`ALU_OPC_SIZE-1:0] alu_opcode;
     always_comb begin
         case (i_dec.funct3)
             ALU_IMM_FUNCT3_ADDI:

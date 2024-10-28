@@ -117,6 +117,17 @@ function build_vcs {
 
 function build_verilator {
     mkdir -p build/hw/verilator
+    cd build/hw/verilator;
+    verilator \
+        --sc --exe --build --trace \
+        --top sim_top \
+        +incdir+../../../rtl \
+        +incdir+../../../rtl/core \
+        $(find ../../../rtl -name *.sv) \
+        $(find ../../../sim/rtl/model -name *.sv) \
+        $(find ../../../sim/rtl/verilator -name *.sv) \
+        $(find ../../../sim/rtl/verilator -name *.cc);
+    cd ../../..
 }
 
 function build_hw {
