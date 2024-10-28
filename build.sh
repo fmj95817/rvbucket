@@ -2,18 +2,19 @@
 
 set -e
 
-TC="/home/mfeng/opt/rv32i-tc/bin/riscv32-unknown-elf"
-CC="${TC}-gcc"
-OBJCOPY="${TC}-objcopy"
-OBJDUMP="${TC}-objdump"
+HOST_CC="gcc"
+CROSS_PREFIX="riscv32-unknown-elf"
+CROSS_CC="${CROSS_PREFIX}-gcc"
+CROSS_OBJCOPY="${CROSS_PREFIX}-objcopy"
+CROSS_OBJDUMP="${CROSS_PREFIX}-objdump"
 
 function build_tools {
     mkdir -p build/tools
-    gcc -Wall -O3 -o build/tools/bin2x tools/bin2x.c -lm
+    ${HOST_CC} -Wall -O3 -o build/tools/bin2x tools/bin2x.c -lm
 }
 
 function build_asm_case {
-    local LD="${TC}-ld"
+    local CROSS_LD="${CROSS_PREFIX}-ld"
 
     local case_dir="${1}"
     local case_name="$(basename ${case_dir})"
@@ -32,13 +33,13 @@ function build_asm_case {
 
     for src in ${srcs[@]}; do
         local obj="${output_dir}/$(basename ${src} .S).o"
-        ${CC} -march=rv32i -c -o "${obj}" "${src}"
+        ${CROSS_CC} -march=rv32i -c -o "${obj}" "${src}"
         objs+=("${obj}")
     done
 
-    ${LD} -T "${lds}" -o "${elf}" "${objs[@]}"
-    ${OBJCOPY} -S "${elf}" -O binary "${bin}"
-    ${OBJDUMP} -D "${elf}" > "${dis}"
+    ${CROSS_LD} -T "${lds}" -o "${elf}" "${objs[@]}"
+    ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bin}"
+    ${CROSS_OBJDUMP} -D "${elf}" > "${dis}"
     ./build/tools/bin2x "${bin}" hex > "${hex}"
 
     if [ "${2}" = "gen_model_boot" ]; then
@@ -50,7 +51,7 @@ function build_asm_case {
 }
 
 function build_c_case {
-    local LD="${TC}-gcc"
+    local CROSS_LD="${CROSS_PREFIX}-gcc"
 
     local CRT="./sdk/crt"
     local COMPILE_OPTIONS=(-Wall -O2 -fPIC -march=rv32i -I./sdk)
@@ -70,18 +71,18 @@ function build_c_case {
     local srcs=("$(find ${case_dir} ${drivers_dir} -name *.c)")
     local objs=()
 
-    ${CC} ${COMPILE_OPTIONS[@]} -c -o "${output_dir}/start.o" "${CRT}/start.S"
+    ${CROSS_CC} ${COMPILE_OPTIONS[@]} -c -o "${output_dir}/start.o" "${CRT}/start.S"
     objs+=("${output_dir}/start.o")
 
     for src in ${srcs[@]}; do
         local obj="${output_dir}/$(basename ${src} .c).o"
-        ${CC} ${COMPILE_OPTIONS[@]} -c -o "${obj}" "${src}"
+        ${CROSS_CC} ${COMPILE_OPTIONS[@]} -c -o "${obj}" "${src}"
         objs+=("${obj}")
     done
 
-    ${LD} -T "${CRT}/soc.lds" -nostartfiles -o "${elf}" "${objs[@]}"
-    ${OBJCOPY} -S "${elf}" -O binary "${bin}"
-    ${OBJDUMP} -D "${elf}" > "${dis}"
+    ${CROSS_LD} -T "${CRT}/soc.lds" -nostartfiles -o "${elf}" "${objs[@]}"
+    ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bin}"
+    ${CROSS_OBJDUMP} -D "${elf}" > "${dis}"
     ./build/tools/bin2x "${bin}" hex > "${hex}"
 }
 

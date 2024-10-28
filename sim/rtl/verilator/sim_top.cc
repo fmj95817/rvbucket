@@ -17,6 +17,7 @@ int sc_main(int argc, char *argv[])
 {
     Verilated::commandArgs(argc, argv);
     Verilated::traceEverOn(true);
+    Verilated::randReset(2);
 
     sc_clock clk{"clk", 10, SC_NS, 0.5, 3, SC_NS, true};
     sc_signal<bool> rst_n;
@@ -25,7 +26,7 @@ int sc_main(int argc, char *argv[])
     sim_top.clk(clk);
     sim_top.rst_n(rst_n);
 
-    while (!Verilated::gotFinish()) {
+    for (int i = 0; i < 10000; i++) {
         auto ts = sc_time_stamp();
         rst_n = rst_n_val(ts);
         sc_start(1, SC_NS);
