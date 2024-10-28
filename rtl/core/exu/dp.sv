@@ -78,6 +78,8 @@ module exu_dp(
                 dp_ctrl.alu_dst = alu_src1_u >> shift_bits;
             ALU_OPCODE_SRA:
                 dp_ctrl.alu_dst = alu_src1_s >> shift_bits;
+            default:
+                dp_ctrl.alu_dst = {`RV_XLEN{1'bx}};
         endcase
     end
 endmodule
