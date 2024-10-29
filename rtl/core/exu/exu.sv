@@ -30,8 +30,8 @@ module exu(
     exu_dp_if auipc_dp_ctrl();
     auipc_handler u_auipc_handler(pc, u_dec, auipc_dp_ctrl);
 
-    exu_dp_if alu_imm_dp_ctrl();
-    alu_imm_handler u_alu_imm_handler(i_dec, alu_imm_dp_ctrl);
+    exu_dp_if alui_dp_ctrl();
+    alui_handler u_alui_handler(i_dec, alui_dp_ctrl);
 
     /* data path */
     exu_dp_if dp_ctrl();

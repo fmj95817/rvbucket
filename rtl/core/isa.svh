@@ -16,7 +16,7 @@ typedef enum logic [6:0] {
     OPCODE_BRANCH = 7'b1100011,
     OPCODE_LOAD = 7'b0000011,
     OPCODE_STORE = 7'b0100011,
-    OPCODE_ALU_IMM = 7'b0010011,
+    OPCODE_ALUI = 7'b0010011,
     OPCODE_ALU = 7'b0110011,
     OPCODE_MEM = 7'b0001111,
     OPCODE_SYSTEM = 7'b1110011
@@ -32,15 +32,15 @@ typedef enum logic [2:0] {
 } rv32i_branch_funct3_t;
 
 typedef enum logic [2:0] {
-    ALU_IMM_FUNCT3_ADDI = 3'b000,
-    ALU_IMM_FUNCT3_SLTI = 3'b010,
-    ALU_IMM_FUNCT3_SLTIU = 3'b011,
-    ALU_IMM_FUNCT3_XORI = 3'b100,
-    ALU_IMM_FUNCT3_ORI = 3'b110,
-    ALU_IMM_FUNCT3_ANDI = 3'b111,
-    ALU_IMM_FUNCT3_SLI = 3'b001,
-    ALU_IMM_FUNCT3_SRI = 3'b101
-} rv32i_alu_imm_funct3_t;
+    ALUI_FUNCT3_ADDI = 3'b000,
+    ALUI_FUNCT3_SLTI = 3'b010,
+    ALUI_FUNCT3_SLTIU = 3'b011,
+    ALUI_FUNCT3_XORI = 3'b100,
+    ALUI_FUNCT3_ORI = 3'b110,
+    ALUI_FUNCT3_ANDI = 3'b111,
+    ALUI_FUNCT3_SLI = 3'b001,
+    ALUI_FUNCT3_SRI = 3'b101
+} rv32i_alui_funct3_t;
 
 typedef enum logic [2:0] {
     ALU_FUNCT3_ADD_SUB = 3'b000,

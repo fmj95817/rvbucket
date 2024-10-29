@@ -1,3 +1,5 @@
+`include "isa.svh"
+
 interface ifetch_if;
     logic req_vld;
     logic req_rdy;

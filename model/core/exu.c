@@ -550,20 +550,20 @@ DECL_GROUP_HANDLER(sri)
     }
 }
 
-DECL_GROUP_HANDLER(alu_imm)
+DECL_GROUP_HANDLER(alui)
 {
-    static inst_handler_t alu_imm_handlers[8] = {
-        [ALU_IMM_FUNCT3_ADDI] = GET_HANDLER(addi),
-        [ALU_IMM_FUNCT3_SLTI] = GET_HANDLER(slti),
-        [ALU_IMM_FUNCT3_SLTIU] = GET_HANDLER(sltiu),
-        [ALU_IMM_FUNCT3_XORI] = GET_HANDLER(xori),
-        [ALU_IMM_FUNCT3_ORI] = GET_HANDLER(ori),
-        [ALU_IMM_FUNCT3_ANDI] = GET_HANDLER(andi),
-        [ALU_IMM_FUNCT3_SLI] = GET_HANDLER(slli),
-        [ALU_IMM_FUNCT3_SRI] = GET_HANDLER(sri)
+    static inst_handler_t alui_handlers[8] = {
+        [ALUI_FUNCT3_ADDI] = GET_HANDLER(addi),
+        [ALUI_FUNCT3_SLTI] = GET_HANDLER(slti),
+        [ALUI_FUNCT3_SLTIU] = GET_HANDLER(sltiu),
+        [ALUI_FUNCT3_XORI] = GET_HANDLER(xori),
+        [ALUI_FUNCT3_ORI] = GET_HANDLER(ori),
+        [ALUI_FUNCT3_ANDI] = GET_HANDLER(andi),
+        [ALUI_FUNCT3_SLI] = GET_HANDLER(slli),
+        [ALUI_FUNCT3_SRI] = GET_HANDLER(sri)
     };
 
-    alu_imm_handlers[i->req.inst.i.funct3](exu, i);
+    alui_handlers[i->req.inst.i.funct3](exu, i);
 }
 
 DECL_INST_HANDLER(add)
@@ -785,7 +785,7 @@ void exu_exec(exu_t *exu, iexec_if_t *i)
         [OPCODE_BRANCH] = GET_HANDLER(branch),
         [OPCODE_LOAD] = GET_HANDLER(load),
         [OPCODE_STORE] = GET_HANDLER(store),
-        [OPCODE_ALU_IMM] = GET_HANDLER(alu_imm),
+        [OPCODE_ALUI] = GET_HANDLER(alui),
         [OPCODE_ALU] = GET_HANDLER(alu),
         [OPCODE_MEM] = GET_HANDLER(fence),
         [OPCODE_SYSTEM] = GET_HANDLER(sys)

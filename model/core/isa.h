@@ -12,7 +12,7 @@ typedef enum rv32i_opcode {
     OPCODE_BRANCH = 0b1100011,
     OPCODE_LOAD = 0b0000011,
     OPCODE_STORE = 0b0100011,
-    OPCODE_ALU_IMM = 0b0010011,
+    OPCODE_ALUI = 0b0010011,
     OPCODE_ALU = 0b0110011,
     OPCODE_MEM = 0b0001111,
     OPCODE_SYSTEM = 0b1110011
@@ -27,16 +27,16 @@ typedef enum rv32i_branch_funct3 {
     BRANCH_FUNCT3_BGEU = 0b111
 } rv32i_branch_funct3_t;
 
-typedef enum rv32i_alu_imm_funct3 {
-    ALU_IMM_FUNCT3_ADDI = 0b000,
-    ALU_IMM_FUNCT3_SLTI = 0b010,
-    ALU_IMM_FUNCT3_SLTIU = 0b011,
-    ALU_IMM_FUNCT3_XORI = 0b100,
-    ALU_IMM_FUNCT3_ORI = 0b110,
-    ALU_IMM_FUNCT3_ANDI = 0b111,
-    ALU_IMM_FUNCT3_SLI = 0b001,
-    ALU_IMM_FUNCT3_SRI = 0b101
-} rv32i_alu_imm_funct3_t;
+typedef enum rv32i_alui_funct3 {
+    ALUI_FUNCT3_ADDI = 0b000,
+    ALUI_FUNCT3_SLTI = 0b010,
+    ALUI_FUNCT3_SLTIU = 0b011,
+    ALUI_FUNCT3_XORI = 0b100,
+    ALUI_FUNCT3_ORI = 0b110,
+    ALUI_FUNCT3_ANDI = 0b111,
+    ALUI_FUNCT3_SLI = 0b001,
+    ALUI_FUNCT3_SRI = 0b101
+} rv32i_alui_funct3_t;
 
 typedef enum rv32i_alu_funct3 {
     ALU_FUNCT3_ADD_SUB = 0b000,

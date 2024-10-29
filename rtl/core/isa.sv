@@ -8,15 +8,15 @@ interface rv32i_opc_dec_if;
     logic branch;
     logic load;
     logic store;
-    logic alu_imm;
+    logic alui;
     logic alu;
     logic mem;
     logic system;
 
     modport master (output lui, auipc, jal, jalr,
-        branch, load, store, alu_imm, alu, mem, system);
+        branch, load, store, alui, alu, mem, system);
     modport slave (output lui, auipc, jal, jalr,
-        branch, load, store, alu_imm, alu, mem, system);
+        branch, load, store, alui, alu, mem, system);
 endinterface
 
 interface rv32i_r_dec_if;
@@ -107,7 +107,7 @@ module rv32i_isa_dec(
     assign opc_dec.branch = (opcode == OPCODE_BRANCH);
     assign opc_dec.load = (opcode == OPCODE_LOAD);
     assign opc_dec.store = (opcode == OPCODE_STORE);
-    assign opc_dec.alu_imm = (opcode == OPCODE_ALU_IMM);
+    assign opc_dec.alui = (opcode == OPCODE_ALUI);
     assign opc_dec.alu = (opcode == OPCODE_ALU);
     assign opc_dec.mem = (opcode == OPCODE_MEM);
     assign opc_dec.system = (opcode == OPCODE_SYSTEM);
