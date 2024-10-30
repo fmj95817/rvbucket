@@ -3,8 +3,16 @@
 set -e
 
 HOST_CC="gcc"
+
+SDK_DIR="./sdk"
+CRT_DIR="${SDK_DIR}/crt"
+DRIVERS_DIR="${SDK_DIR}/drivers"
+
 CROSS_PREFIX="riscv32-unknown-elf"
 CROSS_CC="${CROSS_PREFIX}-gcc"
+CROSS_CFLAGS=(-Wall -O2 -fPIC -march=rv32i -I${SDK_DIR})
+CROSS_LDFLAGS=(-nostartfiles)
+CROSS_LD="${CROSS_PREFIX}-gcc"
 CROSS_OBJCOPY="${CROSS_PREFIX}-objcopy"
 CROSS_OBJDUMP="${CROSS_PREFIX}-objdump"
 BIN2X="./build/tools/bin2x"
@@ -14,12 +22,10 @@ function build_tools {
     ${HOST_CC} -Wall -O3 -o ${BIN2X} tools/bin2x.c -lm
 }
 
-function build_asm_case {
-    local CROSS_LD="${CROSS_PREFIX}-ld"
-
+function build_sw_case {
     local case_name="${1}"
-    local case_dir="cases/asm/${case_name}"
-    local output_dir="build/sw/asm/${case_name}"
+    local case_dir="cases/${case_name}"
+    local output_dir="build/sw/${case_name}"
 
     mkdir -p "${output_dir}"
 
@@ -29,21 +35,29 @@ function build_asm_case {
     local dis="${output_dir}/${case_name}.S"
     local hex="${output_dir}/${case_name}.hex"
 
-    local srcs=("$(find ${case_dir} -name *.S)")
-    local objs=()
+    local src_dirs=("${case_dir}")
+    local ld_flags=()
+    if [ -z "${lds}" ]; then
+        src_dirs+=(${CRT_DIR} ${DRIVERS_DIR})
+        ld_flags+=(-T "${CRT_DIR}/soc.lds")
+    else
+        ld_flags+=(-T "${lds}")
+    fi
 
+    local srcs=("$(find ${src_dirs[@]} -name *.S -o -name *.c)")
+    local objs=()
     for src in ${srcs[@]}; do
-        local obj="${output_dir}/$(basename ${src} .S).o"
-        ${CROSS_CC} -march=rv32i -c -o "${obj}" "${src}"
+        local obj="${output_dir}/$(basename ${src}).o"
+        ${CROSS_CC} ${CROSS_CFLAGS[@]} -c -o "${obj}" "${src}"
         objs+=("${obj}")
     done
 
-    ${CROSS_LD} -T "${lds}" -o "${elf}" "${objs[@]}"
+    ${CROSS_LD} ${CROSS_LDFLAGS[@]} ${ld_flags[@]} -o "${elf}" "${objs[@]}"
     ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bin}"
     ${CROSS_OBJDUMP} -D "${elf}" > "${dis}"
     ${BIN2X} "${bin}" hex > "${hex}"
 
-    if [ "${case_name}" = "bootloader" ]; then
+    if [ "${case_name}" = "boot" ]; then
         if [ "${2}" = "model" ]; then
             ${BIN2X} "${bin}" c_array > model/boot.c
         elif [ "${2}" = "rtl" ]; then
@@ -51,42 +65,6 @@ function build_asm_case {
             ${BIN2X} "${bin}" sv_rom_src > rtl/boot.sv
         fi
     fi
-}
-
-function build_c_case {
-    local CROSS_LD="${CROSS_PREFIX}-gcc"
-
-    local CRT="./sdk/crt"
-    local CFLAGS=(-Wall -O2 -fPIC -march=rv32i -I./sdk)
-
-    local case_name="${1}"
-    local case_dir="cases/c/${case_name}"
-    local output_dir="build/sw/c/${case_name}"
-    local drivers_dir="sdk/drivers"
-
-    mkdir -p "${output_dir}"
-
-    local elf="${output_dir}/${case_name}.elf"
-    local bin="${output_dir}/${case_name}.bin"
-    local hex="${output_dir}/${case_name}.hex"
-    local dis="${output_dir}/${case_name}.S"
-
-    local srcs=("$(find ${case_dir} ${drivers_dir} -name *.c)")
-    local objs=()
-
-    ${CROSS_CC} ${CFLAGS[@]} -c -o "${output_dir}/start.o" "${CRT}/start.S"
-    objs+=("${output_dir}/start.o")
-
-    for src in ${srcs[@]}; do
-        local obj="${output_dir}/$(basename ${src} .c).o"
-        ${CROSS_CC} ${CFLAGS[@]} -c -o "${obj}" "${src}"
-        objs+=("${obj}")
-    done
-
-    ${CROSS_LD} -T "${CRT}/soc.lds" -nostartfiles -o "${elf}" "${objs[@]}"
-    ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bin}"
-    ${CROSS_OBJDUMP} -D "${elf}" > "${dis}"
-    ${BIN2X} "${bin}" hex > "${hex}"
 }
 
 function build_model {
@@ -129,7 +107,7 @@ function build_rtl {
         verilator \
             --sc --exe --build \
             --trace --no-timing \
-            --top sim_top \
+            --top-module sim_top \
             ${common_args[@]} \
             ${rtl_sim_src[@]} \
             $(find ${wd}/sim/rtl/verilator -name *.cc);
@@ -139,24 +117,18 @@ function build_rtl {
 
 function build_sw {
     local args=(-mindepth 1 -maxdepth 1 -type d)
-    local asm_cases=("$(find cases/asm ${args[@]})")
-    local c_cases=("$(find cases/c ${args[@]})")
+    local cases=("$(find cases ${args[@]})")
 
-    for case_dir in ${asm_cases[@]}; do
+    for case_dir in ${cases[@]}; do
         local case_name="$(basename ${case_dir})"
-        if [ "${case_name}" != "bootloader" ]; then
-            build_asm_case "${case_name}"
+        if [ "${case_name}" != "boot" ]; then
+            build_sw_case "${case_name}"
         fi
-    done
-
-    for case_dir in ${c_cases[@]}; do
-        local case_name="$(basename ${case_dir})"
-        build_c_case "${case_name}"
     done
 }
 
 function build_hw {
-    build_asm_case bootloader "${1}"
+    build_sw_case boot "${1}"
     if [ "${1}" = "model" ]; then
         build_model
     elif [ "${1}" = "rtl" ]; then
