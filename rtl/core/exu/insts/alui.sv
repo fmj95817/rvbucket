@@ -2,6 +2,7 @@
 `include "exu/dp.svh"
 
 module alui_handler(
+    input                iexec_req_hsk,
     rv32i_i_dec_if.slave i_dec,
     exu_dp_if.master     dp_ctrl
 );
@@ -33,11 +34,9 @@ module alui_handler(
     assign dp_ctrl.gpr_raddr1 = i_dec.rs1;
     assign dp_ctrl.gpr_waddr = i_dec.rd;
     assign dp_ctrl.gpr_wdata = dp_ctrl.alu_dst;
-    assign dp_ctrl.gpr_wen = 1'b1;
+    assign dp_ctrl.gpr_wen = iexec_req_hsk;
 
     assign dp_ctrl.alu_opcode = alu_opcode;
     assign dp_ctrl.alu_src1 = dp_ctrl.gpr_rdata1;
     assign dp_ctrl.alu_src2 = i_dec.imm;
 endmodule
-
-

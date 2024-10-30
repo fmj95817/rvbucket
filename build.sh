@@ -18,8 +18,8 @@ function build_asm_case {
     local CROSS_LD="${CROSS_PREFIX}-ld"
 
     local case_name="${1}"
-    local case_dir="cases/${case_name}"
-    local output_dir="build/sw/${case_name}"
+    local case_dir="cases/asm/${case_name}"
+    local output_dir="build/sw/asm/${case_name}"
 
     mkdir -p "${output_dir}"
 
@@ -43,11 +43,13 @@ function build_asm_case {
     ${CROSS_OBJDUMP} -D "${elf}" > "${dis}"
     ${BIN2X} "${bin}" hex > "${hex}"
 
-    if [ "${2}" = "gen_model_boot" ]; then
-        ${BIN2X} "${bin}" c_array > model/boot.c
-    elif [ "${2}" = "gen_rtl_boot" ]; then
-        ${BIN2X} "${bin}" sv_rom_header > rtl/boot.svh
-        ${BIN2X} "${bin}" sv_rom_src > rtl/boot.sv
+    if [ "${case_name}" = "bootloader" ]; then
+        if [ "${2}" = "model" ]; then
+            ${BIN2X} "${bin}" c_array > model/boot.c
+        elif [ "${2}" = "rtl" ]; then
+            ${BIN2X} "${bin}" sv_rom_header > rtl/boot.svh
+            ${BIN2X} "${bin}" sv_rom_src > rtl/boot.sv
+        fi
     fi
 }
 
@@ -58,8 +60,8 @@ function build_c_case {
     local CFLAGS=(-Wall -O2 -fPIC -march=rv32i -I./sdk)
 
     local case_name="${1}"
-    local case_dir="cases/${case_name}"
-    local output_dir="build/sw/${case_name}"
+    local case_dir="cases/c/${case_name}"
+    local output_dir="build/sw/c/${case_name}"
     local drivers_dir="sdk/drivers"
 
     mkdir -p "${output_dir}"
@@ -89,7 +91,7 @@ function build_c_case {
 
 function build_model {
     mkdir -p build/hw/model
-    gcc \
+    ${HOST_CC} \
         -O3 \
         -I./model \
         -o build/hw/model/sim_top \
@@ -97,64 +99,75 @@ function build_model {
         $(find sim/model -name *.c)
 }
 
-function build_vcs {
-    mkdir -p build/hw/vcs
-    cd build/hw/vcs;
-    vcs \
-        -full64 \
-        -sverilog \
-        +v2k \
-        -debug_acc+all \
-        -kdb \
-        -top sim_top \
-        -o sim_top \
-        -timescale=1ns/1ps \
-        +incdir+../../../rtl \
-        +incdir+../../../rtl/core \
-        $(find ../../../rtl -name *.sv) \
-        $(find ../../../sim/rtl/model -name *.sv) \
-        $(find ../../../sim/rtl/vcs -name *.sv);
+function build_rtl {
+    local simulator="${1}"
+    local wd="$(pwd)"
+
+    local common_args=(
+        +incdir+${wd}/rtl \
+        +incdir+${wd}/rtl/core \
+    )
+    local rtl_sim_src=(
+        $(find ${wd}/rtl -name *.sv) \
+        $(find ${wd}/sim/rtl/model -name *.sv) \
+        $(find ${wd}/sim/rtl/${simulator} -name *.sv) \
+    )
+
+    mkdir -p "build/hw/${simulator}"
+    cd "build/hw/${simulator}";
+    if [ "${simulator}" = "vcs" ]; then
+        vcs \
+            -full64 \
+            -sverilog +v2k \
+            -debug_acc+all -kdb \
+            -timescale=1ns/1ps \
+            -o sim_top \
+            -top sim_top \
+            ${common_args[@]} \
+            ${rtl_sim_src[@]};
+    elif [ "${simulator}" = "verilator" ]; then
+        verilator \
+            --sc --exe --build \
+            --trace --no-timing \
+            --top sim_top \
+            ${common_args[@]} \
+            ${rtl_sim_src[@]} \
+            $(find ${wd}/sim/rtl/verilator -name *.cc);
+    fi
     cd ../../..
 }
 
-function build_verilator {
-    mkdir -p build/hw/verilator
-    cd build/hw/verilator;
-    verilator \
-        --sc --exe --build --trace \
-        --no-timing \
-        --top sim_top \
-        +incdir+../../../rtl \
-        +incdir+../../../rtl/core \
-        $(find ../../../rtl -name *.sv) \
-        $(find ../../../sim/rtl/model -name *.sv) \
-        $(find ../../../sim/rtl/verilator -name *.sv) \
-        $(find ../../../sim/rtl/verilator -name *.cc);
-    cd ../../..
+function build_sw {
+    local args=(-mindepth 1 -maxdepth 1 -type d)
+    local asm_cases=("$(find cases/asm ${args[@]})")
+    local c_cases=("$(find cases/c ${args[@]})")
+
+    for case_dir in ${asm_cases[@]}; do
+        local case_name="$(basename ${case_dir})"
+        if [ "${case_name}" != "bootloader" ]; then
+            build_asm_case "${case_name}"
+        fi
+    done
+
+    for case_dir in ${c_cases[@]}; do
+        local case_name="$(basename ${case_dir})"
+        build_c_case "${case_name}"
+    done
 }
 
 function build_hw {
-    local bootloader="./sdk/bootloader"
-
+    build_asm_case bootloader "${1}"
     if [ "${1}" = "model" ]; then
-        build_asm_case "${bootloader}" gen_model_boot
         build_model
-    elif [ "${1}" = "vcs" ]; then
-        build_asm_case "${bootloader}" gen_rtl_boot
-        build_vcs
-    elif [ "${1}" = "verilator" ]; then
-        build_verilator
+    elif [ "${1}" = "rtl" ]; then
+        build_rtl "${2}"
     fi
 }
 
 build_tools
 
 if [ "${1}" = "hw" ]; then
-    build_hw "${2}"
+    build_hw "${2}" "${3}"
 elif [ "${1}" = "sw" ]; then
-    if [ "${2}" = "model" ]; then
-        build_c_case test
-    elif [ "${2}" = "rtl" ]; then
-        build_asm_case asm_test
-    fi
+    build_sw "${2}"
 fi

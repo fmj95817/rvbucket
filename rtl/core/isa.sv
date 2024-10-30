@@ -15,7 +15,7 @@ interface rv32i_opc_dec_if;
 
     modport master (output lui, auipc, jal, jalr,
         branch, load, store, alui, alu, mem, system);
-    modport slave (output lui, auipc, jal, jalr,
+    modport slave (input lui, auipc, jal, jalr,
         branch, load, store, alui, alu, mem, system);
 endinterface
 
