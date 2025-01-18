@@ -97,7 +97,7 @@ function build_rtl {
         vcs \
             -full64 \
             -sverilog +v2k \
-            -debug_acc+all -kdb \
+            -debug_access+r -kdb \
             -timescale=1ns/1ps \
             -o sim_top \
             -top sim_top \

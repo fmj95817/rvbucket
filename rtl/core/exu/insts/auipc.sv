@@ -1,4 +1,5 @@
 `include "isa.svh"
+`include "exu/dp.svh"
 
 module auipc_handler(
     input                   iexec_req_hsk,

@@ -1,4 +1,5 @@
 `include "isa.svh"
+`include "exu/dp.svh"
 
 module load_handler(
     input                  clk,
