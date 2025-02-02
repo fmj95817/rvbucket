@@ -1,44 +1,42 @@
 #include "uart.h"
 #include "dbg.h"
 
-void uart_construct(uart_t *uart, uart_output_t *output)
+void uart_construct(uart_t *uart, u32 base_addr)
 {
-    uart->output = output;
+    uart->base_addr = base_addr;
 }
 
-void uart_reset(uart_t *uart)
-{
-    uart->output->valid = false;
-}
+void uart_reset(uart_t *uart) {}
 
 void uart_free(uart_t *uart) {}
 
-static void uart_output(uart_t *uart)
+void uart_clock(uart_t *uart)
 {
-    uart->output->ch = uart->ch;
-    uart->output->valid = true;
-}
-
-bool uart_write(uart_t *uart, u32 addr, u32 data, u8 strobe)
-{
-    if (addr > 0) {
-        return false;
+    if (itf_fifo_empty(uart->bti_req_slv)) {
+        return;
     }
 
-    uart->ch = data;
-    uart_output(uart);
-
-    return true;
-}
-
-void uart_bus_trans_handler(uart_t *uart, u32 base_addr, bus_trans_if_t *i)
-{
-    DBG_CHECK(i->req.addr >= base_addr);
-
-    u32 addr = i->req.addr - base_addr;
-    if (i->req.cmd == BUS_CMD_WRITE) {
-        i->rsp.ok = uart_write(uart, addr, i->req.data, i->req.strobe);
-    } else {
-        i->rsp.ok = false;
+    if (itf_fifo_full(uart->bti_rsp_mst)) {
+        return;
     }
+
+    if (itf_fifo_full(uart->uart_mst)) {
+        return;
+    }
+
+    bti_req_if_t bti_req;
+    itf_read(uart->bti_req_slv, &bti_req);
+    DBG_CHECK(bti_req.addr >= uart->base_addr);
+    if (bti_req.cmd != BTI_CMD_WRITE) {
+        return;
+    }
+
+    bti_rsp_if_t bti_rsp;
+    bti_rsp.trans_id = bti_req.trans_id;
+    bti_rsp.ok = true;
+    itf_write(uart->bti_rsp_mst, &bti_rsp);
+
+    uart_if_t uart_if;
+    uart_if.tx = bti_req.data;
+    itf_write(uart->uart_mst, &uart_if);
 }

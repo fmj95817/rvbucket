@@ -1,4 +1,4 @@
-#include "types.h"
+#include "base/types.h"
 
 u32 g_boot_code_size = 0x38;
 u8 g_boot_code[] = {

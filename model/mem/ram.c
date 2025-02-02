@@ -3,10 +3,11 @@
 #include <string.h>
 #include "dbg.h"
 
-void ram_construct(ram_t *ram, u32 size)
+void ram_construct(ram_t *ram, u32 size, u32 base_addr)
 {
     ram->size = size;
     ram->data = malloc(size + 3);
+    ram->base_addr = base_addr;
     DBG_CHECK(ram->data);
 }
 
@@ -54,16 +55,31 @@ static bool ram_write(ram_t *ram, u32 addr, u32 data, u8 strobe)
     return true;
 }
 
-void ram_bus_trans_handler(ram_t *ram, u32 base_addr, bus_trans_if_t *i)
+void ram_clock(ram_t *ram)
 {
-    DBG_CHECK(i->req.addr >= base_addr);
-
-    u32 addr = i->req.addr - base_addr;
-    if (i->req.cmd == BUS_CMD_READ) {
-        i->rsp.ok = ram_read(ram, addr, &i->rsp.data);
-    } else if (i->req.cmd == BUS_CMD_WRITE) {
-        i->rsp.ok = ram_write(ram, addr, i->req.data, i->req.strobe);
-    } else {
-        i->rsp.ok = false;
+    if (itf_fifo_empty(ram->bti_req_slv)) {
+        return;
     }
+
+    if (itf_fifo_full(ram->bti_rsp_mst)) {
+        return;
+    }
+
+    bti_req_if_t bti_req;
+    itf_read(ram->bti_req_slv, &bti_req);
+    DBG_CHECK(bti_req.addr >= ram->base_addr);
+
+    bti_rsp_if_t bti_rsp;
+    bti_rsp.trans_id = bti_req.trans_id;
+    u32 addr = bti_req.addr - ram->base_addr;
+
+    if (bti_req.cmd == BTI_CMD_READ) {
+        bti_rsp.ok = ram_read(ram, addr, &bti_rsp.data);
+    } else if (bti_req.cmd == BTI_CMD_WRITE) {
+        bti_rsp.ok = ram_write(ram, addr, bti_req.data, bti_req.strobe);
+    } else {
+        bti_rsp.ok = false;
+    }
+
+    itf_write(ram->bti_rsp_mst, &bti_rsp);
 }

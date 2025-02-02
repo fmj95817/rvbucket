@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <assert.h>
-#include "types.h"
+#include "base/types.h"
 
 #define DBG_CHECK(expr) assert(expr)
 typedef enum log_module {

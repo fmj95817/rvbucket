@@ -31,37 +31,38 @@ static void soc_burn_program(soc_t *soc, const char *path)
     free(program.code);
 }
 
-static void uart_output_show(uart_output_t *output, bool *end_sim)
-{
-    if (output->valid) {
-        output->valid = false;
-        if (output->ch != 0x10) {
-            putchar(output->ch);
-        } else {
-            *end_sim = true;
-        }
-    }
-}
-
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
         return 0;
     }
 
-    uart_output_t uart_output = { .valid = false };
+    itf_t uart_itf;
+    itf_construct(&uart_itf, sizeof(uart_if_t), 1);
 
     soc_t soc;
-    soc_construct(&soc, &uart_output);
+    soc.uart_mst = &uart_itf;
+    soc_construct(&soc);
+
     soc_burn_program(&soc, argv[1]);
     soc_reset(&soc);
 
-    bool end_sim = false;
-    while (!end_sim) {
-        rv32i_exec(&soc.cpu);
-        uart_output_show(&uart_output, &end_sim);
+    while (true) {
+        soc_clock(&soc);
+        if (itf_fifo_empty(&uart_itf)) {
+            continue;
+        }
+
+        uart_if_t uart_data;
+        itf_read(&uart_itf, &uart_data);
+        if (uart_data.tx != 0x10) {
+            putchar(uart_data.tx);
+        } else {
+            break;
+        }
     }
 
     soc_free(&soc);
+    itf_free(&uart_itf);
     return 0;
 }

@@ -6,7 +6,7 @@
 
 static void to_c_array(const void *data, size_t size)
 {
-    printf("#include \"types.h\"\n\n");
+    printf("#include \"base/types.h\"\n\n");
     printf("u32 g_boot_code_size = 0x%lx;\n", size);
     printf("u8 g_boot_code[] = {\n    ");
 

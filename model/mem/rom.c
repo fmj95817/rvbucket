@@ -3,7 +3,7 @@
 #include <string.h>
 #include "dbg.h"
 
-void rom_construct(rom_t *rom, u32 size, const void *data, u32 data_size)
+void rom_construct(rom_t *rom, u32 size, const void *data, u32 data_size, u32 base_addr)
 {
     rom->size = size;
     rom->data = malloc(size + 3);
@@ -13,6 +13,8 @@ void rom_construct(rom_t *rom, u32 size, const void *data, u32 data_size)
         DBG_CHECK(data_size <= size);
         memcpy(rom->data, data, data_size);
     }
+
+    rom->base_addr = base_addr;
 }
 
 void rom_reset(rom_t *rom) {}
@@ -39,15 +41,29 @@ static bool rom_read(rom_t *rom, u32 addr, u32 *data)
     return true;
 }
 
-void rom_bus_trans_handler(rom_t *rom, u32 base_addr, bus_trans_if_t *i)
+void rom_clock(rom_t *rom)
 {
-    DBG_CHECK(i->req.addr >= base_addr);
-
-    u32 addr = i->req.addr - base_addr;
-    if (i->req.cmd == BUS_CMD_READ) {
-        i->rsp.ok = rom_read(rom, addr, &i->rsp.data);
-    } else {
-        i->rsp.ok = false;
+    if (itf_fifo_empty(rom->bti_req_slv)) {
+        return;
     }
-}
 
+    if (itf_fifo_full(rom->bti_rsp_mst)) {
+        return;
+    }
+
+    bti_req_if_t bti_req;
+    itf_read(rom->bti_req_slv, &bti_req);
+    DBG_CHECK(bti_req.addr >= rom->base_addr);
+
+    bti_rsp_if_t bti_rsp;
+    bti_rsp.trans_id = bti_req.trans_id;
+    u32 addr = bti_req.addr - rom->base_addr;
+
+    if (bti_req.cmd == BTI_CMD_READ) {
+        bti_rsp.ok = rom_read(rom, addr, &bti_rsp.data);
+    } else {
+        bti_rsp.ok = false;
+    }
+
+    itf_write(rom->bti_rsp_mst, &bti_rsp);
+}

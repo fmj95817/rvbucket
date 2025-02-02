@@ -1,7 +1,7 @@
 #ifndef ISA_H
 #define ISA_H
 
-#include "types.h"
+#include "base/types.h"
 
 #pragma pack(1)
 typedef enum rv32i_opcode {
@@ -115,6 +115,11 @@ typedef struct rv32i_inst_j {
     u32 imm_20 : 1;
 } rv32i_inst_j_t;
 
+typedef struct rv32i_inst_bas {
+    u32 opcode : 7;
+    u32 args: 25;
+} rv32i_inst_base_t;
+
 typedef union rv32i_inst {
     rv32i_inst_r_t r;
     rv32i_inst_i_t i;
@@ -122,6 +127,7 @@ typedef union rv32i_inst {
     rv32i_inst_b_t b;
     rv32i_inst_u_t u;
     rv32i_inst_j_t j;
+    rv32i_inst_base_t base;
     u32 raw;
 } rv32i_inst_t;
 #pragma pack()
