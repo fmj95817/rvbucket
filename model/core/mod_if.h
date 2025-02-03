@@ -44,4 +44,52 @@ typedef struct ldst_rsp_if {
     bool ok;
 } ldst_rsp_if_t;
 
+static inline void ex_req_if_to_str(const void *pkt, char *str)
+{
+    const ex_req_if_t *ex_req = (const ex_req_if_t *)pkt;
+    sprintf(str, "%x %x %d\n", ex_req->inst.raw, ex_req->pc, ex_req->is_boot_code);
+}
+
+static inline void ex_rsp_if_to_str(const void *pkt, char *str)
+{
+    const ex_rsp_if_t *ex_rsp = (const ex_rsp_if_t *)pkt;
+    sprintf(str, "%d %x\n", ex_rsp->taken, ex_rsp->target_pc);
+}
+
+static inline void fch_req_if_to_str(const void *pkt, char *str)
+{
+    const fch_req_if_t *fch_req = (const fch_req_if_t *)pkt;
+    sprintf(str, "%x\n", fch_req->pc);
+}
+
+static inline void fch_rsp_if_to_str(const void *pkt, char *str)
+{
+    const fch_rsp_if_t *fch_rsp = (const fch_rsp_if_t *)pkt;
+    sprintf(str, "%x %d\n", fch_rsp->ir, fch_rsp->ok);
+}
+
+static inline void fl_req_if_to_str(const void *pkt, char *str)
+{
+    const fl_req_if_t *fl_req = (const fl_req_if_t *)pkt;
+    sprintf(str, "%u\n", fl_req->dummy);
+}
+
+static inline void fl_rsp_if_to_str(const void *pkt, char *str)
+{
+    const fl_rsp_if_t *fl_rsp = (const fl_rsp_if_t *)pkt;
+    sprintf(str, "%u\n", fl_rsp->dummy);
+}
+
+static inline void ldst_req_if_to_str(const void *pkt, char *str)
+{
+    const ldst_req_if_t *ldst_req = (const ldst_req_if_t *)pkt;
+    sprintf(str, "%x %x %d %x\n", ldst_req->addr, ldst_req->data, ldst_req->st, ldst_req->strobe);
+}
+
+static inline void ldst_rsp_if_to_str(const void *pkt, char *str)
+{
+    const ldst_rsp_if_t *ldst_rsp = (const ldst_rsp_if_t *)pkt;
+    sprintf(str, "%x %d\n", ldst_rsp->data, ldst_rsp->ok);
+}
+
 #endif

@@ -1,16 +1,16 @@
 #include "rv32i.h"
 #include "dbg.h"
 
-void rv32i_construct(rv32i_t *s, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
+void rv32i_construct(rv32i_t *s, u64 *cycles, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
 {
-    itf_construct(&s->fch_req_itf, sizeof(fch_req_if_t), 1);
-    itf_construct(&s->fch_rsp_itf, sizeof(fch_rsp_if_t), 1);
-    itf_construct(&s->ex_req_itf, sizeof(ex_req_if_t), 1);
-    itf_construct(&s->ex_rsp_itf, sizeof(ex_rsp_if_t), 1);
-    itf_construct(&s->fl_req_itf, sizeof(fl_req_if_t), 1);
-    itf_construct(&s->fl_rsp_itf, sizeof(fl_rsp_if_t), 1);
-    itf_construct(&s->ldst_req_itf, sizeof(ldst_req_if_t), 1);
-    itf_construct(&s->ldst_rsp_itf, sizeof(fch_rsp_if_t), 1);
+    itf_construct(&s->fch_req_itf, cycles, "fch_req_itf", &fch_req_if_to_str, sizeof(fch_req_if_t), 1);
+    itf_construct(&s->fch_rsp_itf, cycles, "fch_rsp_itf", &fch_rsp_if_to_str, sizeof(fch_rsp_if_t), 1);
+    itf_construct(&s->ex_req_itf, cycles, "ex_req_itf", &ex_req_if_to_str, sizeof(ex_req_if_t), 1);
+    itf_construct(&s->ex_rsp_itf, cycles, "ex_rsp_itf", &ex_rsp_if_to_str, sizeof(ex_rsp_if_t), 1);
+    itf_construct(&s->fl_req_itf, cycles, "fl_req_itf", &fl_req_if_to_str, sizeof(fl_req_if_t), 1);
+    itf_construct(&s->fl_rsp_itf, cycles, "fl_rsp_itf", &fl_rsp_if_to_str, sizeof(fl_rsp_if_t), 1);
+    itf_construct(&s->ldst_req_itf, cycles, "ldst_req_itf", &ldst_req_if_to_str, sizeof(ldst_req_if_t), 1);
+    itf_construct(&s->ldst_rsp_itf, cycles, "ldst_rsp_itf", &ldst_rsp_if_to_str, sizeof(fch_rsp_if_t), 1);
 
     s->ifu.fch_req_mst = &s->fch_req_itf;
     s->ifu.fch_rsp_slv = &s->fch_rsp_itf;

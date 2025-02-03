@@ -37,18 +37,21 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    u64 cycles = 0;
+
     itf_t uart_itf;
-    itf_construct(&uart_itf, sizeof(uart_if_t), 1);
+    itf_construct(&uart_itf, &cycles, "uart_itf", &uart_if_to_str, sizeof(uart_if_t), 1);
 
     soc_t soc;
     soc.uart_mst = &uart_itf;
-    soc_construct(&soc);
+    soc_construct(&soc, &cycles);
 
     soc_burn_program(&soc, argv[1]);
     soc_reset(&soc);
 
     while (true) {
         soc_clock(&soc);
+        cycles++;
         if (itf_fifo_empty(&uart_itf)) {
             continue;
         }
@@ -61,6 +64,8 @@ int main(int argc, char *argv[])
             break;
         }
     }
+
+    printf("cycles: %lu\n", cycles);
 
     soc_free(&soc);
     itf_free(&uart_itf);

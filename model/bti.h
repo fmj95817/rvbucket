@@ -23,6 +23,19 @@ typedef struct bti_rsp_if {
     bool ok;
 } bti_rsp_if_t;
 
+static inline void bti_req_if_to_str(const void *pkt, char *str)
+{
+    const bti_req_if_t *bti_req = (const bti_req_if_t *)pkt;
+    sprintf(str, "%u %d %x %x %x\n", bti_req->trans_id,
+        bti_req->cmd, bti_req->addr, bti_req->data, bti_req->strobe);
+}
+
+static inline void bti_rsp_if_to_str(const void *pkt, char *str)
+{
+    const bti_rsp_if_t *bti_rsp = (const bti_rsp_if_t *)pkt;
+    sprintf(str, "%u %x %d\n", bti_rsp->trans_id, bti_rsp->data, bti_rsp->ok);
+}
+
 typedef struct bti_mux {
     itf_t *host_bti_req_slv;
     itf_t *host_bti_rsp_mst;

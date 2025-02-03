@@ -13,7 +13,7 @@
 #define UART_BASE_ADDR      0x20000000
 #define UART_SIZE           4
 
-void soc_construct(soc_t *soc)
+void soc_construct(soc_t *soc, u64 *cycles)
 {
     extern u32 g_boot_code_size;
     extern u8 g_boot_code[];
@@ -21,16 +21,16 @@ void soc_construct(soc_t *soc)
     const u32 periph_base_addrs[] = { BOOT_ROM_BASE_ADDR, FLASH_BASE_ADDR, TCM_BASE_ADDR, UART_BASE_ADDR };
     const u32 periph_sizes[] = { BOOT_ROM_SIZE, FLASH_SIZE, TCM_SIZE, UART_SIZE };
 
-    itf_construct(&soc->cpu_bti_req_itf, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->cpu_bti_rsp_itf, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->boot_rom_bti_req_itf, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->boot_rom_bti_rsp_itf, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->flash_bti_req_itf, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->flash_bti_rsp_itf, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->tcm_bti_req_itf, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->tcm_bti_rsp_itf, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->uart_bti_req_itf, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->uart_bti_rsp_itf, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->cpu_bti_req_itf, cycles, "cpu_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->cpu_bti_rsp_itf, cycles, "cpu_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->boot_rom_bti_req_itf, cycles, "boot_rom_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->boot_rom_bti_rsp_itf, cycles, "boot_rom_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->flash_bti_req_itf, cycles, "flash_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->flash_bti_rsp_itf, cycles, "flash_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->tcm_bti_req_itf, cycles, "tcm_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->tcm_bti_rsp_itf, cycles, "tcm_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->uart_bti_req_itf, cycles, "uart_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->uart_bti_rsp_itf, cycles, "uart_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
 
     soc->cpu.bti_req_mst = &soc->cpu_bti_req_itf;
     soc->cpu.bti_rsp_slv = &soc->cpu_bti_rsp_itf;
@@ -47,7 +47,7 @@ void soc_construct(soc_t *soc)
     soc->bti_mux.host_bti_req_slv = &soc->cpu_bti_req_itf;
     soc->bti_mux.host_bti_rsp_mst = &soc->cpu_bti_rsp_itf;
 
-    rv32i_construct(&soc->cpu, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
+    rv32i_construct(&soc->cpu, cycles, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
     ram_construct(&soc->tcm, TCM_SIZE, TCM_BASE_ADDR);
     rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE_ADDR);
     rom_construct(&soc->boot_rom, BOOT_ROM_SIZE, g_boot_code, g_boot_code_size, BOOT_ROM_BASE_ADDR);

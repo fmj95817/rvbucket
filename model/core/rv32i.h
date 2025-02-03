@@ -26,7 +26,7 @@ typedef struct rv32i {
     itf_t ldst_rsp_itf;
 } rv32i_t;
 
-extern void rv32i_construct(rv32i_t *s, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
+extern void rv32i_construct(rv32i_t *s, u64 *cycles, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
 extern void rv32i_reset(rv32i_t *s);
 extern void rv32i_clock(rv32i_t *s);
 extern void rv32i_free(rv32i_t *s);

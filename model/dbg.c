@@ -1,5 +1,4 @@
 #include "dbg.h"
-#include <string.h>
 
 typedef struct log_module_attr {
     const char *path;
@@ -13,16 +12,6 @@ static log_module_attr_t g_log_mod_attrs[LOG_MOD_COUNT] = {
     [LOG_TRACE] = { "trace.txt", "GEN_TRACE", NULL, true }
 };
 
-static inline bool get_bool_env(const char *key)
-{
-    if (key == NULL) {
-        return false;
-    }
-
-    const char *val = getenv(key);
-    return (val != NULL && strcmp(val, "0") != 0);
-}
-
 __attribute__((constructor)) void dbg_log_constructor()
 {
     for (int i = 0; i < LOG_MOD_COUNT; i++) {
@@ -32,7 +21,7 @@ __attribute__((constructor)) void dbg_log_constructor()
             continue;
         }
 
-        bool gen_file = get_bool_env(mod->env_switch);
+        bool gen_file = dbg_get_bool_env(mod->env_switch);
         if (mod->env_switch != NULL && (!gen_file)) {
             continue;
         }

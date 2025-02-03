@@ -18,6 +18,12 @@ typedef struct uart {
     u32 base_addr;
 } uart_t;
 
+static inline void uart_if_to_str(const void *pkt, char *str)
+{
+    const uart_if_t *uart_if = (const uart_if_t *)pkt;
+    sprintf(str, "%x\n", uart_if->tx);
+}
+
 extern void uart_construct(uart_t *uart, u32 base_addr);
 extern void uart_reset(uart_t *uart);
 extern void uart_clock(uart_t *uart);
