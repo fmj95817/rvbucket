@@ -42,7 +42,7 @@ void soc_construct(soc_t *soc, u64 *cycles)
     soc->tcm.bti_rsp_mst = &soc->tcm_bti_rsp_itf;
     soc->uart.bti_req_slv = &soc->uart_bti_req_itf;
     soc->uart.bti_rsp_mst = &soc->uart_bti_rsp_itf;
-    soc->uart.uart_mst = soc->uart_mst;
+    soc->uart.uart_tx = soc->uart_tx;
 
     soc->bti_mux.host_bti_req_slv = &soc->cpu_bti_req_itf;
     soc->bti_mux.host_bti_rsp_mst = &soc->cpu_bti_rsp_itf;

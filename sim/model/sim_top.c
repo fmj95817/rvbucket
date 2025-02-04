@@ -39,35 +39,34 @@ int main(int argc, char *argv[])
 
     u64 cycles = 0;
 
-    itf_t uart_itf;
-    itf_construct(&uart_itf, &cycles, "uart_itf", &uart_if_to_str, sizeof(uart_if_t), 1);
+    itf_t uart_rx_itf;
+    itf_construct(&uart_rx_itf, &cycles, "uart_rx_itf", &uart_if_to_str, sizeof(uart_if_t), 1);
 
     soc_t soc;
-    soc.uart_mst = &uart_itf;
+    soc.uart_tx = &uart_rx_itf;
     soc_construct(&soc, &cycles);
 
     soc_burn_program(&soc, argv[1]);
     soc_reset(&soc);
 
-    while (true) {
+    for (cycles = 0; ; cycles++) {
         soc_clock(&soc);
-        cycles++;
-        if (itf_fifo_empty(&uart_itf)) {
+
+        if (itf_fifo_empty(&uart_rx_itf)) {
             continue;
         }
 
-        uart_if_t uart_data;
-        itf_read(&uart_itf, &uart_data);
-        if (uart_data.tx != 0x10) {
-            putchar(uart_data.tx);
+        uart_if_t uart_if;
+        itf_read(&uart_rx_itf, &uart_if);
+
+        if (uart_if.data != 0x10) {
+            putchar(uart_if.data);
         } else {
             break;
         }
     }
 
-    printf("cycles: %lu\n", cycles);
-
     soc_free(&soc);
-    itf_free(&uart_itf);
+    itf_free(&uart_rx_itf);
     return 0;
 }

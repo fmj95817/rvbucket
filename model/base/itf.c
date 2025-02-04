@@ -1,7 +1,10 @@
 #include "itf.h"
 #include "dbg.h"
 #include <string.h>
-#include <linux/limits.h>
+#include <sys/stat.h>
+
+#define ITF_DUMP_DIR "itf_dump"
+#define ITF_DUMP_ENV "ITF_DUMP"
 
 void itf_construct(itf_t *itf, u64 *cycles, const char *name, pkt2str_t pkt2str, u32 pkt_size, u32 fifo_depth)
 {
@@ -9,19 +12,28 @@ void itf_construct(itf_t *itf, u64 *cycles, const char *name, pkt2str_t pkt2str,
     itf->fifo_depth = fifo_depth;
 
     itf->cycles = cycles;
+
+    itf->dump_enable = dbg_get_bool_env(ITF_DUMP_ENV);
     itf->name = name;
     itf->pkt2str = pkt2str;
 
-    if (dbg_get_bool_env("ITF_DUMP")) {
-        char slv_path[PATH_MAX];
-        char mst_path[PATH_MAX];
-        sprintf(slv_path, "itf_dump/%s_slv.txt", name);
-        sprintf(mst_path, "itf_dump/%s_mst.txt", name);
-        itf->itf_dump_slv_fp = fopen(slv_path, "w");
-        itf->itf_dump_mst_fp = fopen(mst_path, "w");
+    if (itf->dump_enable) {
+        struct stat s;
+        if (stat(ITF_DUMP_DIR, &s) || !S_ISDIR(s.st_mode)) {
+            mkdir(ITF_DUMP_DIR, 0755);
+        }
+    }
+
+    if (itf->dump_enable) {
+        char slv_path[1024];
+        char mst_path[1024];
+        sprintf(slv_path, ITF_DUMP_DIR"/%s_slv.txt", name);
+        sprintf(mst_path, ITF_DUMP_DIR"/%s_mst.txt", name);
+        itf->dump_slv_fp = fopen(slv_path, "w");
+        itf->dump_mst_fp = fopen(mst_path, "w");
     } else {
-        itf->itf_dump_slv_fp = NULL;
-        itf->itf_dump_mst_fp = NULL;
+        itf->dump_slv_fp = NULL;
+        itf->dump_mst_fp = NULL;
     }
 
     itf->pkts_data = malloc(pkt_size *fifo_depth);
@@ -37,14 +49,14 @@ void itf_free(itf_t *itf)
         itf->pkts_data = NULL;
     }
 
-    if (itf->itf_dump_slv_fp) {
-        fclose(itf->itf_dump_slv_fp);
-        itf->itf_dump_slv_fp = NULL;
+    if (itf->dump_slv_fp) {
+        fclose(itf->dump_slv_fp);
+        itf->dump_slv_fp = NULL;
     }
 
-    if (itf->itf_dump_mst_fp) {
-        fclose(itf->itf_dump_mst_fp);
-        itf->itf_dump_mst_fp = NULL;
+    if (itf->dump_mst_fp) {
+        fclose(itf->dump_mst_fp);
+        itf->dump_mst_fp = NULL;
     }
 }
 
@@ -61,11 +73,11 @@ void itf_write(itf_t *itf, const void *pkt)
     itf->pkt_num++;
     itf->wptr = (itf->wptr + 1) % itf->fifo_depth;
 
-    if (dbg_get_bool_env("ITF_DUMP")) {
-        if (itf->itf_dump_mst_fp) {
+    if (itf->dump_enable) {
+        if (itf->dump_mst_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->itf_dump_mst_fp, "%lu %s", *itf->cycles, pkt_str);
+            fprintf(itf->dump_mst_fp, "%lu %s", *itf->cycles, pkt_str);
         }
     }
 }
@@ -78,11 +90,11 @@ void itf_read(itf_t *itf, void *pkt)
     itf->pkt_num--;
     itf->rptr = (itf->rptr + 1) % itf->fifo_depth;
 
-    if (dbg_get_bool_env("ITF_DUMP")) {
-        if (itf->itf_dump_slv_fp) {
+    if (itf->dump_enable) {
+        if (itf->dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->itf_dump_slv_fp, "%lu %s", *itf->cycles, pkt_str);
+            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycles, pkt_str);
         }
     }
 }
@@ -96,6 +108,15 @@ void itf_fifo_get_front(itf_t *itf, void *pkt)
 void itf_fifo_pop_front(itf_t *itf)
 {
     DBG_CHECK(itf->pkt_num > 0);
+
+    if (itf->dump_enable) {
+        if (itf->dump_slv_fp) {
+            char pkt_str[1024];
+            itf->pkt2str(get_pkt_addr(itf, itf->rptr), pkt_str);
+            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycles, pkt_str);
+        }
+    }
+
     itf->pkt_num--;
     itf->rptr = (itf->rptr + 1) % itf->fifo_depth;
 }

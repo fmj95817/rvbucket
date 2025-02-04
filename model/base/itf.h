@@ -11,10 +11,12 @@ typedef struct itf {
     u32 fifo_depth;
 
     u64 *cycles;
+
+    bool dump_enable;
     const char *name;
     pkt2str_t pkt2str;
-    FILE *itf_dump_slv_fp;
-    FILE *itf_dump_mst_fp;
+    FILE *dump_slv_fp;
+    FILE *dump_mst_fp;
 
     void *pkts_data;
     u32 pkt_num;

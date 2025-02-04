@@ -20,7 +20,7 @@ void uart_clock(uart_t *uart)
         return;
     }
 
-    if (itf_fifo_full(uart->uart_mst)) {
+    if (itf_fifo_full(uart->uart_tx)) {
         return;
     }
 
@@ -37,6 +37,6 @@ void uart_clock(uart_t *uart)
     itf_write(uart->bti_rsp_mst, &bti_rsp);
 
     uart_if_t uart_if;
-    uart_if.tx = bti_req.data;
-    itf_write(uart->uart_mst, &uart_if);
+    uart_if.data = bti_req.data;
+    itf_write(uart->uart_tx, &uart_if);
 }

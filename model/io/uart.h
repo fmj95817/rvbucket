@@ -6,14 +6,13 @@
 #include "bti.h"
 
 typedef struct uart_if {
-    u32 rx;
-    u32 tx;
+    u32 data;
 } uart_if_t;
 
 typedef struct uart {
     itf_t *bti_req_slv;
     itf_t *bti_rsp_mst;
-    itf_t *uart_mst;
+    itf_t *uart_tx;
 
     u32 base_addr;
 } uart_t;
@@ -21,7 +20,7 @@ typedef struct uart {
 static inline void uart_if_to_str(const void *pkt, char *str)
 {
     const uart_if_t *uart_if = (const uart_if_t *)pkt;
-    sprintf(str, "%x\n", uart_if->tx);
+    sprintf(str, "%x\n", uart_if->data);
 }
 
 extern void uart_construct(uart_t *uart, u32 base_addr);

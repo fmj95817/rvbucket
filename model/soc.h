@@ -10,7 +10,7 @@
 #include "dbg.h"
 
 typedef struct soc {
-    itf_t *uart_mst;
+    itf_t *uart_tx;
 
     rv32i_t cpu;
     rom_t boot_rom;
