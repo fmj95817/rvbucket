@@ -70,6 +70,7 @@ function build_sw_case {
 function build_model {
     mkdir -p build/hw/model
     ${HOST_CC} \
+        -Wall \
         -O3 \
         -I./model \
         -o build/hw/model/sim_top \
