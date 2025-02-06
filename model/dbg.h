@@ -7,6 +7,7 @@
 #include "base/types.h"
 
 #define DBG_CHECK(expr) assert(expr)
+
 typedef enum log_module {
     LOG_PRINT = 0,
     LOG_TRACE = 1,
@@ -16,6 +17,7 @@ typedef enum log_module {
 extern FILE *dbg_get_log_module_fp(log_module_t mod);
 extern void dbg_disable_log_module(log_module_t mod);
 extern void dbg_enable_log_module(log_module_t mod);
+extern bool dbg_get_bool_env(const char *key);
 
 #define DBG_LOG(mod, fmt, ...) \
 do { \
@@ -25,15 +27,5 @@ do { \
         fflush(fp); \
     } \
 } while (0)
-
-static inline bool dbg_get_bool_env(const char *key)
-{
-    if (key == NULL) {
-        return false;
-    }
-
-    const char *val = getenv(key);
-    return (val != NULL && strcmp(val, "0") != 0);
-}
 
 #endif

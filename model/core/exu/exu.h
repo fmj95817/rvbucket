@@ -33,6 +33,6 @@ extern void branch_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void sys_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 
-extern void ldst_lsu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp);
+extern void ldst_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp);
 
 #endif

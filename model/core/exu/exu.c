@@ -88,7 +88,7 @@ static void exu_proc_ldst_rsp(exu_t *exu)
     itf_read(exu->ldst_rsp_slv, &ldst_rsp);
     DBG_CHECK(ldst_rsp.ok);
 
-    ldst_lsu_rsp_proc(exu, &ldst_rsp);
+    ldst_biu_rsp_proc(exu, &ldst_rsp);
 }
 
 void exu_clock(exu_t *exu)

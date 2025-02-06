@@ -4,20 +4,20 @@
 
 #define DECL_LDST_IEX_REQ_HANDLER(inst) static void inst##_ex_req_handler( \
     exu_t *exu, const ex_req_if_t *ex_req, ldst_req_if_t *ldst_req)
-#define DECL_LDST_LSU_RSP_HANDLER(inst) static void inst##_lsu_rsp_handler( \
+#define DECL_LDST_LSU_RSP_HANDLER(inst) static void inst##_biu_rsp_handler( \
     exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
 
 #define GET_LDST_IEX_REQ_HANDLER(inst) &inst##_ex_req_handler
-#define GET_LDST_LSU_RSP_HANDLER(inst) &inst##_lsu_rsp_handler
+#define GET_LDST_LSU_RSP_HANDLER(inst) &inst##_biu_rsp_handler
 
 #define CALL_LDST_IEX_REQ_HANDLER(inst, exu, ex_req, ldst_req) \
     inst##_ex_req_handler(exu, ex_req, ldst_req)
 #define CALL_LDST_LSU_RSP_HANDLER(inst, exu, ldst_rsp) \
-    inst##_lsu_rsp_handler(exu, ldst_rsp)
+    inst##_biu_rsp_handler(exu, ldst_rsp)
 
 typedef void (*ldst_ex_req_handler_t)( \
     exu_t *exu, const ex_req_if_t *ex_req, ldst_req_if_t *ldst_req);
-typedef void (*ldst_lsu_rsp_handler_t)( \
+typedef void (*ldst_biu_rsp_handler_t)( \
     exu_t *exu, const ldst_rsp_if_t *ldst_rsp);
 
 DECL_LDST_IEX_REQ_HANDLER(lb)
@@ -130,7 +130,7 @@ DECL_LDST_IEX_REQ_HANDLER(load_group)
 
 DECL_LDST_LSU_RSP_HANDLER(load_group)
 {
-    static ldst_lsu_rsp_handler_t handlers[8] = {
+    static ldst_biu_rsp_handler_t handlers[8] = {
         [LOAD_FUNCT3_LB] = GET_LDST_LSU_RSP_HANDLER(lb),
         [LOAD_FUNCT3_LH] = GET_LDST_LSU_RSP_HANDLER(lh),
         [LOAD_FUNCT3_LW] = GET_LDST_LSU_RSP_HANDLER(lw),
@@ -138,7 +138,7 @@ DECL_LDST_LSU_RSP_HANDLER(load_group)
         [LOAD_FUNCT3_LHU] = GET_LDST_LSU_RSP_HANDLER(lhu)
     };
 
-    ldst_lsu_rsp_handler_t handler = handlers[exu->ld_funct3];
+    ldst_biu_rsp_handler_t handler = handlers[exu->ld_funct3];
     if (handler) {
         handler(exu, ldst_rsp);
     } else {
@@ -236,7 +236,7 @@ void ldst_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
     }
 }
 
-void ldst_lsu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
+void ldst_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
 {
     if (exu->ldst_opcode == OPCODE_LOAD) {
         CALL_LDST_LSU_RSP_HANDLER(load_group, exu, ldst_rsp);

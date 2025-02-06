@@ -58,3 +58,13 @@ void dbg_enable_log_module(log_module_t mod)
     log_module_attr_t *attr = g_log_mod_attrs + mod;
     attr->enable = true;
 }
+
+bool dbg_get_bool_env(const char *key)
+{
+    if (key == NULL) {
+        return false;
+    }
+
+    const char *val = getenv(key);
+    return (val != NULL && strcmp(val, "0") != 0);
+}

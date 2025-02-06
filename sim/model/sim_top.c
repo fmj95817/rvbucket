@@ -7,6 +7,13 @@ typedef struct program {
     void *code;
 } program_t;
 
+typedef struct sim_top {
+    u64 cycles;
+    itf_t uart_rx_itf;
+    soc_t soc;
+    bool end_sim;
+} sim_top_t;
+
 static program_t read_program(const char *path)
 {
     program_t program;
@@ -31,42 +38,69 @@ static void soc_burn_program(soc_t *soc, const char *path)
     free(program.code);
 }
 
+static void sim_top_construct(sim_top_t *sim_top, const char *prog_path)
+{
+    sim_top->cycles = 0;
+    itf_construct(&sim_top->uart_rx_itf, &sim_top->cycles,
+        "uart_rx_itf", &uart_if_to_str, sizeof(uart_if_t), 1);
+
+    sim_top->soc.uart_tx = &sim_top->uart_rx_itf;
+    soc_construct(&sim_top->soc, &sim_top->cycles);
+    soc_burn_program(&sim_top->soc, prog_path);
+
+    sim_top->end_sim = false;
+}
+
+static void sim_top_reset(sim_top_t *sim_top)
+{
+    soc_reset(&sim_top->soc);
+}
+
+static void sim_top_clock(sim_top_t *sim_top)
+{
+    soc_clock(&sim_top->soc);
+
+    if (itf_fifo_empty(&sim_top->uart_rx_itf)) {
+        sim_top->cycles++;
+        return;
+    }
+
+    uart_if_t uart_if;
+    itf_read(&sim_top->uart_rx_itf, &uart_if);
+
+    i32 ch;
+    ch.u = uart_if.data;
+    if (ch.s != 0x10) {
+        putchar(ch.s);
+    } else {
+        sim_top->end_sim = true;
+    }
+
+    sim_top->cycles++;
+}
+
+static void sim_top_free(sim_top_t *sim_top)
+{
+    soc_free(&sim_top->soc);
+    itf_free(&sim_top->uart_rx_itf);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
         return 0;
     }
 
-    u64 cycles = 0;
+    sim_top_t sim_top;
 
-    itf_t uart_rx_itf;
-    itf_construct(&uart_rx_itf, &cycles, "uart_rx_itf", &uart_if_to_str, sizeof(uart_if_t), 1);
+    sim_top_construct(&sim_top, argv[1]);
+    sim_top_reset(&sim_top);
 
-    soc_t soc;
-    soc.uart_tx = &uart_rx_itf;
-    soc_construct(&soc, &cycles);
-
-    soc_burn_program(&soc, argv[1]);
-    soc_reset(&soc);
-
-    for (cycles = 0; ; cycles++) {
-        soc_clock(&soc);
-
-        if (itf_fifo_empty(&uart_rx_itf)) {
-            continue;
-        }
-
-        uart_if_t uart_if;
-        itf_read(&uart_rx_itf, &uart_if);
-
-        if (uart_if.data != 0x10) {
-            putchar(uart_if.data);
-        } else {
-            break;
-        }
+    while (!sim_top.end_sim) {
+        sim_top_clock(&sim_top);
     }
 
-    soc_free(&soc);
-    itf_free(&uart_rx_itf);
+    sim_top_free(&sim_top);
+
     return 0;
 }
