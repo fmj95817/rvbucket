@@ -1,6 +1,7 @@
 #include "exu.h"
 #include "utils.h"
-#include "dbg.h"
+#include "dbg/chk.h"
+#include "dbg/log.h"
 
 #define DECL_BRANCH_HANDLER(inst) static void \
     inst##_ex_req_handler(exu_t *exu, const ex_req_if_t *req, ex_rsp_if_t *rsp)
@@ -44,6 +45,9 @@ DECL_BRANCH_HANDLER(beq)
     if (get_gpr(exu, rs1) == get_gpr(exu, rs2)) {
         rsp->taken = true;
         rsp->target_pc = req->pc + imm.u;
+    } else {
+        rsp->taken = false;
+        rsp->target_pc = req->pc + 4;
     }
 
     DBG_LOG(LOG_TRACE, "beq %s, %s, %d # 0x%08x\n",
@@ -59,6 +63,9 @@ DECL_BRANCH_HANDLER(bne)
     if (get_gpr(exu, rs1) != get_gpr(exu, rs2)) {
         rsp->taken = true;
         rsp->target_pc = req->pc + imm.u;
+    } else {
+        rsp->taken = false;
+        rsp->target_pc = req->pc + 4;
     }
 
     DBG_LOG(LOG_TRACE, "bne %s, %s, %d # 0x%08x\n",
@@ -78,6 +85,9 @@ DECL_BRANCH_HANDLER(blt)
     if (n1.s < n2.s) {
         rsp->taken = true;
         rsp->target_pc = req->pc + imm.u;
+    } else {
+        rsp->taken = false;
+        rsp->target_pc = req->pc + 4;
     }
 
     DBG_LOG(LOG_TRACE, "blt %s, %s, %d # 0x%08x\n",
@@ -97,6 +107,9 @@ DECL_BRANCH_HANDLER(bge)
     if (n1.s >= n2.s) {
         rsp->taken = true;
         rsp->target_pc = req->pc + imm.u;
+    } else {
+        rsp->taken = false;
+        rsp->target_pc = req->pc + 4;
     }
 
     DBG_LOG(LOG_TRACE, "bge %s, %s, %d # 0x%08x\n",
@@ -112,6 +125,9 @@ DECL_BRANCH_HANDLER(bltu)
     if (get_gpr(exu, rs1) < get_gpr(exu, rs2)) {
         rsp->taken = true;
         rsp->target_pc = req->pc + imm.u;
+    } else {
+        rsp->taken = false;
+        rsp->target_pc = req->pc + 4;
     }
 
     DBG_LOG(LOG_TRACE, "bltu %s, %s, %d # 0x%08x\n",
@@ -127,6 +143,9 @@ DECL_BRANCH_HANDLER(bgeu)
     if (get_gpr(exu, rs1) >= get_gpr(exu, rs2)) {
         rsp->taken = true;
         rsp->target_pc = req->pc + imm.u;
+    } else {
+        rsp->taken = false;
+        rsp->target_pc = req->pc + 4;
     }
 
     DBG_LOG(LOG_TRACE, "bgeu %s, %s, %d # 0x%08x\n",
@@ -154,8 +173,12 @@ DECL_BRANCH_HANDLER(branch_group)
 
 void branch_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
 {
+    if (itf_fifo_full(exu->ex_rsp_mst)) {
+        return;
+    }
+
     ex_rsp_if_t ex_rsp;
-    ex_rsp.taken = false;
+    ex_rsp.pc = ex_req->pc;
 
     if (ex_req->inst.base.opcode == OPCODE_JAL) {
         CALL_BRANCH_HANDLER(jal, exu, ex_req, &ex_rsp);
@@ -165,6 +188,13 @@ void branch_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
         CALL_BRANCH_HANDLER(branch_group, exu, ex_req, &ex_rsp);
     } else {
         DBG_CHECK(0);
+    }
+
+    if (ex_rsp.taken) {
+        ex_rsp.pred_true = ex_req->pred_taken &&
+            (ex_rsp.target_pc == ex_req->pred_pc);
+    } else {
+        ex_rsp.pred_true = !ex_req->pred_taken;
     }
 
     itf_write(exu->ex_rsp_mst, &ex_rsp);

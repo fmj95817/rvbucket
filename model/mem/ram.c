@@ -1,7 +1,7 @@
 #include "ram.h"
 #include <stdlib.h>
 #include <string.h>
-#include "dbg.h"
+#include "dbg/chk.h"
 
 void ram_construct(ram_t *ram, u32 size, u32 base_addr)
 {

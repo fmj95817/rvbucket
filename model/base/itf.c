@@ -1,17 +1,18 @@
 #include "itf.h"
-#include "dbg.h"
 #include <string.h>
 #include <sys/stat.h>
+#include "dbg/chk.h"
+#include "dbg/env.h"
 
 #define ITF_DUMP_DIR "itf_dump"
 #define ITF_DUMP_ENV "ITF_DUMP"
 
-void itf_construct(itf_t *itf, u64 *cycles, const char *name, pkt2str_t pkt2str, u32 pkt_size, u32 fifo_depth)
+void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt2str, u32 pkt_size, u32 fifo_depth)
 {
     itf->pkt_size = pkt_size;
     itf->fifo_depth = fifo_depth;
 
-    itf->cycles = cycles;
+    itf->cycle = cycle;
 
     itf->dump_enable = dbg_get_bool_env(ITF_DUMP_ENV);
     itf->name = name;
@@ -77,7 +78,8 @@ void itf_write(itf_t *itf, const void *pkt)
         if (itf->dump_mst_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->dump_mst_fp, "%lu %s", *itf->cycles, pkt_str);
+            fprintf(itf->dump_mst_fp, "%lu %s", *itf->cycle, pkt_str);
+            fflush(itf->dump_mst_fp);
         }
     }
 }
@@ -94,7 +96,8 @@ void itf_read(itf_t *itf, void *pkt)
         if (itf->dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycles, pkt_str);
+            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycle, pkt_str);
+            fflush(itf->dump_slv_fp);
         }
     }
 }
@@ -113,7 +116,8 @@ void itf_fifo_pop_front(itf_t *itf)
         if (itf->dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(get_pkt_addr(itf, itf->rptr), pkt_str);
-            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycles, pkt_str);
+            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycle, pkt_str);
+            fflush(itf->dump_slv_fp);
         }
     }
 

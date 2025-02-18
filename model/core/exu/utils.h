@@ -4,7 +4,7 @@
 #include "base/types.h"
 #include "core/isa.h"
 #include "exu.h"
-#include "dbg.h"
+#include "dbg/chk.h"
 
 static inline u32 sign_ext(u32 data, u32 width)
 {

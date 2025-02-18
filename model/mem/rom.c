@@ -1,7 +1,7 @@
 #include "rom.h"
 #include <stdlib.h>
 #include <string.h>
-#include "dbg.h"
+#include "dbg/chk.h"
 
 void rom_construct(rom_t *rom, u32 size, const void *data, u32 data_size, u32 base_addr)
 {

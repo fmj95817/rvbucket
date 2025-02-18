@@ -1,5 +1,6 @@
 #include "exu.h"
-#include "dbg.h"
+#include "dbg/chk.h"
+#include "dbg/log.h"
 
 static inline void print_split_line(bool newline)
 {

@@ -1,7 +1,7 @@
 #include "biu.h"
 #include "mod_if.h"
 #include "bti.h"
-#include "dbg.h"
+#include "dbg/chk.h"
 
 #define IFETCH_TRANS_ID 0
 #define LDST_TRANS_ID 1

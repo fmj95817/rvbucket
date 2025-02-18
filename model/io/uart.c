@@ -1,5 +1,5 @@
 #include "uart.h"
-#include "dbg.h"
+#include "dbg/chk.h"
 
 void uart_construct(uart_t *uart, u32 base_addr)
 {

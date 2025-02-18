@@ -10,7 +10,7 @@ typedef struct itf {
     u32 pkt_size;
     u32 fifo_depth;
 
-    u64 *cycles;
+    const u64 *cycle;
 
     bool dump_enable;
     const char *name;
@@ -24,7 +24,7 @@ typedef struct itf {
     u32 wptr;
 } itf_t;
 
-extern void itf_construct(itf_t *itf, u64 *cycle, const char *name, pkt2str_t pkt2str, u32 pkt_size, u32 fifo_depth);
+extern void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt2str, u32 pkt_size, u32 fifo_depth);
 extern void itf_free(itf_t *itf);
 extern void itf_write(itf_t *itf, const void *pkt);
 extern void itf_read(itf_t *itf, void *pkt);

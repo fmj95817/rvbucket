@@ -7,11 +7,15 @@
 typedef struct ex_req_if {
     rv32i_inst_t inst;
     u32 pc;
+    bool pred_taken;
+    u32 pred_pc;
     bool is_boot_code;
 } ex_req_if_t;
 
 typedef struct ex_rsp_if {
+    u32 pc;
     bool taken;
+    bool pred_true;
     u32 target_pc;
 } ex_rsp_if_t;
 

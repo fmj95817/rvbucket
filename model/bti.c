@@ -1,5 +1,5 @@
 #include "bti.h"
-#include "dbg.h"
+#include "dbg/chk.h"
 
 void bti_mux_construct(bti_mux_t *bti_mux, u32 gst_num, const u32 *gst_base_addrs, const u32 *gst_sizes)
 {

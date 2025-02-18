@@ -4,6 +4,8 @@
 #include "base/types.h"
 #include "base/itf.h"
 
+#define IFU_BHT_SIZE 8
+
 typedef struct ifu {
     itf_t *fch_req_mst;
     itf_t *fch_rsp_slv;
@@ -12,16 +14,48 @@ typedef struct ifu {
     itf_t *fl_req_mst;
     itf_t *fl_rsp_slv;
 
-    u32 pc;
     u32 reset_pc;
 
-    bool fl_req_pend;
-    bool fch_req_pend;
+    struct {
+        bool pend;
+        bool vld;
+        u32 pc;
+        u32 ir;
+    } fch;
+
+    struct {
+        bool vld;
+        u32 pc;
+        u32 ir;
+        u32 pred_target_pc;
+        u32 pred_taken;
+    } issue;
+
+    struct {
+        bool vld;
+        u32 pc;
+    } resume;
+
+    struct {
+        bool enable;
+        struct {
+            bool vld;
+            u32 pc;
+            bool taken;
+            u32 target_pc;
+            u32 hit_cnt;
+        } bht[IFU_BHT_SIZE];
+    } bpu;
 
     struct {
         u32 base;
         u32 size;
     } boot_rom_info;
+
+    struct {
+        u64 branch;
+        u64 pred_true;
+    } perf_cnt;
 } ifu_t;
 
 extern void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);

@@ -1,6 +1,7 @@
 #include "exu.h"
 #include "utils.h"
-#include "dbg.h"
+#include "dbg/chk.h"
+#include "dbg/log.h"
 
 #define DECL_ALU_HANDLER(inst) static void inst##_ex_req_handler(exu_t *exu, const ex_req_if_t *req)
 #define GET_ALU_HANDLER(inst) &inst##_ex_req_handler

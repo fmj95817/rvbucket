@@ -1,12 +1,8 @@
-#ifndef DBG_H
-#define DBG_H
+#ifndef DBG_LOG_H
+#define DBG_LOG_H
 
 #include <stdio.h>
-#include <assert.h>
-#include <string.h>
 #include "base/types.h"
-
-#define DBG_CHECK(expr) assert(expr)
 
 typedef enum log_module {
     LOG_PRINT = 0,
@@ -17,7 +13,6 @@ typedef enum log_module {
 extern FILE *dbg_get_log_module_fp(log_module_t mod);
 extern void dbg_disable_log_module(log_module_t mod);
 extern void dbg_enable_log_module(log_module_t mod);
-extern bool dbg_get_bool_env(const char *key);
 
 #define DBG_LOG(mod, fmt, ...) \
 do { \
