@@ -3,17 +3,12 @@
 
 void bti_mux_construct(bti_mux_t *bti_mux, u32 gst_num, const u32 *gst_base_addrs, const u32 *gst_sizes)
 {
+    DBG_CHECK(gst_num <= BTI_MUX_GST_NUM_MAX);
     bti_mux->gst_num = gst_num;
-    bti_mux->gst_base_addrs = malloc(sizeof(u32) * gst_num);
-    bti_mux->gst_sizes = malloc(sizeof(u32) * gst_num);
-    bti_mux->gst_bti_req_msts = malloc(sizeof(itf_t *) * gst_num);
-    bti_mux->gst_bti_rsp_slvs = malloc(sizeof(itf_t *) * gst_num);
 
     for (u32 i = 0; i < gst_num; i++) {
         bti_mux->gst_base_addrs[i] = gst_base_addrs[i];
         bti_mux->gst_sizes[i] = gst_sizes[i];
-        bti_mux->gst_bti_req_msts[i] = NULL;
-        bti_mux->gst_bti_rsp_slvs[i] = NULL;
     }
 }
 
@@ -70,25 +65,4 @@ void bti_mux_clock(bti_mux_t *bti_mux)
     bti_mux_proc_rsp(bti_mux);
 }
 
-void bti_mux_free(bti_mux_t *bti_mux)
-{
-    if (bti_mux->gst_base_addrs) {
-        free(bti_mux->gst_base_addrs);
-        bti_mux->gst_base_addrs = NULL;
-    }
-
-    if (bti_mux->gst_sizes) {
-        free(bti_mux->gst_sizes);
-        bti_mux->gst_sizes = NULL;
-    }
-
-    if (bti_mux->gst_bti_req_msts) {
-        free(bti_mux->gst_bti_req_msts);
-        bti_mux->gst_bti_req_msts = NULL;
-    }
-
-    if (bti_mux->gst_bti_rsp_slvs) {
-        free(bti_mux->gst_bti_rsp_slvs);
-        bti_mux->gst_bti_rsp_slvs = NULL;
-    }
-}
+void bti_mux_free(bti_mux_t *bti_mux) {}

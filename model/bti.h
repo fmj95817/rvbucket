@@ -36,15 +36,17 @@ static inline void bti_rsp_if_to_str(const void *pkt, char *str)
     sprintf(str, "%u %x %d\n", bti_rsp->trans_id, bti_rsp->data, bti_rsp->ok);
 }
 
+#define BTI_MUX_GST_NUM_MAX 16
+
 typedef struct bti_mux {
     itf_t *host_bti_req_slv;
     itf_t *host_bti_rsp_mst;
-    itf_t **gst_bti_req_msts;
-    itf_t **gst_bti_rsp_slvs;
+    itf_t *gst_bti_req_msts[BTI_MUX_GST_NUM_MAX];
+    itf_t *gst_bti_rsp_slvs[BTI_MUX_GST_NUM_MAX];
 
     u32 gst_num;
-    u32 *gst_base_addrs;
-    u32 *gst_sizes;
+    u32 gst_base_addrs[BTI_MUX_GST_NUM_MAX];
+    u32 gst_sizes[BTI_MUX_GST_NUM_MAX];
 } bti_mux_t;
 
 extern void bti_mux_construct(bti_mux_t *bti_mux, u32 gst_num, const u32 *gst_base_addrs, const u32 *gst_sizes);

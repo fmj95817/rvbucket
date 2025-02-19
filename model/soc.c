@@ -46,14 +46,6 @@ void soc_construct(soc_t *soc, const u64 *cycle)
 
     soc->bti_mux.host_bti_req_slv = &soc->cpu_bti_req_itf;
     soc->bti_mux.host_bti_rsp_mst = &soc->cpu_bti_rsp_itf;
-
-    rv32i_construct(&soc->cpu, cycle, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
-    ram_construct(&soc->tcm, TCM_SIZE, TCM_BASE_ADDR);
-    rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE_ADDR);
-    rom_construct(&soc->boot_rom, BOOT_ROM_SIZE, g_boot_code, g_boot_code_size, BOOT_ROM_BASE_ADDR);
-    uart_construct(&soc->uart, UART_BASE_ADDR);
-    bti_mux_construct(&soc->bti_mux, 4, periph_base_addrs, periph_sizes);
-
     soc->bti_mux.gst_bti_req_msts[0] = &soc->boot_rom_bti_req_itf;
     soc->bti_mux.gst_bti_rsp_slvs[0] = &soc->boot_rom_bti_rsp_itf;
     soc->bti_mux.gst_bti_req_msts[1] = &soc->flash_bti_req_itf;
@@ -62,6 +54,13 @@ void soc_construct(soc_t *soc, const u64 *cycle)
     soc->bti_mux.gst_bti_rsp_slvs[2] = &soc->tcm_bti_rsp_itf;
     soc->bti_mux.gst_bti_req_msts[3] = &soc->uart_bti_req_itf;
     soc->bti_mux.gst_bti_rsp_slvs[3] = &soc->uart_bti_rsp_itf;
+
+    rv32i_construct(&soc->cpu, cycle, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
+    ram_construct(&soc->tcm, TCM_SIZE, TCM_BASE_ADDR);
+    rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE_ADDR);
+    rom_construct(&soc->boot_rom, BOOT_ROM_SIZE, g_boot_code, g_boot_code_size, BOOT_ROM_BASE_ADDR);
+    uart_construct(&soc->uart, UART_BASE_ADDR);
+    bti_mux_construct(&soc->bti_mux, 4, periph_base_addrs, periph_sizes);
 }
 
 void soc_reset(soc_t *soc)
