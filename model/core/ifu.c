@@ -2,14 +2,20 @@
 #include "mod_if.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
+#include "dbg/pcm.h"
 #include "dbg/env.h"
 
 void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
 {
     ifu->reset_pc = reset_pc;
+
     ifu->boot_rom_info.base = boot_rom_base;
     ifu->boot_rom_info.size = boot_rom_size;
+
     ifu->bpu.enable = dbg_get_bool_env("BR_PRED");
+
+    ifu->perf.branch = dbg_pcm_reg_perf_cnt("ifu_branch");
+    ifu->perf.pred_true = dbg_pcm_reg_perf_cnt("ifu_pred_true");
 }
 
 void ifu_reset(ifu_t *ifu)
@@ -36,8 +42,8 @@ void ifu_reset(ifu_t *ifu)
         ifu->bpu.bht[i].hit_cnt = 0;
     }
 
-    ifu->perf_cnt.branch = 0;
-    ifu->perf_cnt.pred_true = 0;
+    *ifu->perf.branch = 0;
+    *ifu->perf.pred_true = 0;
 }
 
 void ifu_free(ifu_t *ifu) {}
@@ -203,10 +209,10 @@ static void ifu_proc_ex_rsp(ifu_t *ifu)
 
     ex_rsp_if_t ex_rsp;
     itf_read(ifu->ex_rsp_slv, &ex_rsp);
-    ifu->perf_cnt.branch++;
+    (*ifu->perf.branch)++;
 
     if (ex_rsp.pred_true) {
-        ifu->perf_cnt.pred_true++;
+        (*ifu->perf.pred_true)++;
         return;
     }
 

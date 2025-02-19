@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "soc.h"
+#include "dbg/pcm.h"
 #include "dbg/vcd.h"
 
 typedef struct program {
@@ -9,7 +10,7 @@ typedef struct program {
 } program_t;
 
 typedef struct sim_top {
-    u64 cycle;
+    u64 *cycle;
     itf_t uart_rx_itf;
     soc_t soc;
     bool end_sim;
@@ -41,18 +42,18 @@ static void soc_burn_program(soc_t *soc, const char *path)
 
 static void sim_top_construct(sim_top_t *sim_top, const char *prog_path)
 {
-    sim_top->cycle = 0;
-    itf_construct(&sim_top->uart_rx_itf, &sim_top->cycle,
+    sim_top->cycle = dbg_pcm_reg_perf_cnt("cycles");
+    itf_construct(&sim_top->uart_rx_itf, sim_top->cycle,
         "uart_rx_itf", &uart_if_to_str, sizeof(uart_if_t), 1);
 
     dbg_vcd_scope_begin("sim_top");
-    dbg_vcd_set_clk(&sim_top->cycle);
-    dbg_vcd_add_sig("cycle[63:0]", DBG_SIG_TYPE_REG, 64, &sim_top->cycle);
+    dbg_vcd_set_clk(sim_top->cycle);
+    dbg_vcd_add_sig("cycle[63:0]", DBG_SIG_TYPE_REG, 64, sim_top->cycle);
 
     sim_top->end_sim = false;
     sim_top->soc.uart_tx = &sim_top->uart_rx_itf;
 
-    soc_construct(&sim_top->soc, &sim_top->cycle);
+    soc_construct(&sim_top->soc, sim_top->cycle);
     soc_burn_program(&sim_top->soc, prog_path);
 
     dbg_vcd_scope_end();
@@ -67,7 +68,8 @@ static void sim_top_reset(sim_top_t *sim_top)
 static void sim_top_clock(sim_top_t *sim_top)
 {
     soc_clock(&sim_top->soc);
-    sim_top->cycle++;
+
+    (*sim_top->cycle)++;
     dbg_vcd_clock();
 
     if (itf_fifo_empty(&sim_top->uart_rx_itf)) {

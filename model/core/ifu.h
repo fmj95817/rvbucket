@@ -53,9 +53,9 @@ typedef struct ifu {
     } boot_rom_info;
 
     struct {
-        u64 branch;
-        u64 pred_true;
-    } perf_cnt;
+        u64 *branch;
+        u64 *pred_true;
+    } perf;
 } ifu_t;
 
 extern void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);

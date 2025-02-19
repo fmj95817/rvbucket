@@ -1,7 +1,35 @@
 #include "vcd.h"
 #include <string.h>
+#include <stdio.h>
 #include "dbg/chk.h"
 #include "dbg/env.h"
+
+#define DBG_SIG_TOKEN_MAX 32
+#define DBG_SIG_BIT_MAX 64
+#define DBG_SIG_BYTE_MAX 8
+
+typedef struct dbg_sig {
+    char token[DBG_SIG_TOKEN_MAX];
+    u32 bits;
+    u32 bytes;
+    const void *cur;
+    u8 old[DBG_SIG_BYTE_MAX];
+    struct dbg_sig *nxt;
+} dbg_sig_t;
+
+typedef struct dbg_vcd {
+    bool enable;
+
+    const u64 *cycle;
+    char clk_token[DBG_SIG_TOKEN_MAX];
+
+    struct {
+        dbg_sig_t *head;
+        dbg_sig_t *tail;
+    } sig_list;
+
+    FILE *vcd_fp;
+} dbg_vcd_t;
 
 static dbg_vcd_t g_vcd;
 
