@@ -65,13 +65,13 @@
 6. **运行RTL VCS仿真**:
    ```bash
    cd build/hw/vcs
-   ./sim_top +program=../../sw/<用例名称>/用例名称.hex
+   ./sim_top +program=../../sw/<用例名称>/<用例名称>.hex
    ```
 
 7. **运行RTL Verilator仿真**:
    ```bash
    cd build/hw/verilator
-   ./sim_top +program=../../sw/<用例名称>/用例名称.hex
+   ./obj_dir/Vsim_top +program=../../sw/<用例名称>/<用例名称>.hex
    ```
 
 ## 贡献
