@@ -26,7 +26,7 @@ static dbg_pcm_t g_pcm;
 
 __attribute__((constructor)) void dbg_pcm_constructor()
 {
-    g_pcm.dump_flags = dbg_get_uint_env("PCM_DUMP");
+    g_pcm.dump_flags = dbg_get_uint_env("PCD");
     g_pcm.nxt_entry_idx = 0;
     memset(g_pcm.perf_cnts, 0, sizeof(g_pcm.perf_cnts));
 }

@@ -16,6 +16,16 @@ void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_siz
 
     ifu->perf.branch = dbg_pcm_reg_perf_cnt("ifu_branch");
     ifu->perf.pred_true = dbg_pcm_reg_perf_cnt("ifu_pred_true");
+
+    dbg_vcd_scope_begin("ifu");
+    dbg_vcd_add_sig("fch.pc", DBG_SIG_TYPE_REG, 32, &ifu->fch.pc);
+    dbg_vcd_add_sig("fch.pend", DBG_SIG_TYPE_REG, 1, &ifu->fch.pend);
+    dbg_vcd_add_sig("fch.vld", DBG_SIG_TYPE_REG, 1, &ifu->fch.vld);
+    dbg_vcd_add_sig("issue.vld", DBG_SIG_TYPE_REG, 1, &ifu->issue.vld);
+    dbg_vcd_add_sig("issue.pc", DBG_SIG_TYPE_REG, 32, &ifu->issue.pc);
+    dbg_vcd_add_sig("resume.vld", DBG_SIG_TYPE_REG, 1, &ifu->resume.vld);
+    dbg_vcd_add_sig("resume.pc", DBG_SIG_TYPE_REG, 32, &ifu->resume.pc);
+    dbg_vcd_scope_end();
 }
 
 void ifu_reset(ifu_t *ifu)
@@ -39,7 +49,7 @@ void ifu_reset(ifu_t *ifu)
         ifu->bpu.bht[i].pc = ifu->reset_pc;
         ifu->bpu.bht[i].taken = false;
         ifu->bpu.bht[i].target_pc = ifu->reset_pc;
-        ifu->bpu.bht[i].hit_cnt = 0;
+        ifu->bpu.bht[i].used_bits = 0;
     }
 
     *ifu->perf.branch = 0;
@@ -89,8 +99,13 @@ static void ifu_bpu_pred(ifu_t *ifu, u32 pc, bool is_branch)
     }
 
     for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
-        if (ifu->bpu.bht[i].vld && ifu->bpu.bht[i].pc == pc) {
-            ifu->bpu.bht[i].hit_cnt++;
+        if (!ifu->bpu.bht[i].vld) {
+            continue;
+        }
+
+        ifu->bpu.bht[i].used_bits <<= 1u;
+        if (ifu->bpu.bht[i].pc == pc) {
+            ifu->bpu.bht[i].used_bits |= 1u;
             ifu->issue.pred_taken = ifu->bpu.bht[i].taken;
             ifu->issue.pred_target_pc = ifu->bpu.bht[i].target_pc;
             return;
@@ -158,6 +173,15 @@ static void ifu_send_ex_req(ifu_t *ifu)
     ifu->issue.vld = false;
 }
 
+static inline u32 calc_used_times(u16 used_bits)
+{
+    u32 n = 0;
+    for (u32 i = 0; i < 16; i++) {
+        n += ((used_bits & (1u << i)) ? 1 : 0);
+    }
+    return n;
+}
+
 static void ifu_update_bpu_bht(ifu_t *ifu, const ex_rsp_if_t *ex_rsp)
 {
     if (!ifu->bpu.enable) {
@@ -183,11 +207,16 @@ static void ifu_update_bpu_bht(ifu_t *ifu, const ex_rsp_if_t *ex_rsp)
     }
 
     u32 lru_idx = 0;
-    u32 lru_hit_cnt = ifu->bpu.bht[lru_idx].hit_cnt;
+    u32 lru_hit_cnt = calc_used_times(ifu->bpu.bht[lru_idx].used_bits);
     for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
-        if (ifu->bpu.bht[i].vld && ifu->bpu.bht[i].hit_cnt < lru_hit_cnt) {
+        if (!ifu->bpu.bht[i].vld) {
+            continue;
+        }
+
+        u32 hit_cnt = calc_used_times(ifu->bpu.bht[i].used_bits);
+        if (hit_cnt < lru_hit_cnt) {
             lru_idx = i;
-            lru_hit_cnt = ifu->bpu.bht[i].hit_cnt;
+            lru_hit_cnt = hit_cnt;
         }
     }
 
@@ -195,6 +224,7 @@ static void ifu_update_bpu_bht(ifu_t *ifu, const ex_rsp_if_t *ex_rsp)
     ifu->bpu.bht[lru_idx].pc = ex_rsp->pc;
     ifu->bpu.bht[lru_idx].taken = ex_rsp->taken;
     ifu->bpu.bht[lru_idx].target_pc = ex_rsp->target_pc;
+    ifu->bpu.bht[lru_idx].used_bits = 0u;
 }
 
 static void ifu_proc_ex_rsp(ifu_t *ifu)

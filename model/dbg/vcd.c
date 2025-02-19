@@ -63,7 +63,7 @@ static void print_vcd_header()
 
 __attribute__((constructor)) void dbg_vcd_constructor()
 {
-    g_vcd.enable = dbg_get_bool_env("GEN_VCD");
+    g_vcd.enable = dbg_get_bool_env("VCD");
     g_vcd.sig_list.head = NULL;
     g_vcd.sig_list.tail = NULL;
     gen_sig_token(g_vcd.clk_token);

@@ -4,7 +4,7 @@
 #include "base/types.h"
 #include "base/itf.h"
 
-#define IFU_BHT_SIZE 8
+#define IFU_BHT_SIZE 16
 
 typedef struct ifu {
     itf_t *fch_req_mst;
@@ -43,7 +43,7 @@ typedef struct ifu {
             u32 pc;
             bool taken;
             u32 target_pc;
-            u32 hit_cnt;
+            u16 used_bits;
         } bht[IFU_BHT_SIZE];
     } bpu;
 
