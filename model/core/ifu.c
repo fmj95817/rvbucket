@@ -12,7 +12,7 @@ void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_siz
     ifu->boot_rom_info.base = boot_rom_base;
     ifu->boot_rom_info.size = boot_rom_size;
 
-    ifu->bpu.enable = dbg_get_bool_env("BR_PRED");
+    ifu->bpu.enable = !dbg_get_bool_env("BP_OFF");
 
     ifu->perf.branch = dbg_pcm_reg_perf_cnt("ifu_branch");
     ifu->perf.pred_true = dbg_pcm_reg_perf_cnt("ifu_pred_true");
