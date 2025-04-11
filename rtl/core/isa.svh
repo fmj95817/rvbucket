@@ -67,4 +67,72 @@ typedef enum logic [2:0] {
     STORE_FUNCT3_SW = 3'b010
 } rv32i_store_funct3_t;
 
+typedef struct packed {
+    logic [24:0] args;
+    logic [6:0] opcode;
+} rv32i_inst_base_t;
+
+typedef struct packed {
+    logic [6:0] funct7;
+    logic [4:0] rs2;
+    logic [4:0] rs1;
+    logic [2:0] funct3;
+    logic [4:0] rd;
+    logic [6:0] opcode;
+} rv32i_inst_r_t;
+
+typedef struct packed {
+    logic [11:0] imm_11_0;
+    logic [4:0] rs1;
+    logic [2:0] funct3;
+    logic [4:0] rd;
+    logic [6:0] opcode;
+} rv32i_inst_i_t;
+
+typedef struct packed {
+    logic [6:0] imm_11_5;
+    logic [4:0] rs2;
+    logic [4:0] rs1;
+    logic [2:0] funct3;
+    logic [4:0] imm_4_0;
+    logic [6:0] opcode;
+} rv32i_inst_s_t;
+
+typedef struct packed {
+    logic       imm_12;
+    logic [5:0] imm_10_5;
+    logic [4:0] rs2;
+    logic [4:0] rs1;
+    logic [2:0] funct3;
+    logic [3:0] imm_4_1;
+    logic       imm_11;
+    logic [6:0] opcode;
+} rv32i_inst_b_t;
+
+typedef struct packed {
+    logic [19:0] imm_31_12;
+    logic [4:0] rd;
+    logic [6:0] opcode;
+} rv32i_inst_u_t;
+
+typedef struct packed {
+    logic       imm_20;
+    logic [9:0] imm_10_1;
+    logic       imm_11;
+    logic [7:0] imm_19_12;
+    logic [4:0] rd;
+    logic [6:0] opcode;
+} rv32i_inst_j_t;
+
+typedef union packed {
+    rv32i_inst_r_t r;
+    rv32i_inst_i_t i;
+    rv32i_inst_s_t s;
+    rv32i_inst_b_t b;
+    rv32i_inst_u_t u;
+    rv32i_inst_j_t j;
+    rv32i_inst_base_t base;
+    logic [`RV_IR_SIZE-1:0] raw;
+} rv32i_inst_t;
+
 `endif

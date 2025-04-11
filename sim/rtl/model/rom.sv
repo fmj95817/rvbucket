@@ -8,6 +8,6 @@ module rom #(
 );
     logic [DW-1:0] data[0:2**AW-1];
     always @(posedge clk) begin
-        rom_data <= #1 data[rom_addr];
+        rom_data <= data[rom_addr];
     end
 endmodule

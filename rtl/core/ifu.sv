@@ -1,52 +1,72 @@
 `include "isa.svh"
 
 module ifu(
-    input            clk,
-    input            rst_n,
-    ifetch_if.master ifetch,
-    iexec_if.master  iexec
+    input logic      clk,
+    input logic      rst_n,
+    fch_req_if_t.mst fch_req_mst,
+    fch_rsp_if_t.slv fch_rsp_slv,
+    ex_req_if_t.mst  ex_req_mst,
+    ex_rsp_if_t.slv  ex_rsp_slv
 );
-    tri ifetch_req_hsk = ifetch.req_vld & ifetch.req_rdy;
-    tri ifetch_rsp_hsk = ifetch.rsp_vld & ifetch.rsp_rdy;
-    tri iexec_req_hsk = iexec.req_vld & iexec.req_rdy;
+    tri fch_req_hsk = fch_req_mst.vld & fch_req_mst.rdy;
+    tri fch_rsp_hsk = fch_rsp_slv.vld & fch_rsp_slv.rdy;
+    tri ex_req_hsk = ex_req_mst.vld & ex_req_mst.rdy;
 
-    tri ir_valid_flag;
-    tri ifetch_req_pend_flag;
-    tri iexec_req_pkt_valid;
-    tri pc_pend_flag;
+    logic ir_valid_flag;
+    logic fch_req_pend_flag;
+    logic ex_req_pkt_valid;
+    logic pc_pend_flag;
 
-    tri ir_valid_set = ifetch_rsp_hsk;
-    tri ir_valid_clear = iexec_req_hsk;
-    lib_flag u_ir_valid_flag(clk, rst_n,
-        ir_valid_set, ir_valid_clear, ir_valid_flag
-    );
+    tri ir_valid_set = fch_rsp_hsk;
+    tri ir_valid_clear = ex_req_hsk;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n)
+            ir_valid_flag <= 1'b0;
+        else if (ir_valid_set)
+            ir_valid_flag <= 1'b1;
+        else if (ir_valid_clear)
+            ir_valid_flag <= 1'b0;
+    end
 
-    tri ifetch_req_pend_set = ifetch_req_hsk;
-    tri ifetch_req_pend_clear = ifetch_rsp_hsk;
-    lib_flag u_ifetch_req_pend_flag(clk, rst_n,
-        ifetch_req_pend_set, ifetch_req_pend_clear,
-        ifetch_req_pend_flag
-    );
+    tri fch_req_pend_set = fch_req_hsk;
+    tri fch_req_pend_clear = fch_rsp_hsk;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n)
+            fch_req_pend_flag <= 1'b0;
+        else if (fch_req_pend_set)
+            fch_req_pend_flag <= 1'b1;
+        else if (fch_req_pend_clear)
+            fch_req_pend_flag <= 1'b0;
+    end
 
-    tri iexec_req_pkt_valid_set = pc_pend_flag & ifetch.rsp_rdy;
-    tri iexec_req_pkt_valid_clear = iexec_req_hsk;
-    lib_flag u_iexec_req_pkt_valid_flag(clk, rst_n,
-        iexec_req_pkt_valid_set, iexec_req_pkt_valid_clear,
-        iexec_req_pkt_valid
-    );
+    tri ex_req_pkt_valid_set = pc_pend_flag & fch_rsp_slv.rdy;
+    tri ex_req_pkt_valid_clear = ex_req_hsk;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n)
+            ex_req_pkt_valid <= 1'b0;
+        else if (ex_req_pkt_valid_set)
+            ex_req_pkt_valid <= 1'b1;
+        else if (ex_req_pkt_valid_clear)
+            ex_req_pkt_valid <= 1'b0;
+    end
 
-    tri pc_pend_set = ifetch_req_hsk;
-    tri pc_pend_clear = iexec_req_pkt_valid_set;
-    lib_flag u_pc_pend_flag(clk, rst_n,
-        pc_pend_set, pc_pend_clear, pc_pend_flag
-    );
+    tri pc_pend_set = fch_req_hsk;
+    tri pc_pend_clear = ex_req_pkt_valid_set;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n)
+            pc_pend_flag <= 1'b0;
+        else if (pc_pend_set)
+            pc_pend_flag <= 1'b1;
+        else if (pc_pend_clear)
+            pc_pend_flag <= 1'b0;
+    end
 
     logic [`RV_IR_SIZE-1:0] ir;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             ir <= {`RV_IR_SIZE{1'b0}};
         else if (ir_valid_set)
-            ir <= #1 ifetch.rsp_ir;
+            ir <= fch_rsp_slv.pkt.ir;
     end
 
     logic [2:0] pc_offset;
@@ -54,7 +74,7 @@ module ifu(
         if (~rst_n)
             pc_offset <= {3{1'b0}};
         else
-            pc_offset <= #1 3'd4;
+            pc_offset <= 3'd4;
     end
 
     logic [`RV_PC_SIZE-1:0] pc;
@@ -62,24 +82,25 @@ module ifu(
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             pc <= {`RV_PC_SIZE{1'b0}};
-        else if (ifetch_req_hsk)
-            pc <= #1 pc_nxt;
+        else if (fch_req_hsk)
+            pc <= pc_nxt;
     end
 
     logic [`RV_PC_SIZE-1:0] pc_of_ir;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             pc_of_ir <= {`RV_PC_SIZE{1'b0}};
-        else if (iexec_req_pkt_valid_set)
-            pc_of_ir <= #1 pc;
+        else if (ex_req_pkt_valid_set)
+            pc_of_ir <= pc;
     end
 
-    assign iexec.req_vld = ir_valid_flag;
-    assign iexec.req_pkt.valid = iexec_req_pkt_valid;
-    assign iexec.req_pkt.ir = ir;
-    assign iexec.req_pkt.pc = pc_of_ir;
+    assign ex_req_mst.vld = ir_valid_flag;
+    assign ex_req_mst.pkt.valid = ex_req_pkt_valid;
+    assign ex_req_mst.pkt.ir.raw = ir;
+    assign ex_req_mst.pkt.pc = pc_of_ir;
 
-    assign ifetch.req_vld = (~ifetch_req_pend_flag) | ifetch_req_pend_clear;
-    assign ifetch.req_pc = pc_nxt;
-    assign ifetch.rsp_rdy = (~ir_valid_flag) | ir_valid_clear;
+    assign fch_req_mst.vld = (~fch_req_pend_flag) | fch_req_pend_clear;
+    assign fch_req_mst.pkt.pc = pc_nxt;
+    assign fch_rsp_slv.rdy = (~ir_valid_flag) | ir_valid_clear;
+
 endmodule

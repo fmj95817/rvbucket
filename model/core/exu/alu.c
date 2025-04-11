@@ -302,7 +302,7 @@ DECL_ALU_HANDLER(alu_group)
         [ALU_FUNCT3_AND] = GET_ALU_HANDLER(and)
     };
 
-    alu_handlers[req->inst.i.funct3](exu, req);
+    alu_handlers[req->inst.r.funct3](exu, req);
 }
 
 void alu_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)

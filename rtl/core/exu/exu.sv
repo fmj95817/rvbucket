@@ -1,52 +1,103 @@
-
 `include "isa.svh"
 
 module exu(
-    input          clk,
-    input          rst_n,
-    iexec_if.slave iexec,
-    ldst_if.master ldst_src
+    input logic       clk,
+    input logic       rst_n,
+    ex_req_if_t.slv   ex_req_slv,
+    ex_rsp_if_t.mst   ex_rsp_mst,
+    ldst_req_if_t.mst ldst_req_mst,
+    ldst_rsp_if_t.slv ldst_rsp_slv
 );
-    tri iexec_req_hsk = iexec.req_vld & iexec.req_rdy;
-    tri [`RV_IR_SIZE-1:0] ir = iexec.req_pkt.ir;
-    tri [`RV_PC_SIZE-1:0] pc = iexec.req_pkt.pc;
+    localparam INST_HANDLER_NUM = 2;
+    localparam ALU_CHN_IDX = 0;
+    localparam LDST_CHN_IDX = 1;
 
-    /* ISA decoder */
-    rv32i_opc_dec_if opc_dec();
-    rv32i_r_dec_if r_dec();
-    rv32i_i_dec_if i_dec();
-    rv32i_s_dec_if s_dec();
-    rv32i_b_dec_if b_dec();
-    rv32i_u_dec_if u_dec();
-    rv32i_j_dec_if j_dec();
+    tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.ir.base.opcode;
+    tri is_lui = ex_req_slv.vld & (opcode == OPCODE_LUI);
+    tri is_auipc = ex_req_slv.vld & (opcode == OPCODE_AUIPC);
+    tri is_jal = ex_req_slv.vld & (opcode == OPCODE_JAL);
+    tri is_jalr = ex_req_slv.vld & (opcode == OPCODE_JALR);
+    tri is_branch = ex_req_slv.vld & (opcode == OPCODE_BRANCH);
+    tri is_load = ex_req_slv.vld & (opcode == OPCODE_LOAD);
+    tri is_store = ex_req_slv.vld & (opcode == OPCODE_STORE);
+    tri is_alui = ex_req_slv.vld & (opcode == OPCODE_ALUI);
+    tri is_alu = ex_req_slv.vld & (opcode == OPCODE_ALU);
+    tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MEM);
+    tri is_system = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
 
-    rv32i_isa_dec u_rv32i_isa_dec(.*);
+    tri ldst_sel = is_load | is_store;
+    tri alu_sel = is_alu | is_alui;
+    tri branch_sel = is_jal | is_jalr | is_branch;
+    tri ldst_done = ldst_rsp_slv.vld & ldst_rsp_slv.rdy;
 
-    /* data path */
-    exu_dp_if dp_ctrl();
-    exu_dp u_exu_dp(.*);
+    always_comb begin
+        case (opcode)
+            OPCODE_LUI: ex_req_slv.rdy = 1'b1;
+            OPCODE_AUIPC: ex_req_slv.rdy = 1'b1;
+            OPCODE_JAL: ex_req_slv.rdy = 1'b1;
+            OPCODE_JALR: ex_req_slv.rdy = 1'b1;
+            OPCODE_BRANCH: ex_req_slv.rdy = 1'b1;
+            OPCODE_LOAD: ex_req_slv.rdy = ldst_done;
+            OPCODE_STORE: ex_req_slv.rdy = ldst_done;
+            OPCODE_ALUI: ex_req_slv.rdy = 1'b1;
+            OPCODE_ALU: ex_req_slv.rdy = 1'b1;
+            OPCODE_MEM: ex_req_slv.rdy = 1'b1;
+            OPCODE_SYSTEM: ex_req_slv.rdy = 1'b1;
+            default: ex_req_slv.rdy = 1'b0;
+        endcase
+    end
 
-    /* instructions */
-    exu_dp_if lui_dp_ctrl();
-    lui_handler u_lui_handler(iexec_req_hsk, u_dec, lui_dp_ctrl);
+    logic chn_sels[INST_HANDLER_NUM];
+    assign chn_sels[ALU_CHN_IDX] = alu_sel;
+    assign chn_sels[LDST_CHN_IDX] = ldst_sel;
 
-    exu_dp_if auipc_dp_ctrl();
-    auipc_handler u_auipc_handler(iexec_req_hsk, pc, u_dec, auipc_dp_ctrl);
+    exu_gpr_r_if_t gpr_r1_src_arr[INST_HANDLER_NUM]();
+    exu_gpr_r_if_t gpr_r2_src_arr[INST_HANDLER_NUM]();
+    exu_gpr_w_if_t gpr_w_src_arr[INST_HANDLER_NUM]();
 
-    exu_dp_if load_dp_ctrl();
-    ldst_if load_ldst();
-    tri load_iexec_req_rdy;
-    load_handler u_load_handler(clk, rst_n, iexec_req_hsk,
-        opc_dec.load, i_dec, load_dp_ctrl, load_ldst, load_iexec_req_rdy);
+    exu_gpr_r_if_t gpr_r1_dst();
+    exu_gpr_r_if_t gpr_r2_dst();
+    exu_gpr_w_if_t gpr_w_dst();
 
-    exu_dp_if alui_dp_ctrl();
-    alui_handler u_alui_handler(iexec_req_hsk, i_dec, alui_dp_ctrl);
+    exu_gpr u_exu_gpr(
+        .clk          (clk),
+        .gpr_r1_slv   (gpr_r1_dst),
+        .gpr_r2_slv   (gpr_r2_dst),
+        .gpr_w_slv    (gpr_w_dst)
+    );
 
-    /* MUX */
-    tri iexec_req_rdy;
-    exu_dp_mux u_exu_dp_mux(.*);
-    exu_ldst_mux u_exu_ldst_mux(.*);
-    exu_iexec_mux u_exu_iexec_mux(.*);
+    exu_gpr_rw_mux #(
+        .CHN_NUM      (INST_HANDLER_NUM)
+    ) u_exu_gpr_rw_mux(
+        .chn_sels     (chn_sels),
+        .gpr_r1_slvs  (gpr_r1_src_arr),
+        .gpr_r2_slvs  (gpr_r2_src_arr),
+        .gpr_w_slvs   (gpr_w_src_arr),
+        .gpr_r1_mst   (gpr_r1_dst),
+        .gpr_r2_mst   (gpr_r2_dst),
+        .gpr_w_mst    (gpr_w_dst)
+    );
 
-    assign iexec.req_rdy = iexec_req_rdy;
+    exu_alu_handler u_exu_alu_handler(
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .sel          (alu_sel),
+        .inst         (ex_req_slv.pkt.ir),
+        .gpr_r1_mst   (gpr_r1_src_arr[ALU_CHN_IDX]),
+        .gpr_r2_mst   (gpr_r2_src_arr[ALU_CHN_IDX]),
+        .gpr_w_mst    (gpr_w_src_arr[ALU_CHN_IDX])
+    );
+
+    exu_ldst_handler u_exu_ldst_handler(
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .sel          (ldst_sel),
+        .inst         (ex_req_slv.pkt.ir),
+        .ldst_req_mst (ldst_req_mst),
+        .ldst_rsp_slv (ldst_rsp_slv),
+        .gpr_r1_mst   (gpr_r1_src_arr[LDST_CHN_IDX]),
+        .gpr_r2_mst   (gpr_r2_src_arr[LDST_CHN_IDX]),
+        .gpr_w_mst    (gpr_w_src_arr[LDST_CHN_IDX])
+    );
+
 endmodule
