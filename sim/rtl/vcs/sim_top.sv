@@ -55,6 +55,6 @@ module sim_top;
         end
 
         $fsdbDumpfile("sim_top.fsdb");
-        $fsdbDumpvars;
+        $fsdbDumpvars(0, sim_top, "+all");
     end
 endmodule

@@ -95,7 +95,6 @@ module ifu(
     end
 
     assign ex_req_mst.vld = ir_valid_flag;
-    assign ex_req_mst.pkt.valid = ex_req_pkt_valid;
     assign ex_req_mst.pkt.ir.raw = ir;
     assign ex_req_mst.pkt.pc = pc_of_ir;
 

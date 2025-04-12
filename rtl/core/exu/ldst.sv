@@ -9,7 +9,8 @@ module exu_ldst_handler(
     ldst_rsp_if_t.slv  ldst_rsp_slv,
     exu_gpr_r_if_t.mst gpr_r1_mst,
     exu_gpr_r_if_t.mst gpr_r2_mst,
-    exu_gpr_w_if_t.mst gpr_w_mst
+    exu_gpr_w_if_t.mst gpr_w_mst,
+    output logic       done
 );
     logic ldst_req_pend;
 
@@ -99,5 +100,7 @@ module exu_ldst_handler(
             default: gpr_w_mst.data = {`RV_XLEN{1'bx}};
         endcase
     end
+
+    assign done = ldst_rsp_slv.vld & ldst_rsp_slv.rdy;
 
 endmodule
