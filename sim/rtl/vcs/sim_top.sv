@@ -53,5 +53,8 @@ module sim_top;
         if ($value$plusargs ("program=%s", path)) begin
             $readmemh(path, u_itcm.u_rom.data);
         end
+
+        $fsdbDumpfile("sim_top.fsdb");
+        $fsdbDumpvars;
     end
 endmodule

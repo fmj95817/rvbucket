@@ -28,8 +28,8 @@ module exu_alu_handler(
 
     tri signed [`RV_XLEN-1:0] alu_src1_s = alu_src1;
     tri signed [`RV_XLEN-1:0] alu_src2_s = alu_src2;
-    tri  [`RV_XLEN-1:0] alu_src1_u = alu_src1;
-    tri  [`RV_XLEN-1:0] alu_src2_u = alu_src2;
+    tri [`RV_XLEN-1:0] alu_src1_u = alu_src1;
+    tri [`RV_XLEN-1:0] alu_src2_u = alu_src2;
     tri [4:0] shift_bits = alu_src2[4:0];
 
     always_comb begin
@@ -50,13 +50,11 @@ module exu_alu_handler(
         endcase
     end
 
-    function logic [`RV_XLEN-1:0] i_imm_decode;
-        input rv32i_inst_t inst;
-        i_imm_decode = {
-            {(`RV_XLEN-12){inst.i.imm_11_0[11]}},
-            inst.i.imm_11_0
-        };
-    endfunction
+    logic [`RV_XLEN-1:0] i_imm;
+    i_imm_decode u_i_imm_decode(
+        .inst  (inst),
+        .i_imm (i_imm)
+    );
 
     always_comb begin
         gpr_r1_mst.vld = 1'b0;
@@ -82,7 +80,7 @@ module exu_alu_handler(
             gpr_w_mst.data = alu_dst;
 
             alu_src1 = gpr_r1_mst.data;
-            alu_src2 = i_imm_decode(inst);
+            alu_src2 = i_imm;
             case (inst.i.funct3)
                 ALUI_FUNCT3_ADDI: alu_op = ALU_OPCODE_ADD;
                 ALUI_FUNCT3_SLTI: alu_op = ALU_OPCODE_LESS_S;

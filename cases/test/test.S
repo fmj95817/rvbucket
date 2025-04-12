@@ -14,3 +14,5 @@ _asm_test:
     li x9, 3
     addi x1, x9, 11
     addi x9, x9, 3
+    sw x9, 0(x1)
+    lw x10, 0(x1)

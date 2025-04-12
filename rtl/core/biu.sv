@@ -34,5 +34,6 @@ module biu(
     assign ldst_rsp_mst.vld = dtcm_bti_rsp_slv.vld;
     assign ldst_rsp_mst.pkt.data = dtcm_bti_rsp_slv.pkt.data;
     assign ldst_rsp_mst.pkt.ok = dtcm_bti_rsp_slv.pkt.ok;
+    assign dtcm_bti_rsp_slv.rdy = ldst_rsp_mst.rdy;
 
 endmodule
