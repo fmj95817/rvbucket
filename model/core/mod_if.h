@@ -32,10 +32,6 @@ typedef struct fl_req_if {
     u32 dummy;
 } fl_req_if_t;
 
-typedef struct fl_rsp_if {
-    u32 dummy;
-} fl_rsp_if_t;
-
 typedef struct ldst_req_if {
     u32 addr;
     bool st;
@@ -76,12 +72,6 @@ static inline void fl_req_if_to_str(const void *pkt, char *str)
 {
     const fl_req_if_t *fl_req = (const fl_req_if_t *)pkt;
     sprintf(str, "%u\n", fl_req->dummy);
-}
-
-static inline void fl_rsp_if_to_str(const void *pkt, char *str)
-{
-    const fl_rsp_if_t *fl_rsp = (const fl_rsp_if_t *)pkt;
-    sprintf(str, "%u\n", fl_rsp->dummy);
 }
 
 static inline void ldst_req_if_to_str(const void *pkt, char *str)

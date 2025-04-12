@@ -39,9 +39,6 @@ static void exu_proc_ex_req(exu_t *exu)
     if (!itf_fifo_empty(exu->fl_req_slv)) {
         fl_req_if_t fl_req;
         itf_read(exu->fl_req_slv, &fl_req);
-
-        fl_rsp_if_t fl_rsp;
-        itf_write(exu->fl_rsp_mst, &fl_rsp);
         return;
     }
 

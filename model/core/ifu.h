@@ -12,7 +12,6 @@ typedef struct ifu {
     itf_t *ex_req_mst;
     itf_t *ex_rsp_slv;
     itf_t *fl_req_mst;
-    itf_t *fl_rsp_slv;
 
     u32 reset_pc;
 

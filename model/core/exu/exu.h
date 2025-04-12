@@ -8,7 +8,6 @@
 
 typedef struct exu {
     itf_t *fl_req_slv;
-    itf_t *fl_rsp_mst;
     itf_t *ex_req_slv;
     itf_t *ex_rsp_mst;
     itf_t *ldst_req_mst;

@@ -21,7 +21,6 @@ typedef struct rv32i {
     itf_t ex_req_itf;
     itf_t ex_rsp_itf;
     itf_t fl_req_itf;
-    itf_t fl_rsp_itf;
     itf_t ldst_req_itf;
     itf_t ldst_rsp_itf;
 } rv32i_t;

@@ -255,16 +255,6 @@ static void ifu_proc_ex_rsp(ifu_t *ifu)
     ifu->resume.vld = true;
 }
 
-static void ifu_proc_fl_rsp(ifu_t *ifu)
-{
-    if (itf_fifo_empty(ifu->fl_rsp_slv)) {
-        return;
-    }
-
-    fl_rsp_if_t fl_rsp;
-    itf_read(ifu->fl_rsp_slv, &fl_rsp);
-}
-
 void ifu_clock(ifu_t *ifu)
 {
     ifu_send_fch(ifu);
@@ -272,5 +262,4 @@ void ifu_clock(ifu_t *ifu)
     ifu_prepare_issue(ifu);
     ifu_send_ex_req(ifu);
     ifu_proc_ex_rsp(ifu);
-    ifu_proc_fl_rsp(ifu);
 }
