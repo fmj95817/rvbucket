@@ -19,8 +19,8 @@ module bti_to_sram #(
     parameter BTI_DW = 32,
     parameter SRAM_AW = 15
 )(
-    input              clk,
-    input              rst_n,
+    input logic        clk,
+    input logic        rst_n,
     bti_req_if_t.slv   bti_req_slv,
     bti_rsp_if_t.mst   bti_rsp_mst,
     sram_rw_if_t.mst   sram_rw_mst
@@ -52,8 +52,8 @@ module bti_sram #(
     parameter BTI_DW = 32,
     parameter SRAM_AW = 15
 )(
-    input              clk,
-    input              rst_n,
+    input logic        clk,
+    input logic        rst_n,
     bti_req_if_t.slv   bti_req_slv,
     bti_rsp_if_t.mst   bti_rsp_mst
 );

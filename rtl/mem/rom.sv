@@ -5,12 +5,13 @@ module bti_to_rom #(
     parameter BTI_DW = 32,
     parameter ROM_AW = 15
 )(
-    input               clk,
-    input               rst_n,
-    bti_req_if_t.slv    bti_req_slv,
-    bti_rsp_if_t.mst    bti_rsp_mst,
-    output [ROM_AW-1:0] rom_addr,
-    input [BTI_DW-1:0]  rom_data
+    input logic               clk,
+    input logic               rst_n,
+    bti_req_if_t.slv          bti_req_slv,
+    bti_rsp_if_t.mst          bti_rsp_mst,
+    output logic              cs,
+    output logic [ROM_AW-1:0] addr,
+    input logic [BTI_DW-1:0]  data
 );
     reg_slice #(
         .DW       (`BTI_TIDW)
@@ -25,8 +26,9 @@ module bti_to_rom #(
         .dst_data (bti_rsp_mst.pkt.tid)
     );
 
-    assign rom_addr = bti_req_slv.pkt.addr[ROM_AW+1:2];
-    assign bti_rsp_mst.pkt.data = rom_data;
+    assign cs = bti_req_slv.vld & bti_req_slv.rdy;
+    assign addr = bti_req_slv.pkt.addr[ROM_AW+1:2];
+    assign bti_rsp_mst.pkt.data = data;
     assign bti_rsp_mst.pkt.ok = 1'b1;
 endmodule
 
@@ -35,21 +37,23 @@ module bti_rom #(
     parameter BTI_DW = 32,
     parameter ROM_AW = 15
 )(
-    input              clk,
-    input              rst_n,
+    input logic        clk,
+    input logic        rst_n,
     bti_req_if_t.slv   bti_req_slv,
     bti_rsp_if_t.mst   bti_rsp_mst
 );
-    tri [ROM_AW-1:0] rom_addr;
-    tri [BTI_DW-1:0] rom_data;
+    tri              cs;
+    tri [ROM_AW-1:0] addr;
+    tri [BTI_DW-1:0] data;
 
     rom #(
-        .AW       (ROM_AW),
-        .DW       (BTI_DW)
+        .AW          (ROM_AW),
+        .DW          (BTI_DW)
     ) u_rom(
-        .clk      (clk),
-        .rom_addr (rom_addr),
-        .rom_data (rom_data)
+        .clk         (clk),
+        .cs          (cs),
+        .addr        (addr),
+        .data        (data)
     );
 
     bti_to_rom #(
@@ -61,7 +65,8 @@ module bti_rom #(
         .rst_n       (rst_n),
         .bti_req_slv (bti_req_slv),
         .bti_rsp_mst (bti_rsp_mst),
-        .rom_addr    (rom_addr),
-        .rom_data    (rom_data)
+        .cs          (cs),
+        .addr        (addr),
+        .data        (data)
     );
 endmodule

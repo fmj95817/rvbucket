@@ -95,7 +95,7 @@ module exu_ldst_handler(
             LOAD_FUNCT3_LH: gpr_w_mst.data = { {(`RV_XLEN-16){rdata[15]}}, rdata[15:0] };
             LOAD_FUNCT3_LW: gpr_w_mst.data = rdata;
             LOAD_FUNCT3_LBU: gpr_w_mst.data = { {(`RV_XLEN-8){1'b0}}, rdata[7:0] };
-            LOAD_FUNCT3_LHU: gpr_w_mst.data = { {(`RV_XLEN-8){1'b0}}, rdata[15:0] };
+            LOAD_FUNCT3_LHU: gpr_w_mst.data = { {(`RV_XLEN-16){1'b0}}, rdata[15:0] };
             default: gpr_w_mst.data = {`RV_XLEN{1'bx}};
         endcase
     end

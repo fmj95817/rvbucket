@@ -2,7 +2,7 @@ module sram #(
     parameter AW = 15,
     parameter DW = 32
 )(
-    input            clk,
+    input logic      clk,
     sram_rw_if_t.slv sram_rw_slv
 );
     logic [DW-1:0] mem[0:2**AW-1];

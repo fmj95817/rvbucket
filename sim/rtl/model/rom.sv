@@ -2,12 +2,14 @@ module rom #(
     parameter AW = 15,
     parameter DW = 32
 )(
-    input tri             clk,
-    input tri    [AW-1:0] rom_addr,
-    output logic [DW-1:0] rom_data
+    input logic           clk,
+    input logic           cs,
+    input logic  [AW-1:0] addr,
+    output logic [DW-1:0] data
 );
-    logic [DW-1:0] data[0:2**AW-1];
+    logic [DW-1:0] mem[0:2**AW-1];
     always @(posedge clk) begin
-        rom_data <= data[rom_addr];
+        if (cs)
+            data <= mem[addr];
     end
 endmodule
