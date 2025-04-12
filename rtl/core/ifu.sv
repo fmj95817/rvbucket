@@ -6,7 +6,8 @@ module ifu(
     fch_req_if_t.mst fch_req_mst,
     fch_rsp_if_t.slv fch_rsp_slv,
     ex_req_if_t.mst  ex_req_mst,
-    ex_rsp_if_t.slv  ex_rsp_slv
+    ex_rsp_if_t.slv  ex_rsp_slv,
+    fl_req_if_t.mst  fl_req_mst
 );
     tri fch_req_hsk = fch_req_mst.vld & fch_req_mst.rdy;
     tri fch_rsp_hsk = fch_rsp_slv.vld & fch_rsp_slv.rdy;

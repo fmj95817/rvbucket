@@ -5,6 +5,7 @@ module exu(
     input logic       rst_n,
     ex_req_if_t.slv   ex_req_slv,
     ex_rsp_if_t.mst   ex_rsp_mst,
+    fl_req_if_t.slv   fl_req_slv,
     ldst_req_if_t.mst ldst_req_mst,
     ldst_rsp_if_t.slv ldst_rsp_slv
 );

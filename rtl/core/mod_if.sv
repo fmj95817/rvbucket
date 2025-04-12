@@ -54,6 +54,13 @@ interface ex_rsp_if_t;
     modport slv (input vld, pkt, output rdy);
 endinterface
 
+interface fl_req_if_t;
+    logic vld;
+
+    modport mst(output vld);
+    modport slv(input vld);
+endinterface
+
 interface ldst_req_if_t;
     logic vld;
     logic rdy;
