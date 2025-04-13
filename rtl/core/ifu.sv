@@ -12,6 +12,7 @@ module ifu(
     tri fch_req_hsk = fch_req_mst.vld & fch_req_mst.rdy;
     tri fch_rsp_hsk = fch_rsp_slv.vld & fch_rsp_slv.rdy;
     tri ex_req_hsk = ex_req_mst.vld & ex_req_mst.rdy;
+    tri ex_rsp_hsk = ex_rsp_slv.vld & ex_rsp_slv.rdy;
 
     logic ir_valid_flag;
     logic fch_req_pend_flag;
@@ -98,6 +99,8 @@ module ifu(
     assign ex_req_mst.vld = ir_valid_flag;
     assign ex_req_mst.pkt.ir.raw = ir;
     assign ex_req_mst.pkt.pc = pc_of_ir;
+
+    assign ex_rsp_slv.rdy = 1'b1;
 
     assign fch_req_mst.vld = (~fch_req_pend_flag) | fch_req_pend_clear;
     assign fch_req_mst.pkt.pc = pc_nxt;

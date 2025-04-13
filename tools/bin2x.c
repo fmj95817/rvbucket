@@ -44,22 +44,24 @@ static void to_sv_rom_src(const void *data, size_t size)
 
     printf(
         "module boot_rom(\n"
-        "    input tri           clk,\n"
-        "    input tri    [%d:0]  rom_addr,\n"
-        "    output logic [31:0] rom_data\n"
+        "    input logic         clk,\n"
+        "    input logic         cs,\n"
+        "    input logic  [%d:0]  addr,\n"
+        "    output logic [31:0] data\n"
         ");\n"
-        "    tri [31:0] data[0:%d];\n",
+        "    tri [31:0] mem[0:%d];\n",
         addr_width - 1, word_num - 1
     );
 
     uint32_t *word = (uint32_t *)data;
     for (int i = 0; i < word_num; i++) {
-        printf("    assign data[%d] = 32'h%08x;\n", i, word[i]);
+        printf("    assign mem[%d] = 32'h%08x;\n", i, word[i]);
     }
 
     printf(
         "\n    always_ff @(posedge clk) begin\n"
-        "        rom_data <= data[rom_addr];\n"
+        "        if (cs)\n"
+        "            data <= mem[addr];\n"
         "    end\n"
         "endmodule\n"
     );

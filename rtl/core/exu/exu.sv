@@ -28,29 +28,32 @@ module exu(
     tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MEM);
     tri is_system = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
 
-    tri alu_sel = is_alu | is_alui;
-    tri branch_sel = is_jal | is_jalr | is_branch;
-    tri ldst_sel = is_load | is_store;
-    tri misc_sel = is_lui | is_auipc;
-    tri sys_sel = is_mem | is_system;
+    tri alu_sel = (~fl_req_slv.vld) & (is_alu | is_alui);
+    tri branch_sel = (~fl_req_slv.vld) & (is_jal | is_jalr | is_branch);
+    tri ldst_sel = (~fl_req_slv.vld) & (is_load | is_store);
+    tri misc_sel = (~fl_req_slv.vld) & (is_lui | is_auipc);
+    tri sys_sel = (~fl_req_slv.vld) & (is_mem | is_system);
 
     tri branch_done;
     tri ldst_done;
 
+    logic ex_req_rdy;
+    assign ex_req_slv.rdy = fl_req_slv.vld ? 1'b1 : ex_req_rdy;
+
     always_comb begin
         case (opcode)
-            OPCODE_LUI: ex_req_slv.rdy = 1'b1;
-            OPCODE_AUIPC: ex_req_slv.rdy = 1'b1;
-            OPCODE_JAL: ex_req_slv.rdy = branch_done;
-            OPCODE_JALR: ex_req_slv.rdy = branch_done;
-            OPCODE_BRANCH: ex_req_slv.rdy = branch_done;
-            OPCODE_LOAD: ex_req_slv.rdy = ldst_done;
-            OPCODE_STORE: ex_req_slv.rdy = ldst_done;
-            OPCODE_ALUI: ex_req_slv.rdy = 1'b1;
-            OPCODE_ALU: ex_req_slv.rdy = 1'b1;
-            OPCODE_MEM: ex_req_slv.rdy = 1'b1;
-            OPCODE_SYSTEM: ex_req_slv.rdy = 1'b1;
-            default: ex_req_slv.rdy = 1'b0;
+            OPCODE_LUI: ex_req_rdy = 1'b1;
+            OPCODE_AUIPC: ex_req_rdy = 1'b1;
+            OPCODE_JAL: ex_req_rdy = branch_done;
+            OPCODE_JALR: ex_req_rdy = branch_done;
+            OPCODE_BRANCH: ex_req_rdy = branch_done;
+            OPCODE_LOAD: ex_req_rdy = ldst_done;
+            OPCODE_STORE: ex_req_rdy = ldst_done;
+            OPCODE_ALUI: ex_req_rdy = 1'b1;
+            OPCODE_ALU: ex_req_rdy = 1'b1;
+            OPCODE_MEM: ex_req_rdy = 1'b1;
+            OPCODE_SYSTEM: ex_req_rdy = 1'b1;
+            default: ex_req_rdy = 1'b0;
         endcase
     end
 
@@ -102,6 +105,9 @@ module exu(
         .rst_n        (rst_n),
         .sel          (branch_sel),
         .inst         (ex_req_slv.pkt.ir),
+        .pc           (ex_req_slv.pkt.pc),
+        .pred_taken   (ex_req_slv.pkt.pred_taken),
+        .pred_pc      (ex_req_slv.pkt.pred_pc),
         .ex_rsp_mst   (ex_rsp_mst),
         .gpr_r1_mst   (gpr_r1_src_arr[BRANCH_CHN_IDX]),
         .gpr_r2_mst   (gpr_r2_src_arr[BRANCH_CHN_IDX]),
@@ -127,9 +133,9 @@ module exu(
         .rst_n        (rst_n),
         .sel          (misc_sel),
         .inst         (ex_req_slv.pkt.ir),
-        .gpr_r1_mst   (gpr_r1_src_arr[LDST_CHN_IDX]),
-        .gpr_r2_mst   (gpr_r2_src_arr[LDST_CHN_IDX]),
-        .gpr_w_mst    (gpr_w_src_arr[LDST_CHN_IDX])
+        .gpr_r1_mst   (gpr_r1_src_arr[MISC_CHN_IDX]),
+        .gpr_r2_mst   (gpr_r2_src_arr[MISC_CHN_IDX]),
+        .gpr_w_mst    (gpr_w_src_arr[MISC_CHN_IDX])
     );
 
 endmodule
