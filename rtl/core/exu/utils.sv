@@ -41,3 +41,13 @@ module s_imm_decode(
         inst.s.imm_11_5, inst.s.imm_4_0
     };
 endmodule
+
+module u_imm_decode(
+    input rv32i_inst_t inst,
+    output logic [`RV_XLEN-1:0] u_imm
+);
+    assign u_imm = {
+        inst.u.imm_31_12,
+        {12{1'b0}}
+    };
+endmodule

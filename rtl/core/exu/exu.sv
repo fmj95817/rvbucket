@@ -9,11 +9,12 @@ module exu(
     ldst_req_if_t.mst ldst_req_mst,
     ldst_rsp_if_t.slv ldst_rsp_slv
 );
-    localparam INST_HANDLER_NUM = 4;
+    localparam INST_HANDLER_NUM = 5;
     localparam ALU_CHN_IDX = 0;
     localparam BRANCH_CHN_IDX = 1;
     localparam LDST_CHN_IDX = 2;
     localparam MISC_CHN_IDX = 3;
+    localparam SYS_CHN_IDX = 4;
 
     tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.ir.base.opcode;
     tri is_lui = ex_req_slv.vld & (opcode == OPCODE_LUI);
@@ -26,13 +27,13 @@ module exu(
     tri is_alui = ex_req_slv.vld & (opcode == OPCODE_ALUI);
     tri is_alu = ex_req_slv.vld & (opcode == OPCODE_ALU);
     tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MEM);
-    tri is_system = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
+    tri is_sys = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
 
     tri alu_sel = (~fl_req_slv.vld) & (is_alu | is_alui);
     tri branch_sel = (~fl_req_slv.vld) & (is_jal | is_jalr | is_branch);
     tri ldst_sel = (~fl_req_slv.vld) & (is_load | is_store);
     tri misc_sel = (~fl_req_slv.vld) & (is_lui | is_auipc);
-    tri sys_sel = (~fl_req_slv.vld) & (is_mem | is_system);
+    tri sys_sel = (~fl_req_slv.vld) & (is_mem | is_sys);
 
     tri branch_done;
     tri ldst_done;
@@ -62,6 +63,7 @@ module exu(
     assign chn_sels[BRANCH_CHN_IDX] = branch_sel;
     assign chn_sels[LDST_CHN_IDX] = ldst_sel;
     assign chn_sels[MISC_CHN_IDX] = misc_sel;
+    assign chn_sels[SYS_CHN_IDX] = sys_sel;
 
     exu_gpr_r_if_t gpr_r1_src_arr[INST_HANDLER_NUM]();
     exu_gpr_r_if_t gpr_r2_src_arr[INST_HANDLER_NUM]();
@@ -133,9 +135,20 @@ module exu(
         .rst_n        (rst_n),
         .sel          (misc_sel),
         .inst         (ex_req_slv.pkt.ir),
+        .pc           (ex_req_slv.pkt.pc),
         .gpr_r1_mst   (gpr_r1_src_arr[MISC_CHN_IDX]),
         .gpr_r2_mst   (gpr_r2_src_arr[MISC_CHN_IDX]),
         .gpr_w_mst    (gpr_w_src_arr[MISC_CHN_IDX])
+    );
+
+    exu_sys_handler u_exu_sys_handler(
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .sel          (sys_sel),
+        .inst         (ex_req_slv.pkt.ir),
+        .gpr_r1_mst   (gpr_r1_src_arr[SYS_CHN_IDX]),
+        .gpr_r2_mst   (gpr_r2_src_arr[SYS_CHN_IDX]),
+        .gpr_w_mst    (gpr_w_src_arr[SYS_CHN_IDX])
     );
 
 endmodule
