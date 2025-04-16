@@ -1,39 +1,32 @@
 `include "isa.svh"
 
-interface exu_gpr_r_if_t;
-    logic                  vld;
-    logic [`RV_GPR_AW-1:0] addr;
-    logic [`RV_XLEN-1:0]   data;
-
-    modport mst(output vld, addr, input data);
-    modport slv(input vld, addr, output data);
-endinterface
-
-interface exu_gpr_w_if_t;
+interface exu_gpr_if_t;
+    logic [`RV_GPR_AW-1:0] ra1;
+    logic [`RV_XLEN-1:0]   rd1;
+    logic [`RV_GPR_AW-1:0] ra2;
+    logic [`RV_XLEN-1:0]   rd2;
     logic                  wen;
-    logic [`RV_GPR_AW-1:0] addr;
-    logic [`RV_XLEN-1:0]   data;
+    logic [`RV_GPR_AW-1:0] wa;
+    logic [`RV_XLEN-1:0]   wd;
 
-    modport mst(output wen, addr, data);
-    modport slv(input wen, addr, data);
+    modport mst(output ra1, ra2, wen, wa, wd, input rd1, rd2);
+    modport slv(input ra1, ra2, wen, wa, wd, output rd1, rd2);
 endinterface
 
 module exu_gpr(
-    input logic        clk,
-    exu_gpr_r_if_t.slv gpr_r1_slv,
-    exu_gpr_r_if_t.slv gpr_r2_slv,
-    exu_gpr_w_if_t.slv gpr_w_slv
+    input logic      clk,
+    exu_gpr_if_t.slv gpr_slv
 );
     logic [`RV_XLEN-1:0] gprs[0:2**`RV_GPR_AW-1];
     assign gprs[0] = {`RV_XLEN{1'b0}};
 
-    assign gpr_r1_slv.data = gprs[gpr_r1_slv.addr] & {`RV_XLEN{gpr_r1_slv.vld}};
-    assign gpr_r2_slv.data = gprs[gpr_r2_slv.addr] & {`RV_XLEN{gpr_r2_slv.vld}};
+    assign gpr_slv.rd1 = gprs[gpr_slv.ra1];
+    assign gpr_slv.rd2 = gprs[gpr_slv.ra2];
 
     for (genvar i = 1; i < 2**`RV_GPR_AW; i++) begin : GEN_GPR
         always_ff @(posedge clk) begin
-            if ((i == gpr_w_slv.addr) & gpr_w_slv.wen)
-                gprs[i] <= gpr_w_slv.data;
+            if ((i == gpr_slv.wa) & gpr_slv.wen)
+                gprs[i] <= gpr_slv.wd;
         end
     end
 endmodule
@@ -41,52 +34,40 @@ endmodule
 module exu_gpr_rw_mux #(
     parameter CHN_NUM = 2
 )(
-    input logic        chn_sels[CHN_NUM],
-    exu_gpr_r_if_t.slv gpr_r1_slvs[CHN_NUM],
-    exu_gpr_r_if_t.slv gpr_r2_slvs[CHN_NUM],
-    exu_gpr_w_if_t.slv gpr_w_slvs[CHN_NUM],
-    exu_gpr_r_if_t.mst gpr_r1_mst,
-    exu_gpr_r_if_t.mst gpr_r2_mst,
-    exu_gpr_w_if_t.mst gpr_w_mst
+    input logic      chn_sels[CHN_NUM],
+    exu_gpr_if_t.slv gpr_src_slvs[CHN_NUM],
+    exu_gpr_if_t.mst gpr_dst_mst
 );
-    logic                  r1_vld_arr[CHN_NUM];
     logic [`RV_GPR_AW-1:0] r1_addr_arr[CHN_NUM];
-    logic                  r2_vld_arr[CHN_NUM];
     logic [`RV_GPR_AW-1:0] r2_addr_arr[CHN_NUM];
     logic                  w_wen_arr[CHN_NUM];
     logic [`RV_GPR_AW-1:0] w_addr_arr[CHN_NUM];
     logic [`RV_XLEN-1:0]   w_data_arr[CHN_NUM];
 
     for (genvar i = 0; i < CHN_NUM; i++) begin
-        assign gpr_r1_slvs[i].data = {`RV_XLEN{chn_sels[i]}} & gpr_r1_mst.data;
-        assign gpr_r2_slvs[i].data = {`RV_XLEN{chn_sels[i]}} & gpr_r2_mst.data;
+        assign gpr_src_slvs[i].rd1 = {`RV_XLEN{chn_sels[i]}} & gpr_dst_mst.rd1;
+        assign gpr_src_slvs[i].rd2 = {`RV_XLEN{chn_sels[i]}} & gpr_dst_mst.rd2;
 
-        assign r1_vld_arr[i] = gpr_r1_slvs[i].vld;
-        assign r1_addr_arr[i] = gpr_r1_slvs[i].addr;
-        assign r2_vld_arr[i] = gpr_r2_slvs[i].vld;
-        assign r2_addr_arr[i] = gpr_r2_slvs[i].addr;
-        assign w_wen_arr[i] = gpr_w_slvs[i].wen;
-        assign w_addr_arr[i] = gpr_w_slvs[i].addr;
-        assign w_data_arr[i] = gpr_w_slvs[i].data;
+        assign r1_addr_arr[i] = gpr_src_slvs[i].ra1;
+        assign r2_addr_arr[i] = gpr_src_slvs[i].ra2;
+        assign w_wen_arr[i] = gpr_src_slvs[i].wen;
+        assign w_addr_arr[i] = gpr_src_slvs[i].wa;
+        assign w_data_arr[i] = gpr_src_slvs[i].wd;
     end
 
     always_comb begin
-        gpr_r1_mst.vld = 1'b0;
-        gpr_r1_mst.addr = {`RV_GPR_AW{1'b0}};
-        gpr_r2_mst.vld = 1'b0;
-        gpr_r2_mst.addr = {`RV_GPR_AW{1'b0}};
-        gpr_w_mst.wen = 1'b0;
-        gpr_w_mst.addr = {`RV_GPR_AW{1'b0}};
-        gpr_w_mst.data = {`RV_XLEN{1'b0}};
+        gpr_dst_mst.ra1 = {`RV_GPR_AW{1'b0}};
+        gpr_dst_mst.ra2 = {`RV_GPR_AW{1'b0}};
+        gpr_dst_mst.wen = 1'b0;
+        gpr_dst_mst.wa = {`RV_GPR_AW{1'b0}};
+        gpr_dst_mst.wd = {`RV_XLEN{1'b0}};
 
         for (int i = 0; i < CHN_NUM; i++) begin
-            gpr_r1_mst.vld |= (chn_sels[i] & r1_vld_arr[i]);
-            gpr_r1_mst.addr |= ({`RV_GPR_AW{chn_sels[i]}} & r1_addr_arr[i]);
-            gpr_r2_mst.vld |= (chn_sels[i] & r2_vld_arr[i]);
-            gpr_r2_mst.addr |= ({`RV_GPR_AW{chn_sels[i]}} & r2_addr_arr[i]);
-            gpr_w_mst.wen |= (chn_sels[i] & w_wen_arr[i]);
-            gpr_w_mst.addr |= ({`RV_GPR_AW{chn_sels[i]}} & w_addr_arr[i]);
-            gpr_w_mst.data |= ({`RV_XLEN{chn_sels[i]}} & w_data_arr[i]);
+            gpr_dst_mst.ra1 |= ({`RV_GPR_AW{chn_sels[i]}} & r1_addr_arr[i]);
+            gpr_dst_mst.ra2 |= ({`RV_GPR_AW{chn_sels[i]}} & r2_addr_arr[i]);
+            gpr_dst_mst.wen |= (chn_sels[i] & w_wen_arr[i]);
+            gpr_dst_mst.wa |= ({`RV_GPR_AW{chn_sels[i]}} & w_addr_arr[i]);
+            gpr_dst_mst.wd |= ({`RV_XLEN{chn_sels[i]}} & w_data_arr[i]);
         end
     end
 endmodule

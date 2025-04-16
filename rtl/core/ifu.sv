@@ -117,12 +117,11 @@ module ifu(
     assign ex_req_mst.pkt.pred_taken = 1'b0;
     assign ex_req_mst.pkt.pred_pc = {`RV_PC_SIZE{1'b0}};
 
-    assign ex_rsp_slv.rdy = (~fch_req_pend_flag) | fch_req_pend_clear;
-
     assign fch_req_mst.vld = (~fch_req_pend_flag) | fch_req_pend_clear;
     assign fch_req_mst.pkt.pc = pc_nxt;
     assign fch_rsp_slv.rdy = (~ir_valid_flag) | ir_valid_clear;
 
-    assign fl_req_mst.vld = need_fl_flag & need_fl_clear;
+    assign ex_rsp_slv.rdy = fch_req_hsk;
+    assign fl_req_mst.vld = need_fl_flag;
 
 endmodule

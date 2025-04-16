@@ -65,31 +65,20 @@ module exu(
     assign chn_sels[MISC_CHN_IDX] = misc_sel;
     assign chn_sels[SYS_CHN_IDX] = sys_sel;
 
-    exu_gpr_r_if_t gpr_r1_src_arr[INST_HANDLER_NUM]();
-    exu_gpr_r_if_t gpr_r2_src_arr[INST_HANDLER_NUM]();
-    exu_gpr_w_if_t gpr_w_src_arr[INST_HANDLER_NUM]();
-
-    exu_gpr_r_if_t gpr_r1_dst();
-    exu_gpr_r_if_t gpr_r2_dst();
-    exu_gpr_w_if_t gpr_w_dst();
+    exu_gpr_if_t gpr_src_if_arr[INST_HANDLER_NUM]();
+    exu_gpr_if_t gpr_dst_if();
 
     exu_gpr u_exu_gpr(
         .clk          (clk),
-        .gpr_r1_slv   (gpr_r1_dst),
-        .gpr_r2_slv   (gpr_r2_dst),
-        .gpr_w_slv    (gpr_w_dst)
+        .gpr_slv      (gpr_dst_if)
     );
 
     exu_gpr_rw_mux #(
         .CHN_NUM      (INST_HANDLER_NUM)
     ) u_exu_gpr_rw_mux(
         .chn_sels     (chn_sels),
-        .gpr_r1_slvs  (gpr_r1_src_arr),
-        .gpr_r2_slvs  (gpr_r2_src_arr),
-        .gpr_w_slvs   (gpr_w_src_arr),
-        .gpr_r1_mst   (gpr_r1_dst),
-        .gpr_r2_mst   (gpr_r2_dst),
-        .gpr_w_mst    (gpr_w_dst)
+        .gpr_src_slvs (gpr_src_if_arr),
+        .gpr_dst_mst  (gpr_dst_if)
     );
 
     exu_alu_handler u_exu_alu_handler(
@@ -97,9 +86,7 @@ module exu(
         .rst_n        (rst_n),
         .sel          (alu_sel),
         .inst         (ex_req_slv.pkt.ir),
-        .gpr_r1_mst   (gpr_r1_src_arr[ALU_CHN_IDX]),
-        .gpr_r2_mst   (gpr_r2_src_arr[ALU_CHN_IDX]),
-        .gpr_w_mst    (gpr_w_src_arr[ALU_CHN_IDX])
+        .gpr_mst      (gpr_src_if_arr[ALU_CHN_IDX])
     );
 
     exu_branch_handler u_exu_branch_handler(
@@ -111,9 +98,7 @@ module exu(
         .pred_taken   (ex_req_slv.pkt.pred_taken),
         .pred_pc      (ex_req_slv.pkt.pred_pc),
         .ex_rsp_mst   (ex_rsp_mst),
-        .gpr_r1_mst   (gpr_r1_src_arr[BRANCH_CHN_IDX]),
-        .gpr_r2_mst   (gpr_r2_src_arr[BRANCH_CHN_IDX]),
-        .gpr_w_mst    (gpr_w_src_arr[BRANCH_CHN_IDX]),
+        .gpr_mst      (gpr_src_if_arr[BRANCH_CHN_IDX]),
         .done         (branch_done)
     );
 
@@ -124,9 +109,7 @@ module exu(
         .inst         (ex_req_slv.pkt.ir),
         .ldst_req_mst (ldst_req_mst),
         .ldst_rsp_slv (ldst_rsp_slv),
-        .gpr_r1_mst   (gpr_r1_src_arr[LDST_CHN_IDX]),
-        .gpr_r2_mst   (gpr_r2_src_arr[LDST_CHN_IDX]),
-        .gpr_w_mst    (gpr_w_src_arr[LDST_CHN_IDX]),
+        .gpr_mst      (gpr_src_if_arr[LDST_CHN_IDX]),
         .done         (ldst_done)
     );
 
@@ -136,9 +119,7 @@ module exu(
         .sel          (misc_sel),
         .inst         (ex_req_slv.pkt.ir),
         .pc           (ex_req_slv.pkt.pc),
-        .gpr_r1_mst   (gpr_r1_src_arr[MISC_CHN_IDX]),
-        .gpr_r2_mst   (gpr_r2_src_arr[MISC_CHN_IDX]),
-        .gpr_w_mst    (gpr_w_src_arr[MISC_CHN_IDX])
+        .gpr_mst      (gpr_src_if_arr[MISC_CHN_IDX])
     );
 
     exu_sys_handler u_exu_sys_handler(
@@ -146,9 +127,7 @@ module exu(
         .rst_n        (rst_n),
         .sel          (sys_sel),
         .inst         (ex_req_slv.pkt.ir),
-        .gpr_r1_mst   (gpr_r1_src_arr[SYS_CHN_IDX]),
-        .gpr_r2_mst   (gpr_r2_src_arr[SYS_CHN_IDX]),
-        .gpr_w_mst    (gpr_w_src_arr[SYS_CHN_IDX])
+        .gpr_mst      (gpr_src_if_arr[SYS_CHN_IDX])
     );
 
 endmodule
