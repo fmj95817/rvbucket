@@ -18,7 +18,6 @@ module ifu(
     logic fch_req_pend_flag;
     logic ex_req_pkt_valid;
     logic pc_pend_flag;
-    logic need_fl_flag;
 
     tri ir_valid_set = fch_rsp_hsk;
     tri ir_valid_clear = ex_req_hsk;
@@ -64,17 +63,6 @@ module ifu(
             pc_pend_flag <= 1'b0;
     end
 
-    tri need_fl_set = ex_rsp_hsk & ex_rsp_slv.pkt.taken;
-    tri need_fl_clear = ex_req_hsk;
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (~rst_n)
-            need_fl_flag <= 1'b0;
-        else if (need_fl_set)
-            need_fl_flag <= 1'b1;
-        else if (need_fl_clear)
-            need_fl_flag <= 1'b0;
-    end
-
     logic [`RV_IR_SIZE-1:0] ir;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
@@ -111,6 +99,15 @@ module ifu(
             pc_of_ir <= pc;
     end
 
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n)
+            ex_rsp_slv.rdy <= 1'b0;
+        else if (fch_req_hsk)
+            ex_rsp_slv.rdy <= 1'b1;
+        else if (fch_rsp_hsk)
+            ex_rsp_slv.rdy <= 1'b0;
+    end
+
     assign ex_req_mst.vld = ir_valid_flag;
     assign ex_req_mst.pkt.ir.raw = ir;
     assign ex_req_mst.pkt.pc = pc_of_ir;
@@ -121,7 +118,6 @@ module ifu(
     assign fch_req_mst.pkt.pc = pc_nxt;
     assign fch_rsp_slv.rdy = (~ir_valid_flag) | ir_valid_clear;
 
-    assign ex_rsp_slv.rdy = fch_req_hsk;
-    assign fl_req_mst.vld = need_fl_flag;
+    assign fl_req_mst.vld = taken;
 
 endmodule
