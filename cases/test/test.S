@@ -4,14 +4,12 @@
 
 _asm_test:
     li x1, 0
-    li x2, 0
-    li x3, 0
-loop:
-    addi x3, x3, 5
-    li x9, 3
-    addi x1, x9, 11
-    addi x9, x9, 3
-    sw x9, 0(x1)
-    lw x10, 0(x1)
-    j loop
-    li x4, 100
+    li x2, 0x02000100
+    li x3, 0x05000200
+    li x4, 0x123
+    sw x4, 0(x1)
+    sw x4, 0(x2)
+    sw x4, 0(x3)
+    lw x5, 0(x1)
+    lw x6, 0(x2)
+    lw x7, 0(x3)
