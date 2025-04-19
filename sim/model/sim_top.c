@@ -35,8 +35,7 @@ static program_t read_program(const char *path)
 static void soc_burn_program(soc_t *soc, const char *path)
 {
     program_t program = read_program(path);
-    rom_burn(&soc->flash, &program.size, 0, 4);
-    rom_burn(&soc->flash, program.code, 4, program.size);
+    rom_burn(&soc->flash, program.code, 0, program.size);
     free(program.code);
 }
 

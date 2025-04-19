@@ -22,8 +22,10 @@ void rv32i_construct(rv32i_t *s, const u64 *cycle, u32 reset_pc, u32 boot_rom_ba
     s->exu.ldst_req_mst = &s->ldst_req_itf;
     s->exu.ldst_rsp_slv = &s->ldst_rsp_itf;
 
-    s->biu.bti_req_mst = s->bti_req_mst;
-    s->biu.bti_rsp_slv = s->bti_rsp_slv;
+    s->biu.i_bti_req_mst = s->i_bti_req_mst;
+    s->biu.i_bti_rsp_slv = s->i_bti_rsp_slv;
+    s->biu.d_bti_req_mst = s->d_bti_req_mst;
+    s->biu.d_bti_rsp_slv = s->d_bti_rsp_slv;
     s->biu.fch_req_slv = &s->fch_req_itf;
     s->biu.fch_rsp_mst = &s->fch_rsp_itf;
     s->biu.ldst_req_slv = &s->ldst_req_itf;

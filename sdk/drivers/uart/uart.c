@@ -1,7 +1,7 @@
 #include "uart.h"
 #include <stdint.h>
 
-#define UART_BASE_ADDR 0x20000000
+#define UART_BASE_ADDR 0x30000000
 
 void uart_write(char ch)
 {

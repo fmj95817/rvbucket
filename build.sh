@@ -16,10 +16,12 @@ CROSS_LD="${CROSS_PREFIX}-gcc"
 CROSS_OBJCOPY="${CROSS_PREFIX}-objcopy"
 CROSS_OBJDUMP="${CROSS_PREFIX}-objdump"
 BIN2X="./build/tools/bin2x"
+MKBIN="./build/tools/mkbin"
 
 function build_tools {
     mkdir -p build/tools
     ${HOST_CC} -Wall -O3 -o ${BIN2X} tools/bin2x.c -lm
+    ${HOST_CC} -Wall -O3 -o ${MKBIN} tools/mkbin.c -lm
 }
 
 function build_sw_case {
@@ -31,6 +33,8 @@ function build_sw_case {
 
     local lds="$(find ${case_dir} -name *.lds)"
     local elf="${output_dir}/${case_name}.elf"
+    local itcm="${output_dir}/${case_name}.itcm"
+    local dtcm="${output_dir}/${case_name}.dtcm"
     local bin="${output_dir}/${case_name}.bin"
     local dis="${output_dir}/${case_name}.S"
     local hex="${output_dir}/${case_name}.hex"
@@ -53,16 +57,26 @@ function build_sw_case {
     done
 
     ${CROSS_LD} ${CROSS_LDFLAGS[@]} ${ld_flags[@]} -o "${elf}" "${objs[@]}"
-    ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bin}"
+    ${CROSS_OBJCOPY} -S "${elf}" -O binary \
+        --only-section='.text*' \
+        "${itcm}"
+    ${CROSS_OBJCOPY} -S "${elf}" -O binary \
+        --only-section='.*data*' \
+        --only-section='.*bss*' \
+        --only-section='.got*' \
+        --only-section='.gnu.linkonce.*' \
+        "${dtcm}"
     ${CROSS_OBJDUMP} -D "${elf}" > "${dis}"
+
+    ${MKBIN} "${itcm}" "${dtcm}" "${bin}"
     ${BIN2X} "${bin}" hex > "${hex}"
 
     if [ "${case_name}" = "boot" ]; then
         if [ "${2}" = "model" ]; then
-            ${BIN2X} "${bin}" c_array > model/boot.c
+            ${BIN2X} "${itcm}" c_array > model/boot.c
         elif [ "${2}" = "rtl" ]; then
-            ${BIN2X} "${bin}" sv_rom_header > rtl/boot.svh
-            ${BIN2X} "${bin}" sv_rom_src > rtl/boot.sv
+            ${BIN2X} "${itcm}" sv_rom_header > rtl/boot.svh
+            ${BIN2X} "${itcm}" sv_rom_src > rtl/boot.sv
         fi
     fi
 }

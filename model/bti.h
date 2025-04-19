@@ -38,7 +38,7 @@ static inline void bti_rsp_if_to_str(const void *pkt, char *str)
 
 #define BTI_MUX_GST_NUM_MAX 16
 
-typedef struct bti_mux {
+typedef struct bti_demux {
     itf_t *host_bti_req_slv;
     itf_t *host_bti_rsp_mst;
     itf_t *gst_bti_req_msts[BTI_MUX_GST_NUM_MAX];
@@ -47,11 +47,11 @@ typedef struct bti_mux {
     u32 gst_num;
     u32 gst_base_addrs[BTI_MUX_GST_NUM_MAX];
     u32 gst_sizes[BTI_MUX_GST_NUM_MAX];
-} bti_mux_t;
+} bti_demux_t;
 
-extern void bti_mux_construct(bti_mux_t *bti_mux, u32 gst_num, const u32 *gst_base_addrs, const u32 *gst_sizes);
-extern void bti_mux_reset(bti_mux_t *bti_mux);
-extern void bti_mux_clock(bti_mux_t *bti_mux);
-extern void bti_mux_free(bti_mux_t *bti_mux);
+extern void bti_demux_construct(bti_demux_t *bti_demux, u32 gst_num, const u32 *gst_base_addrs, const u32 *gst_sizes);
+extern void bti_demux_reset(bti_demux_t *bti_demux);
+extern void bti_demux_clock(bti_demux_t *bti_demux);
+extern void bti_demux_free(bti_demux_t *bti_demux);
 
 #endif

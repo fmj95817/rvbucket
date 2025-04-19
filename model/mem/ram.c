@@ -3,8 +3,12 @@
 #include <string.h>
 #include "dbg/chk.h"
 
-void ram_construct(ram_t *ram, u32 size, u32 base_addr)
+void ram_construct(ram_t *ram, u32 port_num, u32 size, u32 base_addr)
 {
+    DBG_CHECK(port_num > 0);
+    DBG_CHECK(port_num <= RAM_MAX_PORT_NUM);
+
+    ram->port_num = port_num;
     ram->size = size;
     ram->data = malloc(size + 3);
     ram->base_addr = base_addr;
@@ -16,6 +20,13 @@ void ram_reset(ram_t *ram) {}
 void ram_free(ram_t *ram)
 {
     free(ram->data);
+}
+
+void ram_load(ram_t *ram, const void *data, u32 addr, u32 size)
+{
+    DBG_CHECK(addr < ram->size);
+    DBG_CHECK(addr + size <= ram->size);
+    memcpy(ram->data + addr, data, size);
 }
 
 static bool ram_read(ram_t *ram, u32 addr, u32 *data)
@@ -55,18 +66,20 @@ static bool ram_write(ram_t *ram, u32 addr, u32 data, u8 strobe)
     return true;
 }
 
-void ram_clock(ram_t *ram)
+static void ram_proc_port(ram_t *ram, u32 port_idx)
 {
-    if (itf_fifo_empty(ram->bti_req_slv)) {
+    DBG_CHECK (port_idx < ram->port_num);
+
+    if (itf_fifo_empty(ram->bti_req_slv[port_idx])) {
         return;
     }
 
-    if (itf_fifo_full(ram->bti_rsp_mst)) {
+    if (itf_fifo_full(ram->bti_rsp_mst[port_idx])) {
         return;
     }
 
     bti_req_if_t bti_req;
-    itf_read(ram->bti_req_slv, &bti_req);
+    itf_read(ram->bti_req_slv[port_idx], &bti_req);
     DBG_CHECK(bti_req.addr >= ram->base_addr);
 
     bti_rsp_if_t bti_rsp;
@@ -81,5 +94,12 @@ void ram_clock(ram_t *ram)
         bti_rsp.ok = false;
     }
 
-    itf_write(ram->bti_rsp_mst, &bti_rsp);
+    itf_write(ram->bti_rsp_mst[port_idx], &bti_rsp);
+}
+
+void ram_clock(ram_t *ram)
+{
+    for (u32 i = 0; i < ram->port_num; i++) {
+        ram_proc_port(ram, i);
+    }
 }

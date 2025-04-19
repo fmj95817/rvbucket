@@ -13,8 +13,10 @@ typedef struct rv32i {
     exu_t exu;
     biu_t biu;
 
-    itf_t *bti_req_mst;
-    itf_t *bti_rsp_slv;
+    itf_t *i_bti_req_mst;
+    itf_t *i_bti_rsp_slv;
+    itf_t *d_bti_req_mst;
+    itf_t *d_bti_rsp_slv;
 
     itf_t fch_req_itf;
     itf_t fch_rsp_itf;

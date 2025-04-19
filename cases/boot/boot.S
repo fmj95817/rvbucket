@@ -5,36 +5,62 @@
 _boot:
     /* x1 = flash_addr */
     li x1, 0x80000000
-    /* x2 = tcm_addr */
+    /* x2 = itcm_addr */
     li x2, 0x10000000
+    /* x3 = dtcm_addr */
+    li x3, 0x20000000
 
-    /* read program size to x4 */
+    /* read itcm size to x4 */
     lw x4, 0(x1)
+    /* read dtcm size to x5 */
+    lw x5, 4(x1)
+    /* move x1 to itcm data */
+    addi x1, x1, 8
 
-    /* move x1 to program data */
-    addi x1, x1, 4
+    /* loop var x8 = 0 */
+    li x8, 0
 
-    /* loop var x3 = 0 */
-    li x3, 0
+itcm_loop:
+    /* while (x8 < itcm_size) */
+    bge x8, x4, load_itcm_done
 
-loop:
-    /* while (x3 < size) */
-    bge x3, x4, load_done
+    /* read word to x7 from flash */
+    add x6, x1, x8
+    lw x7, 0(x6)
 
-    /* read word to x6 from flash */
-    add x5, x1, x3
-    lw x6, 0(x5)
+    /* store word x7 to ITCM */
+    add x6, x2, x8
+    sw x7, 0(x6)
 
-    /* store word x6 to TCM */
-    add x5, x2, x3
-    sw x6, 0(x5)
+    /* x8 += 4 */
+    addi x8, x8, 4
 
-    /* x3 += 4 */
-    addi x3, x3, 4
+    j itcm_loop
 
-    j loop
+load_itcm_done:
+    /* clear loop var x8 */
+    li x8, 0
+    /* move x1 to itcm data */
+    add x1, x1, x4
 
-load_done:
+dtcm_loop:
+    /* while (x8 < dtcm_size) */
+    bge x8, x5, load_dtcm_done
+
+    /* read word to x7 from flash */
+    add x6, x1, x8
+    lw x7, 0(x6)
+
+    /* store word x7 to DTCM */
+    add x6, x3, x8
+    sw x7, 0(x6)
+
+    /* x8 += 4 */
+    addi x8, x8, 4
+
+    j dtcm_loop
+
+load_dtcm_done:
     /* jump to user program */
-    li x7, 0x10000000
-    jalr 0(x7)
+    li x9, 0x10000000
+    jalr 0(x9)
