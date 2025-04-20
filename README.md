@@ -2,22 +2,23 @@
 
 ## 概述
 
-本项目是一个开源的RISC-V CPU实现，包含一个2级流水线的RV32I指令集CPU、一个简单的SoC系统以及对应的Cycle-Accurate (CA)模型和RTL实现。CA模型已经开发完成，能够跑通所有测试用例，而RTL实现目前正在开发中，支持VCS和Verilator仿真器。该项目旨在为学习、研究和开发RISC-V架构的爱好者提供一个简单且可扩展的起点。
+本项目是一个开源的RISC-V CPU实现，包含一个2级流水线的RV32I指令集CPU、一个简单的SoC系统以及对应的Cycle-Accurate (CA)模型和RTL实现。
 
 ## SoC系统规格
 
 - **CPU核心**: 2级流水线的RV32I指令集CPU
 - **Boot ROM**: 1 KB
 - **Flash**: 1 MB
-- **TCM (Tightly Coupled Memory)**: 128 KB
+- **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
+- **DTCM (Data Tightly Coupled Memory)**: 64 KB
 - **UART接口**: 用于串口通信
 
 ## 功能特性
 
 - **RV32I指令集支持**: 支持RISC-V基础整数指令集（RV32I）。
-- **2级流水线**: 采用2级流水线设计。
-- **简单SoC系统**: 包含Boot ROM、Flash、TCM和UART接口，适合嵌入式应用。
-- **Cycle-Accurate模型**: 提供精确到时钟周期的仿真模型，便于性能分析和验证。
+- **2级流水线**: 采用if/ex 2级流水线设计。
+- **简单SoC系统**: 包含Boot ROM、Flash、ITCM/DTCM和UART接口，适合嵌入式应用。
+- **CA模型**: 提供精确到时钟周期的仿真模型，便于性能分析和验证。
 - **RTL实现**: 使用SystemVerilog实现，支持VCS和Verilator仿真器。
 
 ## 快速开始
@@ -59,7 +60,7 @@
 5. **运行CA模型**:
    ```bash
    cd build/hw/model
-   ./sim_top ../../sw/<用例名称>/用例名称.bin
+   ./sim_top ../../sw/<用例名称>/<用例名称>.bin
    ```
 
 6. **运行RTL VCS仿真**:
