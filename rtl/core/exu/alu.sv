@@ -43,7 +43,7 @@ module exu_alu_handler(
             ALU_OP_AND: alu_dst = alu_src1_u & alu_src2_u;
             ALU_OP_SL: alu_dst = alu_src1_u << shift_bits;
             ALU_OP_SRL: alu_dst = alu_src1_u >> shift_bits;
-            ALU_OP_SRA: alu_dst = alu_src1_s >> shift_bits;
+            ALU_OP_SRA: alu_dst = alu_src1_s >>> shift_bits;
             default: alu_dst = {`RV_XLEN{1'bx}};
         endcase
     end
