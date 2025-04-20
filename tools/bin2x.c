@@ -32,7 +32,7 @@ static void to_sv_rom_header(size_t size)
     printf(
         "`ifndef BOOT_ROM_SVH\n"
         "`define BOOT_ROM_SVH\n\n"
-        "`define BOOT_ROM_AW %d\n\n"
+        "`define BOOT_ROM_WORD_AW %d\n\n"
         "`endif\n", addr_width
     );
 }

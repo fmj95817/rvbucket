@@ -1,6 +1,5 @@
 `include "bti.svh"
 
-
 interface bti_req_if_t #(
     parameter BTI_AW = 32,
     parameter BTI_DW = 32
@@ -40,8 +39,8 @@ module bti_demux #(
     parameter BTI_DW = 32,
     parameter GST_SEL_AW = 8,
     parameter GST_NUM = 4,
-    parameter logic [GST_SEL_AW-1:0] GST_SEL_ADDRS[GST_NUM],
-    parameter int GST_VLD_AW[GST_NUM]
+    parameter logic [GST_SEL_AW-1:0] GST_SEL[GST_NUM],
+    parameter int GST_AW[GST_NUM]
 )(
     input logic      clk,
     input logic      rst_n,
@@ -56,14 +55,14 @@ module bti_demux #(
 
     logic gsts_sel[GST_NUM];
     for (genvar i = 0; i < GST_NUM; i++) begin
-        assign gsts_sel[i] = (sel_addr == GST_SEL_ADDRS[i]) &&
-            (req_addr[GST_ADDR_END_BIT-1:GST_VLD_AW[i]] ==
-            {(GST_ADDR_END_BIT-GST_VLD_AW[i]){1'b0}});
+        assign gsts_sel[i] = (sel_addr == GST_SEL[i]) &&
+            (req_addr[GST_ADDR_END_BIT-1:GST_AW[i]] ==
+            {(GST_ADDR_END_BIT-GST_AW[i]){1'b0}});
     end
 
     logic [GST_NUM-1:0] gsts_req_rdy;
-    logic gsts_req_hsk[GST_NUM];
-    logic gsts_rsp_hsk[GST_NUM];
+    logic [GST_NUM-1:0] gsts_req_hsk;
+    logic [GST_NUM-1:0] gsts_rsp_hsk;
     for (genvar i = 0; i < GST_NUM; i++) begin
         assign gsts_req_rdy[i] = gst_bti_req_msts[i].rdy;
         assign gsts_req_hsk[i] = gst_bti_req_msts[i].vld & gst_bti_req_msts[i].rdy;
@@ -71,7 +70,6 @@ module bti_demux #(
     end
 
     logic [GST_NUM-1:0] gsts_req_pend;
-    tri req_pend = |gsts_req_pend;
     for (genvar i = 0; i < GST_NUM; i++) begin
         always_ff @(posedge clk or negedge rst_n) begin
             if (~rst_n)
@@ -83,9 +81,12 @@ module bti_demux #(
         end
     end
 
-    assign host_bti_req_slv.rdy = (|gsts_req_rdy) & (~req_pend);
+    tri req_pend = |gsts_req_pend;
+    tri req_not_pend = (~req_pend) | (|gsts_rsp_hsk);
+
+    assign host_bti_req_slv.rdy = (|gsts_req_rdy) & req_not_pend;
     for (genvar i = 0; i < GST_NUM; i++) begin
-        assign gst_bti_req_msts[i].vld = host_bti_req_slv.vld & gsts_sel[i] & (~req_pend);
+        assign gst_bti_req_msts[i].vld = host_bti_req_slv.vld & gsts_sel[i] & req_not_pend;
         assign gst_bti_req_msts[i].pkt = host_bti_req_slv.pkt;
     end
 

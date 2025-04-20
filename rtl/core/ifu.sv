@@ -86,7 +86,7 @@ module ifu(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            pc <= {`RV_PC_SIZE{1'b0}};
+            pc <= 32'h40000000;
         else if (fch_req_hsk)
             pc <= pc_nxt;
     end

@@ -3,10 +3,10 @@
 module rv32i(
     input logic       clk,
     input logic       rst_n,
-    bti_req_if_t.mst  itcm_bti_req_mst,
-    bti_rsp_if_t.slv  itcm_bti_rsp_slv,
-    bti_req_if_t.mst  dtcm_bti_req_mst,
-    bti_rsp_if_t.slv  dtcm_bti_rsp_slv
+    bti_req_if_t.mst  i_bti_req_mst,
+    bti_rsp_if_t.slv  i_bti_rsp_slv,
+    bti_req_if_t.mst  d_bti_req_mst,
+    bti_rsp_if_t.slv  d_bti_rsp_slv
 );
     fch_req_if_t fch_req_if();
     fch_rsp_if_t fch_rsp_if();
@@ -43,10 +43,10 @@ module rv32i(
         .fch_rsp_mst      (fch_rsp_if),
         .ldst_req_slv     (ldst_req_if),
         .ldst_rsp_mst     (ldst_rsp_if),
-        .itcm_bti_req_mst (itcm_bti_req_mst),
-        .itcm_bti_rsp_slv (itcm_bti_rsp_slv),
-        .dtcm_bti_req_mst (dtcm_bti_req_mst),
-        .dtcm_bti_rsp_slv (dtcm_bti_rsp_slv)
+        .i_bti_req_mst    (i_bti_req_mst),
+        .i_bti_rsp_slv    (i_bti_rsp_slv),
+        .d_bti_req_mst    (d_bti_req_mst),
+        .d_bti_rsp_slv    (d_bti_rsp_slv)
     );
 
 endmodule

@@ -10,7 +10,7 @@ module bti_to_rom #(
     bti_req_if_t.slv          bti_req_slv,
     bti_rsp_if_t.mst          bti_rsp_mst,
     output logic              cs,
-    output logic [ROM_AW-1:0] addr,
+    output logic [ROM_AW-3:0] addr,
     input logic [BTI_DW-1:0]  data
 );
     reg_slice #(
@@ -27,7 +27,7 @@ module bti_to_rom #(
     );
 
     assign cs = bti_req_slv.vld & bti_req_slv.rdy;
-    assign addr = bti_req_slv.pkt.addr[ROM_AW+1:2];
+    assign addr = bti_req_slv.pkt.addr[ROM_AW-1:2];
     assign bti_rsp_mst.pkt.data = data;
     assign bti_rsp_mst.pkt.ok = 1'b1;
 endmodule
@@ -43,11 +43,11 @@ module bti_rom #(
     bti_rsp_if_t.mst   bti_rsp_mst
 );
     tri              cs;
-    tri [ROM_AW-1:0] addr;
+    tri [ROM_AW-3:0] addr;
     tri [BTI_DW-1:0] data;
 
     rom #(
-        .AW          (ROM_AW),
+        .AW          (ROM_AW - 2),
         .DW          (BTI_DW)
     ) u_rom(
         .clk         (clk),

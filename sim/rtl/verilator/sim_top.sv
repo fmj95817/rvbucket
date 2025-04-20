@@ -4,43 +4,9 @@ module sim_top(
     input logic clk,
     input logic rst_n
 );
-    localparam ITCM_AW = 15;
-    localparam DTCM_AW = 15;
-
-    bti_req_if_t #(`RV_AW, `RV_XLEN) itcm_bti_req_if();
-    bti_rsp_if_t #(`RV_XLEN)         itcm_bti_rsp_if();
-    bti_req_if_t #(`RV_AW, `RV_XLEN) dtcm_bti_req_if();
-    bti_rsp_if_t #(`RV_XLEN)         dtcm_bti_rsp_if();
-
-    bti_rom #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .ROM_AW           (ITCM_AW)
-    ) u_itcm(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .bti_req_slv      (itcm_bti_req_if),
-        .bti_rsp_mst      (itcm_bti_rsp_if)
-    );
-
-    bti_sram #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .SRAM_AW          (DTCM_AW)
-    ) u_dtcm(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .bti_req_slv      (dtcm_bti_req_if),
-        .bti_rsp_mst      (dtcm_bti_rsp_if)
-    );
-
-    rv32i u_rv32i(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .itcm_bti_req_mst (itcm_bti_req_if),
-        .itcm_bti_rsp_slv (itcm_bti_rsp_if),
-        .dtcm_bti_req_mst (dtcm_bti_req_if),
-        .dtcm_bti_rsp_slv (dtcm_bti_rsp_if)
+    soc u_soc(
+        .clk   (clk),
+        .rst_n (rst_n)
     );
 
     initial begin
@@ -51,7 +17,7 @@ module sim_top(
     initial begin
         string path;
         if ($value$plusargs ("program=%s", path)) begin
-            $readmemh(path, u_itcm.u_rom.mem);
+            $readmemh(path, u_soc.u_flash.u_rom.mem);
         end
     end
 endmodule
