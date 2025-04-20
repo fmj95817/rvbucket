@@ -33,7 +33,7 @@ module soc(
 
     tri                              boot_rom_cs;
     tri [`BOOT_ROM_WORD_AW-1:0]      boot_rom_addr;
-    tri [`RV_XLEN-1:0]               boor_rom_data;
+    tri [`RV_XLEN-1:0]               boot_rom_data;
 
     rv32i u_rv32i(
         .clk              (clk),
@@ -48,7 +48,7 @@ module soc(
         .clk              (clk),
         .cs               (boot_rom_cs),
         .addr             (boot_rom_addr),
-        .data             (boor_rom_data)
+        .data             (boot_rom_data)
     );
 
     bti_to_rom #(
@@ -62,7 +62,7 @@ module soc(
         .bti_rsp_mst      (i_bti_rsp_if_arr[0]),
         .cs               (boot_rom_cs),
         .addr             (boot_rom_addr),
-        .data             (boor_rom_data)
+        .data             (boot_rom_data)
     );
 
     bti_rom #(
