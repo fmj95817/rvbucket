@@ -26,7 +26,7 @@ int sc_main(int argc, char *argv[])
     sim_top.clk(clk);
     sim_top.rst_n(rst_n);
 
-    for (int i = 0; i < 10000; i++) {
+    while (!Verilated::gotFinish()) {
         auto ts = sc_time_stamp();
         rst_n = rst_n_val(ts);
         sc_start(1, SC_NS);

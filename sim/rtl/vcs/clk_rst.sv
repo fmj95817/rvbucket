@@ -12,6 +12,5 @@ module clk_rst(
 
         #1 rst_n = 1'b0;
         #15 rst_n = 1'b1;
-        #1500000 $finish;
     end
 endmodule

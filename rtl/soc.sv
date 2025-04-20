@@ -10,7 +10,7 @@ module soc(
     localparam D_BTI_GST_NUM = 4;
 
     localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
-    localparam FLASH_AW = 16;
+    localparam FLASH_AW = 20;
     localparam ITCM_AW = 17;
     localparam DTCM_AW = 16;
     localparam UART_AW = 2;
@@ -45,24 +45,24 @@ module soc(
     );
 
     boot_rom u_boot_rom(
-        .clk         (clk),
-        .cs          (boot_rom_cs),
-        .addr        (boot_rom_addr),
-        .data        (boor_rom_data)
+        .clk              (clk),
+        .cs               (boot_rom_cs),
+        .addr             (boot_rom_addr),
+        .data             (boor_rom_data)
     );
 
     bti_to_rom #(
-        .BTI_AW      (`RV_AW),
-        .BTI_DW      (`RV_XLEN),
-        .ROM_AW      (BOOT_ROM_AW)
+        .BTI_AW           (`RV_AW),
+        .BTI_DW           (`RV_XLEN),
+        .ROM_AW           (BOOT_ROM_AW)
     ) u_bti_to_boot_rom(
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .bti_req_slv (i_bti_req_if_arr[0]),
-        .bti_rsp_mst (i_bti_rsp_if_arr[0]),
-        .cs          (boot_rom_cs),
-        .addr        (boot_rom_addr),
-        .data        (boor_rom_data)
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .bti_req_slv      (i_bti_req_if_arr[0]),
+        .bti_rsp_mst      (i_bti_rsp_if_arr[0]),
+        .cs               (boot_rom_cs),
+        .addr             (boot_rom_addr),
+        .data             (boor_rom_data)
     );
 
     bti_rom #(

@@ -132,13 +132,37 @@ module bti_to_sram #(
         endcase
     end
 
+    always_comb begin
+        case (addr[1:0])
+            2'b00: bti_rsp_mst.pkt.data = {
+                sram_bank3_rw_mst.rdata,
+                sram_bank2_rw_mst.rdata,
+                sram_bank1_rw_mst.rdata,
+                sram_bank0_rw_mst.rdata
+            };
+            2'b01: bti_rsp_mst.pkt.data = {
+                sram_bank0_rw_mst.rdata,
+                sram_bank3_rw_mst.rdata,
+                sram_bank2_rw_mst.rdata,
+                sram_bank1_rw_mst.rdata
+            };
+            2'b10: bti_rsp_mst.pkt.data = {
+                sram_bank1_rw_mst.rdata,
+                sram_bank0_rw_mst.rdata,
+                sram_bank3_rw_mst.rdata,
+                sram_bank2_rw_mst.rdata
+            };
+            2'b11: bti_rsp_mst.pkt.data = {
+                sram_bank2_rw_mst.rdata,
+                sram_bank1_rw_mst.rdata,
+                sram_bank0_rw_mst.rdata,
+                sram_bank3_rw_mst.rdata
+            };
+            default: bti_rsp_mst.pkt.data = {BTI_DW{1'bx}};
+        endcase
+    end
+
     assign bti_rsp_mst.pkt.ok = 1'b1;
-    assign bti_rsp_mst.pkt.data = {
-        sram_bank3_rw_mst.rdata,
-        sram_bank2_rw_mst.rdata,
-        sram_bank1_rw_mst.rdata,
-        sram_bank0_rw_mst.rdata
-    };
 
 endmodule
 

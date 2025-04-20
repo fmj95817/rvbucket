@@ -6,8 +6,11 @@ module uart(
     output logic       done
 );
     always @(posedge clk) begin
-        if (ch_vld)
+        if (ch_vld) begin
+            if (ch == 8'h10)
+                $finish;
             $write("%c", ch);
+        end
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
