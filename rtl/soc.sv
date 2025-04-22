@@ -2,8 +2,10 @@
 `include "boot.svh"
 
 module soc(
-    input logic       clk,
-    input logic       rst_n
+    input  logic      clk,
+    input  logic      rst_n,
+    output logic      uart_tx,
+    input  logic      uart_rx
 );
     localparam BTI_GST_SEL_AW = 8;
     localparam I_BTI_GST_NUM = 2;
@@ -13,7 +15,7 @@ module soc(
     localparam FLASH_AW = 20;
     localparam ITCM_AW = 17;
     localparam DTCM_AW = 16;
-    localparam UART_AW = 2;
+    localparam UART_AW = 4;
 
     localparam BOOT_ROM_SEL = 8'h40;
     localparam FLASH_SEL = 8'h80;
@@ -108,7 +110,9 @@ module soc(
         .clk              (clk),
         .rst_n            (rst_n),
         .bti_req_slv      (d_bti_req_if_arr[3]),
-        .bti_rsp_mst      (d_bti_rsp_if_arr[3])
+        .bti_rsp_mst      (d_bti_rsp_if_arr[3]),
+        .tx               (uart_tx),
+        .rx               (uart_rx)
     );
 
     bti_demux #(

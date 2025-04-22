@@ -14,17 +14,17 @@
 #define DTCM_SIZE           (64 * KiB)
 
 #define UART_BASE_ADDR      0x30000000
-#define UART_SIZE           4
+#define UART_SIZE           12
 
 void soc_construct(soc_t *soc, const u64 *cycle)
 {
     extern u32 g_boot_code_size;
     extern u8 g_boot_code[];
 
-    const u32 i_periph_base_addrs[] = { BOOT_ROM_BASE_ADDR, ITCM_BASE_ADDR };
-    const u32 i_periph_sizes[] = { BOOT_ROM_SIZE, ITCM_SIZE };
-    const u32 d_periph_base_addrs[] = { FLASH_BASE_ADDR, ITCM_BASE_ADDR, DTCM_BASE_ADDR, UART_BASE_ADDR };
-    const u32 d_periph_sizes[] = { FLASH_SIZE, ITCM_SIZE, DTCM_SIZE, UART_SIZE };
+    const u32 i_gst_base_addrs[] = { BOOT_ROM_BASE_ADDR, ITCM_BASE_ADDR };
+    const u32 i_gst_sizes[] = { BOOT_ROM_SIZE, ITCM_SIZE };
+    const u32 d_gst_base_addrs[] = { FLASH_BASE_ADDR, ITCM_BASE_ADDR, DTCM_BASE_ADDR, UART_BASE_ADDR };
+    const u32 d_gst_sizes[] = { FLASH_SIZE, ITCM_SIZE, DTCM_SIZE, UART_SIZE };
 
     itf_construct(&soc->cpu_i_bti_req_itf, cycle, "cpu_i_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
     itf_construct(&soc->cpu_i_bti_rsp_itf, cycle, "cpu_i_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
@@ -84,9 +84,9 @@ void soc_construct(soc_t *soc, const u64 *cycle)
     ram_construct(&soc->dtcm, 1, DTCM_SIZE, DTCM_BASE_ADDR);
     rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE_ADDR);
     rom_construct(&soc->boot_rom, BOOT_ROM_SIZE, g_boot_code, g_boot_code_size, BOOT_ROM_BASE_ADDR);
-    uart_construct(&soc->uart, UART_BASE_ADDR);
-    bti_demux_construct(&soc->i_bti_demux, 2, i_periph_base_addrs, i_periph_sizes);
-    bti_demux_construct(&soc->d_bti_demux, 4, d_periph_base_addrs, d_periph_sizes);
+    uart_construct(&soc->uart, UART_BASE_ADDR, UART_SIZE);
+    bti_demux_construct(&soc->i_bti_demux, 2, i_gst_base_addrs, i_gst_sizes);
+    bti_demux_construct(&soc->d_bti_demux, 4, d_gst_base_addrs, d_gst_sizes);
 }
 
 void soc_reset(soc_t *soc)

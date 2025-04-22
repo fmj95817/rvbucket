@@ -40,6 +40,9 @@ _start:
 
     la gp, __global_pointer$
 
+    li a0, 9
+    call uart_init
+
     call main
 
     li a0, 0x10
