@@ -25,12 +25,12 @@ module sim_top(
         .rx      (uart_tx)
     );
 
-    always @(posedge clk) begin
+    always @(negedge clk) begin
         if (uart_rx_ch_vld) begin
-            if (uart_rx_ch == 8'h10)
-                $finish;
-            else
+            if (uart_rx_ch != 8'h10)
                 $write("%c", uart_rx_ch);
+            else
+                $finish;
         end
     end
 

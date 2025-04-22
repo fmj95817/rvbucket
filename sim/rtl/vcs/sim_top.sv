@@ -30,10 +30,10 @@ module sim_top;
 
     always @(posedge clk) begin
         if (uart_rx_ch_vld) begin
-            if (uart_rx_ch == 8'h10)
-                $finish;
-            else
+            if (uart_rx_ch != 8'h10)
                 $write("%c", uart_rx_ch);
+            else
+                $finish;
         end
     end
 
