@@ -15,8 +15,10 @@ CROSS_LDFLAGS=(-nostartfiles)
 CROSS_LD="${CROSS_PREFIX}-gcc"
 CROSS_OBJCOPY="${CROSS_PREFIX}-objcopy"
 CROSS_OBJDUMP="${CROSS_PREFIX}-objdump"
+
 BIN2X="./build/tools/bin2x"
 MKBIN="./build/tools/mkbin"
+GXPR="./tools/gxpr.py"
 
 function build_tools {
     mkdir -p build/tools
@@ -130,6 +132,20 @@ function build_rtl {
     cd ../../..
 }
 
+function build_fpga {
+    local vendor="${1}"
+    if [ "${vendor}" = "xilinx" ]; then
+        local conf_path="./fpga/xilinx/proj.json"
+        local out_dir="build/hw/vivado"
+        rm -rf "${out_dir}"
+        mkdir -p "${out_dir}"
+        ${GXPR} "${conf_path}" "${out_dir}"
+        cd "${out_dir}";
+        vivado -mode batch -source mkprj.tcl;
+        cd ../../..
+    fi
+}
+
 function build_sw {
     local args=(-mindepth 1 -maxdepth 1 -type d)
     local cases=("$(find cases ${args[@]})")
@@ -148,6 +164,8 @@ function build_hw {
         build_model
     elif [ "${1}" = "rtl" ]; then
         build_rtl "${2}"
+    elif [ "${1}" = "fpga" ]; then
+        build_fpga "${2}"
     fi
 }
 

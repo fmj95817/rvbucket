@@ -1,0 +1,1 @@
+../../../sim/rtl/model/sram.sv

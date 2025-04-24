@@ -1,0 +1,30 @@
+{
+    "name": "rv32_soc",
+
+    "inc_dir": [
+        "rtl",
+        "rtl/core"
+    ],
+    "rtl_dir": [
+        "rtl",
+        "fpga/xilinx/lib"
+    ],
+
+    "top_module": "soc",
+    "params": {},
+    "clocks": [
+        {
+            "name": "main_clk",
+            "port": "clk",
+            "freq": 50e6,
+            "genclk": false
+        }
+    ],
+
+    "props": {
+        "uart_tx": ["PULLUP"],
+        "uart_rx": ["PULLUP"]
+    },
+
+    "board": "fpga/xilinx/boards/k7ecor2p.json"
+}

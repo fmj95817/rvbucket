@@ -19,7 +19,7 @@
 - **2级流水线**: 采用if/ex 2级流水线设计。
 - **简单SoC系统**: 包含Boot ROM、Flash、ITCM/DTCM和UART接口，适合嵌入式应用。
 - **CA模型**: 提供精确到时钟周期的仿真模型，便于性能分析和验证。
-- **RTL实现**: 使用SystemVerilog实现，支持VCS和Verilator仿真器。
+- **RTL实现**: 使用SystemVerilog实现，支持在VCS和Verilator仿真器上仿真，支持在FPGA上运行。
 
 ## 快速开始
 
@@ -27,6 +27,7 @@
 
 - **仿真工具**: 需要安装VCS或Verilator仿真器。
 - **RISC-V工具链**: 需要安装RISC-V GCC工具链以编译和生成测试程序。可以从[RISC-V工具链GitHub仓库](https://github.com/riscv/riscv-gnu-toolchain)获取。
+- **FPGA工具**: 目前仅支持Xilinx平台，需要安装Vivado。
 
 ### 编译和运行
 
@@ -51,25 +52,32 @@
    ./build.sh hw rtl verilator
    ```
 
-4. **编译测试用例**:
+4. **生成FPGA工程**:
+   对于Xilinx FPGA，需要在`fpga/xilinx/boards`下添加FPGA开发板描述文件，并在`fpga/xilinx/proj.json`中更新`board`项，然后运行：
+   ```bash
+   ./build.sh hw fpga xilinx
+   ```
+   运行后会在`build/hw/vivado`下生成Vivado工程。
+
+5. **编译测试用例**:
    确保RISC-V工具链的`bin`目录已添加到`PATH`环境变量中。
    ```bash
    ./build.sh sw
    ```
 
-5. **运行CA模型**:
+6. **运行CA模型**:
    ```bash
    cd build/hw/model
    ./sim_top ../../sw/<用例名称>/<用例名称>.bin
    ```
 
-6. **运行RTL VCS仿真**:
+7. **运行RTL VCS仿真**:
    ```bash
    cd build/hw/vcs
    ./sim_top +program=../../sw/<用例名称>/<用例名称>.hex
    ```
 
-7. **运行RTL Verilator仿真**:
+8. **运行RTL Verilator仿真**:
    ```bash
    cd build/hw/verilator
    ./obj_dir/Vsim_top +program=../../sw/<用例名称>/<用例名称>.hex

@@ -1,0 +1,13 @@
+{
+    "device": "xc7k325tffg676-2",
+    "iostd": "LVCMOS33",
+
+    "pinout": {
+        "clk": "G22",
+        "rst_n":  "H26",
+        "uart_rx": "P23",
+        "uart_tx": "T24"
+    },
+
+    "misc_xdc": []
+}
