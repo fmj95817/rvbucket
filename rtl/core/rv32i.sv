@@ -1,5 +1,3 @@
-`include "bti.svh"
-
 module rv32i(
     input logic       clk,
     input logic       rst_n,

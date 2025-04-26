@@ -1,4 +1,4 @@
-`include "isa.svh"
+`include "core/isa.svh"
 
 module sim_top(
     input logic clk,
@@ -36,7 +36,7 @@ module sim_top(
 
     initial begin
         string path;
-        if ($value$plusargs ("program=%s", path)) begin
+        if ($value$plusargs("program=%s", path)) begin
             $readmemh(path, u_soc.u_flash.u_rom.mem);
         end
         $dumpfile("sim_top.vcd");

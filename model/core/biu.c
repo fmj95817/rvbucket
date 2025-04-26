@@ -1,6 +1,4 @@
 #include "biu.h"
-#include "mod_if.h"
-#include "bti.h"
 #include "dbg/chk.h"
 
 #define FCH_TRANS_ID 0

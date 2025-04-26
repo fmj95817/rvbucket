@@ -1,4 +1,4 @@
-`include "bti.svh"
+`include "itf/bti_req_if.svh"
 
 module biu(
     input logic       clk,

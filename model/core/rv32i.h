@@ -3,7 +3,6 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "mod_if.h"
 #include "ifu.h"
 #include "biu.h"
 #include "exu/exu.h"

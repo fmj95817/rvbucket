@@ -1,4 +1,4 @@
-`include "bti.svh"
+`include "itf/bti_req_if.svh"
 
 interface sram_rw_if_t #(
     parameter AW = 15,

@@ -100,7 +100,6 @@ function build_rtl {
 
     local common_args=(
         +incdir+${wd}/rtl \
-        +incdir+${wd}/rtl/core \
     )
     local rtl_sim_src=(
         $(find ${wd}/rtl -name *.sv) \

@@ -3,7 +3,12 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "base/arb.h"
+#include "itf/fch_req_if.h"
+#include "itf/fch_rsp_if.h"
+#include "itf/ldst_req_if.h"
+#include "itf/ldst_rsp_if.h"
+#include "itf/bti_req_if.h"
+#include "itf/bti_rsp_if.h"
 
 typedef struct biu {
     itf_t *i_bti_req_mst;

@@ -3,7 +3,8 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "bti.h"
+#include "itf/bti_req_if.h"
+#include "itf/bti_rsp_if.h"
 
 typedef struct rom {
     itf_t *bti_req_slv;

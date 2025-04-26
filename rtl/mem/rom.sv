@@ -1,4 +1,4 @@
-`include "bti.svh"
+`include "itf/bti_req_if.svh"
 
 module bti_to_rom #(
     parameter BTI_AW = 32,

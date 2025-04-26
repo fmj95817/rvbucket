@@ -1,4 +1,4 @@
-`include "isa.svh"
+`include "core/isa.svh"
 
 module ifu(
     input logic      clk,

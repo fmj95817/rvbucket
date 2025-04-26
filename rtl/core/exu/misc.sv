@@ -1,4 +1,4 @@
-`include "isa.svh"
+`include "core/isa.svh"
 
 module exu_misc_handler(
     input logic                   clk,

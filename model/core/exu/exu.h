@@ -3,7 +3,11 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "core/mod_if.h"
+#include "itf/ex_req_if.h"
+#include "itf/ex_rsp_if.h"
+#include "itf/fl_req_if.h"
+#include "itf/ldst_req_if.h"
+#include "itf/ldst_rsp_if.h"
 #include "core/isa.h"
 
 typedef struct exu {

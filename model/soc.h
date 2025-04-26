@@ -6,7 +6,7 @@
 #include "mem/ram.h"
 #include "mem/rom.h"
 #include "io/uart.h"
-#include "bti.h"
+#include "demux.h"
 
 typedef struct soc {
     itf_t *uart_tx;

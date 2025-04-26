@@ -2,8 +2,7 @@
     "name": "rv32_soc",
 
     "inc_dir": [
-        "rtl",
-        "rtl/core"
+        "rtl"
     ],
     "rtl_dir": [
         "rtl",

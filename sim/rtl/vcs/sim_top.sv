@@ -39,7 +39,7 @@ module sim_top;
 
     initial begin
         string path;
-        if ($value$plusargs ("program=%s", path)) begin
+        if ($value$plusargs("program=%s", path)) begin
             $readmemh(path, u_soc.u_flash.u_rom.mem);
         end
         $fsdbDumpfile("sim_top.fsdb");

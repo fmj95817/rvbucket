@@ -1,4 +1,4 @@
-#include "bti.h"
+#include "demux.h"
 #include "dbg/chk.h"
 
 void bti_demux_construct(bti_demux_t *bti_demux, u32 gst_num, const u32 *gst_base_addrs, const u32 *gst_sizes)

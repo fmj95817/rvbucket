@@ -1,4 +1,4 @@
-`include "bti.svh"
+`include "itf/bti_req_if.svh"
 
 module uart_tx #(
     parameter BCW = 16

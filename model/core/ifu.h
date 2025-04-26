@@ -3,6 +3,11 @@
 
 #include "base/types.h"
 #include "base/itf.h"
+#include "itf/ex_req_if.h"
+#include "itf/ex_rsp_if.h"
+#include "itf/fch_req_if.h"
+#include "itf/fch_rsp_if.h"
+#include "itf/fl_req_if.h"
 
 #define IFU_BHT_SIZE 16
 

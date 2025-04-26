@@ -1,4 +1,4 @@
-`include "isa.svh"
+`include "core/isa.svh"
 `include "boot.svh"
 
 module soc(
@@ -120,8 +120,8 @@ module soc(
         .BTI_DW           (`RV_XLEN),
         .GST_SEL_AW       (BTI_GST_SEL_AW),
         .GST_NUM          (I_BTI_GST_NUM),
-        .GST_SEL          ('{BOOT_ROM_SEL, ITCM_SEL}),
-        .GST_AW           ('{BOOT_ROM_AW, ITCM_AW})
+        .GST_SEL          ('{BOOT_ROM_SEL, ITCM_SEL, 8'h00, 8'h00}),
+        .GST_AW           ('{BOOT_ROM_AW, ITCM_AW, 0, 0})
     ) u_i_bti_demux(
         .clk              (clk),
         .rst_n            (rst_n),

@@ -1,5 +1,5 @@
 #include "ifu.h"
-#include "mod_if.h"
+#include "isa.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 #include "dbg/pcm.h"
