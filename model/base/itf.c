@@ -78,7 +78,7 @@ void itf_write(itf_t *itf, const void *pkt)
         if (itf->dump_mst_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->dump_mst_fp, "%lu %s", *itf->cycle, pkt_str);
+            fprintf(itf->dump_mst_fp, U64_FMT" %s", *itf->cycle, pkt_str);
             fflush(itf->dump_mst_fp);
         }
     }
@@ -96,7 +96,7 @@ void itf_read(itf_t *itf, void *pkt)
         if (itf->dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycle, pkt_str);
+            fprintf(itf->dump_slv_fp, U64_FMT" %s", *itf->cycle, pkt_str);
             fflush(itf->dump_slv_fp);
         }
     }
@@ -116,7 +116,7 @@ void itf_fifo_pop_front(itf_t *itf)
         if (itf->dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(get_pkt_addr(itf, itf->rptr), pkt_str);
-            fprintf(itf->dump_slv_fp, "%lu %s", *itf->cycle, pkt_str);
+            fprintf(itf->dump_slv_fp, U64_FMT" %s", *itf->cycle, pkt_str);
             fflush(itf->dump_slv_fp);
         }
     }

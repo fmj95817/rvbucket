@@ -143,13 +143,13 @@ void dbg_vcd_scope_end()
 
 static void print_clk_rising()
 {
-    fprintf(g_vcd.vcd_fp, "#%lu\n", *g_vcd.cycle * 1000);
+    fprintf(g_vcd.vcd_fp, "#"U64_FMT"\n", *g_vcd.cycle * 1000);
     fprintf(g_vcd.vcd_fp, "1%s\n", g_vcd.clk_token);
 }
 
 static void print_clk_falling()
 {
-    fprintf(g_vcd.vcd_fp, "#%lu\n", *g_vcd.cycle * 1000 + 500);
+    fprintf(g_vcd.vcd_fp, "#"U64_FMT"\n", *g_vcd.cycle * 1000 + 500);
     fprintf(g_vcd.vcd_fp, "0%s\n", g_vcd.clk_token);
 }
 
