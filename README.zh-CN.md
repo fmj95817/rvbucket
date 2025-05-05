@@ -79,6 +79,14 @@
    ./obj_dir/Vsim_top +program=../../sw/<用例名称>/<用例名称>.hex
    ```
 
+## 开发计划
+* C-Model支持M/A/Zicsr/Zifencei指令集
+* C-Model支持分页，启动linux内核
+* RTL支持M/A/Zicsr/Zifencei指令集
+* RTL支持分页，启动linux内核
+* FPGA启动linux内核
+* C-Model/RTL支持F/D指令集
+
 ## 贡献
 
 欢迎贡献代码、报告问题和提出建议！请遵循以下步骤：

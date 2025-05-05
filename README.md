@@ -77,6 +77,14 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
    ./obj_dir/Vsim_top +program=../../sw/<test_case_name>/<test_case_name>.hex
    ```
 
+## Development Plan
+* C-Model supports M/A/Zicsr/Zifencei instruction sets
+* C-Model supports paging and boots the Linux kernel
+* RTL supports M/A/Zicsr/Zifencei instruction sets
+* RTL supports paging and boots the Linux kernel
+* FPGA boots the Linux kernel
+* C-Model/RTL support F/D instruction sets
+
 ## Contributions
 
 Contributions in the form of code, bug reports, and suggestions are welcome! Please follow these steps:
