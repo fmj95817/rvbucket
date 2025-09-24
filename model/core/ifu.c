@@ -127,7 +127,7 @@ static void ifu_prepare_issue(ifu_t *ifu)
     ifu->issue.pc = ifu->fch.pc;
     ifu->issue.ir = ifu->fch.ir;
 
-    rv32i_inst_t i;
+    rv32g_inst_t i;
     i.raw = ifu->issue.ir;
     bool is_branch =
         i.base.opcode == OPCODE_JAL ||

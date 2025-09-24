@@ -14,12 +14,12 @@ static inline u32 sign_ext(u32 data, u32 width)
     return data;
 }
 
-static inline u32 u_imm_decode(const rv32i_inst_t *i)
+static inline u32 u_imm_decode(const rv32g_inst_t *i)
 {
     return i->u.imm_31_12 << 12;
 }
 
-static inline i32 j_imm_decode(const rv32i_inst_t *i)
+static inline i32 j_imm_decode(const rv32g_inst_t *i)
 {
     u32 src = (i->j.imm_10_1 << 1) |
               (i->j.imm_11 << 11) |
@@ -30,13 +30,13 @@ static inline i32 j_imm_decode(const rv32i_inst_t *i)
     return dst;
 }
 
-static inline i32 i_imm_decode(const rv32i_inst_t *i)
+static inline i32 i_imm_decode(const rv32g_inst_t *i)
 {
     i32 dst = { .u = sign_ext(i->i.imm_11_0, 12) };
     return dst;
 }
 
-static inline i32 b_imm_decode(const rv32i_inst_t *i)
+static inline i32 b_imm_decode(const rv32g_inst_t *i)
 {
     u32 src = (i->b.imm_4_1 << 1) |
               (i->b.imm_10_5 << 5) |
@@ -47,7 +47,7 @@ static inline i32 b_imm_decode(const rv32i_inst_t *i)
     return dst;
 }
 
-static inline i32 s_imm_decode(const rv32i_inst_t *i)
+static inline i32 s_imm_decode(const rv32g_inst_t *i)
 {
     u32 src = (i->s.imm_4_0) |
               (i->s.imm_11_5 << 5);
@@ -70,9 +70,9 @@ static inline void set_gpr(exu_t *exu, u32 i, u32 val)
 
 static inline const char *gpr_name(u32 i)
 {
-    DBG_CHECK(i < 32);
+    DBG_CHECK(i < RV32G_GPR_NUM);
 
-    static const char *names[] = {
+    static const char *names[RV32G_GPR_NUM] = {
         "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
         "s0/fp", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
         "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",

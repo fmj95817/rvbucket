@@ -6,7 +6,7 @@
 #include "core/isa.h"
 
 typedef struct ex_req_if {
-    rv32i_inst_t inst;
+    rv32g_inst_t inst;
     u32 pc;
     bool pred_taken;
     u32 pred_pc;

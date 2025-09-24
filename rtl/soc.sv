@@ -37,7 +37,7 @@ module soc(
     tri [`BOOT_ROM_WORD_AW-1:0]      boot_rom_addr;
     tri [`RV_XLEN-1:0]               boot_rom_data;
 
-    rv32i u_rv32i(
+    rv32g u_rv32g(
         .clk              (clk),
         .rst_n            (rst_n),
         .i_bti_req_mst    (i_bti_req_if),

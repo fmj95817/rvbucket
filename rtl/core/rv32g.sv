@@ -1,4 +1,4 @@
-module rv32i(
+module rv32g(
     input logic       clk,
     input logic       rst_n,
     bti_req_if_t.mst  i_bti_req_mst,

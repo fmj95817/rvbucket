@@ -2,7 +2,7 @@
 #define SOC_H
 
 #include "base/types.h"
-#include "core/rv32i.h"
+#include "core/rv32g.h"
 #include "mem/ram.h"
 #include "mem/rom.h"
 #include "io/uart.h"
@@ -11,7 +11,7 @@
 typedef struct soc {
     itf_t *uart_tx;
 
-    rv32i_t cpu;
+    rv32g_t cpu;
     rom_t boot_rom;
     rom_t flash;
     ram_t itcm;

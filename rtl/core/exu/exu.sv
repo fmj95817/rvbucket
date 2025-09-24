@@ -36,7 +36,7 @@ module exu(
     tri is_store = ex_req_slv.vld & (opcode == OPCODE_STORE);
     tri is_alui = ex_req_slv.vld & (opcode == OPCODE_ALUI);
     tri is_alu = ex_req_slv.vld & (opcode == OPCODE_ALU);
-    tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MEM);
+    tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MISC_MEM);
     tri is_sys = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
 
     tri alu_sel = (~need_fl) & (is_alu | is_alui);
@@ -62,7 +62,7 @@ module exu(
             OPCODE_STORE: ex_req_rdy = ldst_done;
             OPCODE_ALUI: ex_req_rdy = 1'b1;
             OPCODE_ALU: ex_req_rdy = 1'b1;
-            OPCODE_MEM: ex_req_rdy = 1'b1;
+            OPCODE_MISC_MEM: ex_req_rdy = 1'b1;
             OPCODE_SYSTEM: ex_req_rdy = 1'b1;
             default: ex_req_rdy = 1'b0;
         endcase

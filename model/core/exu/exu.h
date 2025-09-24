@@ -9,6 +9,7 @@
 #include "itf/ldst_req_if.h"
 #include "itf/ldst_rsp_if.h"
 #include "core/isa.h"
+#include "core/csr.h"
 
 typedef struct exu {
     itf_t *fl_req_slv;
@@ -22,10 +23,13 @@ typedef struct exu {
     u32 ld_rd;
     u32 ld_funct3;
 
-    u32 gpr[32];
+    u32 gpr[RV32G_GPR_NUM];
+
+    csr_t *csr;
+    rv32g_priv_t *priv;
 } exu_t;
 
-extern void exu_construct(exu_t *exu);
+extern void exu_construct(exu_t *exu, rv32g_priv_t *priv, csr_t *csr);
 extern void exu_reset(exu_t *exu);
 extern void exu_clock(exu_t *exu);
 extern void exu_free(exu_t *exu);
@@ -34,8 +38,8 @@ extern void ldst_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void alu_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void branch_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
+extern void mem_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void sys_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
-
 extern void ldst_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp);
 
 #endif

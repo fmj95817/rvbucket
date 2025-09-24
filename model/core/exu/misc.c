@@ -24,12 +24,19 @@ DECL_MISC_HANDLER(auipc)
     DBG_LOG(LOG_TRACE, "auipc %s, 0x%08x\n", gpr_name(rd), imm);
 }
 
+DECL_MISC_HANDLER(fence)
+{
+    DBG_LOG(LOG_TRACE, "fence\n");
+}
+
 void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
 {
     if (ex_req->inst.base.opcode == OPCODE_LUI) {
         CALL_MISC_HANDLER(lui, exu, ex_req);
     } else if (ex_req->inst.base.opcode == OPCODE_AUIPC) {
         CALL_MISC_HANDLER(auipc, exu, ex_req);
+    } else if (ex_req->inst.base.opcode == OPCODE_MISC_MEM) {
+        CALL_MISC_HANDLER(fence, exu, ex_req);
     } else {
         DBG_CHECK(0);
     }

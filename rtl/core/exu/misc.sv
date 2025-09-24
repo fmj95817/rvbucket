@@ -4,7 +4,7 @@ module exu_misc_handler(
     input logic                   clk,
     input logic                   rst_n,
     input logic                   sel,
-    input rv32i_inst_t            inst,
+    input rv32g_inst_t            inst,
     input logic [`RV_PC_SIZE-1:0] pc,
     exu_gpr_if_t.mst              gpr_mst
 );

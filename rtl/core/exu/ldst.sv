@@ -4,7 +4,7 @@ module exu_ldst_handler(
     input logic        clk,
     input logic        rst_n,
     input logic        sel,
-    input rv32i_inst_t inst,
+    input rv32g_inst_t inst,
     ldst_req_if_t.mst  ldst_req_mst,
     ldst_rsp_if_t.slv  ldst_rsp_slv,
     exu_gpr_if_t.mst   gpr_mst,

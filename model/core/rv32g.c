@@ -1,7 +1,9 @@
-#include "rv32i.h"
+#include "rv32g.h"
 
-void rv32i_construct(rv32i_t *s, const u64 *cycle, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
+void rv32g_construct(rv32g_t *s, const u64 *cycle, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
 {
+    s->cycle = cycle;
+
     itf_construct(&s->fch_req_itf, cycle, "fch_req_itf", &fch_req_if_to_str, sizeof(fch_req_if_t), 1);
     itf_construct(&s->fch_rsp_itf, cycle, "fch_rsp_itf", &fch_rsp_if_to_str, sizeof(fch_rsp_if_t), 1);
     itf_construct(&s->ex_req_itf, cycle, "ex_req_itf", &ex_req_if_to_str, sizeof(ex_req_if_t), 1);
@@ -32,18 +34,21 @@ void rv32i_construct(rv32i_t *s, const u64 *cycle, u32 reset_pc, u32 boot_rom_ba
     s->biu.ldst_rsp_mst = &s->ldst_rsp_itf;
 
     ifu_construct(&s->ifu, reset_pc, boot_rom_base, boot_rom_size);
-    exu_construct(&s->exu);
+    exu_construct(&s->exu, &s->priv, &s->csr);
     biu_construct(&s->biu);
 }
 
-void rv32i_reset(rv32i_t *s)
+void rv32g_reset(rv32g_t *s)
 {
+    s->priv = RV32G_PRIV_MACHINE;
+    csr_reset(&s->csr);
+
     ifu_reset(&s->ifu);
     exu_reset(&s->exu);
     biu_reset(&s->biu);
 }
 
-void rv32i_free(rv32i_t *s)
+void rv32g_free(rv32g_t *s)
 {
     ifu_free(&s->ifu);
     exu_free(&s->exu);
@@ -58,8 +63,10 @@ void rv32i_free(rv32i_t *s)
     itf_free(&s->ldst_rsp_itf);
 }
 
-void rv32i_clock(rv32i_t *s)
+void rv32g_clock(rv32g_t *s)
 {
+    s->csr.cycle = (u32)(*s->cycle);
+
     biu_clock(&s->biu);
     exu_clock(&s->exu);
     ifu_clock(&s->ifu);

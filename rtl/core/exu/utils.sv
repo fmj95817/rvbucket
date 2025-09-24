@@ -1,7 +1,7 @@
 `include "core/isa.svh"
 
 module i_imm_decode(
-    input rv32i_inst_t inst,
+    input rv32g_inst_t inst,
     output logic [`RV_XLEN-1:0] i_imm
 );
     assign i_imm = {
@@ -11,7 +11,7 @@ module i_imm_decode(
 endmodule
 
 module j_imm_decode(
-    input rv32i_inst_t inst,
+    input rv32g_inst_t inst,
     output logic [`RV_XLEN-1:0] j_imm
 );
     assign j_imm = {
@@ -22,7 +22,7 @@ module j_imm_decode(
 endmodule
 
 module b_imm_decode(
-    input rv32i_inst_t inst,
+    input rv32g_inst_t inst,
     output logic [`RV_XLEN-1:0] b_imm
 );
     assign b_imm = {
@@ -33,7 +33,7 @@ module b_imm_decode(
 endmodule
 
 module s_imm_decode(
-    input rv32i_inst_t inst,
+    input rv32g_inst_t inst,
     output logic [`RV_XLEN-1:0] s_imm
 );
     assign s_imm = {
@@ -43,7 +43,7 @@ module s_imm_decode(
 endmodule
 
 module u_imm_decode(
-    input rv32i_inst_t inst,
+    input rv32g_inst_t inst,
     output logic [`RV_XLEN-1:0] u_imm
 );
     assign u_imm = {

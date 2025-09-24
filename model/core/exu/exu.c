@@ -57,7 +57,7 @@ static void exu_proc_ex_req(exu_t *exu)
         [OPCODE_STORE] = &ldst_ex_req_proc,
         [OPCODE_ALUI] = &alu_ex_req_proc,
         [OPCODE_ALU] = &alu_ex_req_proc,
-        [OPCODE_MEM] = &sys_ex_req_proc,
+        [OPCODE_MISC_MEM] = &misc_ex_req_proc,
         [OPCODE_SYSTEM] = &sys_ex_req_proc
     };
 
@@ -95,12 +95,16 @@ void exu_clock(exu_t *exu)
     exu_proc_ldst_rsp(exu);
 }
 
-void exu_construct(exu_t *exu) {}
+void exu_construct(exu_t *exu, rv32g_priv_t *priv, csr_t *csr)
+{
+    exu->priv = priv;
+    exu->csr = csr;
+}
 
 void exu_reset(exu_t *exu)
 {
     exu->gpr[0] = 0;
-    for (int i = 1; i < 32; i++) {
+    for (int i = 1; i < RV32G_GPR_NUM; i++) {
         exu->gpr[i] = (u32)rand();
     }
     exu->ldst_req_pend = false;

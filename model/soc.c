@@ -78,7 +78,7 @@ void soc_construct(soc_t *soc, const u64 *cycle)
     soc->d_bti_demux.gst_bti_req_msts[3] = &soc->uart_bti_req_itf;
     soc->d_bti_demux.gst_bti_rsp_slvs[3] = &soc->uart_bti_rsp_itf;
 
-    rv32i_construct(&soc->cpu, cycle, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
+    rv32g_construct(&soc->cpu, cycle, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
     ram_construct(&soc->itcm, 2, ITCM_SIZE, ITCM_BASE_ADDR);
     ram_construct(&soc->dtcm, 1, DTCM_SIZE, DTCM_BASE_ADDR);
     rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE_ADDR);
@@ -90,7 +90,7 @@ void soc_construct(soc_t *soc, const u64 *cycle)
 
 void soc_reset(soc_t *soc)
 {
-    rv32i_reset(&soc->cpu);
+    rv32g_reset(&soc->cpu);
     ram_reset(&soc->itcm);
     ram_reset(&soc->dtcm);
     rom_reset(&soc->flash);
@@ -102,7 +102,7 @@ void soc_reset(soc_t *soc)
 
 void soc_clock(soc_t *soc)
 {
-    rv32i_clock(&soc->cpu);
+    rv32g_clock(&soc->cpu);
     rom_clock(&soc->boot_rom);
     rom_clock(&soc->flash);
     ram_clock(&soc->itcm);
@@ -114,7 +114,7 @@ void soc_clock(soc_t *soc)
 
 void soc_free(soc_t *soc)
 {
-    rv32i_free(&soc->cpu);
+    rv32g_free(&soc->cpu);
     rom_free(&soc->flash);
     rom_free(&soc->boot_rom);
     ram_free(&soc->itcm);
