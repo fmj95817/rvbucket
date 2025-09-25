@@ -165,15 +165,6 @@ DECL_ALU_HANDLER(sub)
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
-DECL_ALU_HANDLER(add_sub)
-{
-    if (req->inst.r.funct7 & 0b100000) {
-        CALL_ALU_HANDLER(sub, exu, req);
-    } else {
-        CALL_ALU_HANDLER(add, exu, req);
-    }
-}
-
 DECL_ALU_HANDLER(sll)
 {
     u32 rd = req->inst.r.rd;
@@ -258,15 +249,6 @@ DECL_ALU_HANDLER(sra)
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
-DECL_ALU_HANDLER(sr)
-{
-    if (req->inst.r.funct7 & 0b100000) {
-        CALL_ALU_HANDLER(sra, exu, req);
-    } else {
-        CALL_ALU_HANDLER(srl, exu, req);
-    }
-}
-
 DECL_ALU_HANDLER(or)
 {
     u32 rd = req->inst.r.rd;
@@ -289,20 +271,198 @@ DECL_ALU_HANDLER(and)
         gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
 }
 
+DECL_ALU_HANDLER(mul)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    i32 s1, s2;
+    s1.u = get_gpr(exu, rs1);
+    s2.u = get_gpr(exu, rs2);
+    
+    i64 d;
+    d.s = (s64)s1.s * (s64)s2.s;
+    set_gpr(exu, rd, (u32)d.u);
+    
+    DBG_LOG(LOG_TRACE, "mul %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
+DECL_ALU_HANDLER(mulh)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    i32 s1, s2;
+    s1.u = get_gpr(exu, rs1);
+    s2.u = get_gpr(exu, rs2);
+    
+    i64 d;
+    d.s = (s64)s1.s * (s64)s2.s;
+    set_gpr(exu, rd, (u32)(d.u >> 32));
+    
+    DBG_LOG(LOG_TRACE, "mulh %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
+DECL_ALU_HANDLER(mulhsu)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    i32 s1;
+    s1.u = get_gpr(exu, rs1);
+    u32 s2 = get_gpr(exu, rs2);
+    
+    i64 d;
+    d.s = (s64)s1.s * (s64)(u32)s2;
+    set_gpr(exu, rd, (u32)(d.u >> 32));
+    
+    DBG_LOG(LOG_TRACE, "mulhsu %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
+DECL_ALU_HANDLER(mulhu)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    u32 s1 = get_gpr(exu, rs1);
+    u32 s2 = get_gpr(exu, rs2);
+    
+    u64 d = (u64)s1 * (u64)s2;
+    set_gpr(exu, rd, (u32)(d >> 32));
+    
+    DBG_LOG(LOG_TRACE, "mulhu %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
+DECL_ALU_HANDLER(div)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    i32 s1, s2, d;
+    s1.u = get_gpr(exu, rs1);
+    s2.u = get_gpr(exu, rs2);
+    
+    if (s2.u == 0) {
+        d.u = 0xffffffff;
+    } else if (s1.u == 0x80000000 && s2.s == -1) {
+        d.u = 0x80000000;
+    } else {
+        d.s = s1.s / s2.s;
+    }
+    
+    set_gpr(exu, rd, d.u);
+    
+    DBG_LOG(LOG_TRACE, "div %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
+DECL_ALU_HANDLER(divu)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    u32 s1 = get_gpr(exu, rs1);
+    u32 s2 = get_gpr(exu, rs2);
+    u32 d;
+    
+    if (s2 == 0) {
+        d = 0xffffffff;
+    } else {
+        d = s1 / s2;
+    }
+    
+    set_gpr(exu, rd, d);
+    
+    DBG_LOG(LOG_TRACE, "divu %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
+DECL_ALU_HANDLER(rem)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    i32 s1, s2, d;
+    s1.u = get_gpr(exu, rs1);
+    s2.u = get_gpr(exu, rs2);
+    
+    if (s2.u == 0) {
+        d.u = s1.u;
+    } else if (s1.u == 0x80000000 && s2.s == -1) {
+        d.u = 0;
+    } else {
+        d.s = s1.s % s2.s;
+    }
+    
+    set_gpr(exu, rd, d.u);
+    
+    DBG_LOG(LOG_TRACE, "rem %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
+DECL_ALU_HANDLER(remu)
+{
+    u32 rd = req->inst.r.rd;
+    u32 rs1 = req->inst.r.rs1;
+    u32 rs2 = req->inst.r.rs2;
+    
+    u32 s1 = get_gpr(exu, rs1);
+    u32 s2 = get_gpr(exu, rs2);
+    u32 d;
+    
+    if (s2 == 0) {
+        d = s1;
+    } else {
+        d = s1 % s2;
+    }
+    
+    set_gpr(exu, rd, d);
+    
+    DBG_LOG(LOG_TRACE, "remu %s, %s, %s\n",
+        gpr_name(rd), gpr_name(rs1), gpr_name(rs2));
+}
+
 DECL_ALU_HANDLER(alu_group)
 {
-    static alu_ex_req_handler_t alu_handlers[8] = {
-        [ALU_FUNCT3_ADD_SUB] = GET_ALU_HANDLER(add_sub),
-        [ALU_FUNCT3_SL] = GET_ALU_HANDLER(sll),
-        [ALU_FUNCT3_SLT] = GET_ALU_HANDLER(slt),
-        [ALU_FUNCT3_SLTU] = GET_ALU_HANDLER(sltu),
-        [ALU_FUNCT3_XOR] = GET_ALU_HANDLER(xor),
-        [ALU_FUNCT3_SR] = GET_ALU_HANDLER(sr),
-        [ALU_FUNCT3_OR] = GET_ALU_HANDLER(or),
-        [ALU_FUNCT3_AND] = GET_ALU_HANDLER(and)
+    static alu_ex_req_handler_t alu_handlers[1024] = {
+        [ALU_FUNCT37_ADD] = GET_ALU_HANDLER(add),
+        [ALU_FUNCT37_SUB] = GET_ALU_HANDLER(sub),
+        [ALU_FUNCT37_SL] = GET_ALU_HANDLER(sll),
+        [ALU_FUNCT37_SLT] = GET_ALU_HANDLER(slt),
+        [ALU_FUNCT37_SLTU] = GET_ALU_HANDLER(sltu),
+        [ALU_FUNCT37_XOR] = GET_ALU_HANDLER(xor),
+        [ALU_FUNCT37_SRL] = GET_ALU_HANDLER(srl),
+        [ALU_FUNCT37_SRA] = GET_ALU_HANDLER(sra),
+        [ALU_FUNCT37_OR] = GET_ALU_HANDLER(or),
+        [ALU_FUNCT37_AND] = GET_ALU_HANDLER(and),
+        [ALU_FUNCT37_MUL] = GET_ALU_HANDLER(mul),
+        [ALU_FUNCT37_MULH] = GET_ALU_HANDLER(mulh),
+        [ALU_FUNCT37_MULHSU] = GET_ALU_HANDLER(mulhsu),
+        [ALU_FUNCT37_MULHU] = GET_ALU_HANDLER(mulhu),
+        [ALU_FUNCT37_DIV] = GET_ALU_HANDLER(div),
+        [ALU_FUNCT37_DIVU] = GET_ALU_HANDLER(divu),
+        [ALU_FUNCT37_REM] = GET_ALU_HANDLER(rem),
+        [ALU_FUNCT37_REMU] = GET_ALU_HANDLER(remu)
     };
 
-    alu_handlers[req->inst.r.funct3](exu, req);
+    u32 funct37 = (req->inst.r.funct3 << 7u) | req->inst.r.funct7;
+    alu_ex_req_handler_t handler = alu_handlers[funct37];
+    if (handler) {
+        handler(exu, req);
+    } else {
+        DBG_CHECK(0);
+    }
 }
 
 void alu_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
