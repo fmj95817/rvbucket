@@ -10,7 +10,7 @@ DRIVERS_DIR="${SDK_DIR}/drivers"
 
 CROSS_PREFIX="riscv32-unknown-elf"
 CROSS_CC="${CROSS_PREFIX}-gcc"
-CROSS_CFLAGS=(-Wall -O2 -fPIC -march=rv32i -I${SDK_DIR})
+CROSS_CFLAGS=(-Wall -O2 -fPIC -march=rv32ima_zicsr -I${SDK_DIR})
 CROSS_LDFLAGS=(-nostartfiles)
 CROSS_LD="${CROSS_PREFIX}-gcc"
 CROSS_OBJCOPY="${CROSS_PREFIX}-objcopy"

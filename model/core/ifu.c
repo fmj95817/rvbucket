@@ -1,5 +1,6 @@
 #include "ifu.h"
 #include "isa.h"
+#include "base/def.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 #include "dbg/pcm.h"

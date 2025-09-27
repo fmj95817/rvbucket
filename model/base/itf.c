@@ -1,6 +1,7 @@
 #include "itf.h"
 #include <string.h>
 #include <sys/stat.h>
+#include "base/def.h"
 #include "dbg/chk.h"
 #include "dbg/env.h"
 

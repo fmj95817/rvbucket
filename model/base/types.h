@@ -22,19 +22,4 @@ typedef int64_t s64;
 typedef uint64_t u64;
 typedef union { s64 s; u64 u; } i64;
 
-#define KiB (1024)
-#define MiB (1024 * 1024)
-#define GiB (1024 * 1024 * 1024)
-
-#define I32_FMT "%d"
-#define U32_FMT "%u"
-
-#if defined(__linux__)
-#define U64_FMT "%lu"
-#elif defined(__APPLE__)
-#define U64_FMT "%llu"
-#endif
-
-#define ADDR_IN(addr, base, size) (((addr) >= (base)) && ((addr) < ((base) + (size))))
-
 #endif

@@ -50,8 +50,9 @@ DECL_SYS_HANDLER(csrrs)
     set_gpr(exu, req->inst.i.rd, old_val);
 
     u32 mask = get_gpr(exu, req->inst.i.rs1);
-    DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val | mask));
-
+    if (mask != 0) {
+        DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val | mask));
+    }
     DBG_LOG(LOG_TRACE, "csrrs, %s, %s, %s\n", gpr_name(req->inst.i.rd),
         csr_name(req->inst.i.imm_11_0), gpr_name(req->inst.i.rs1));
 }
@@ -63,8 +64,9 @@ DECL_SYS_HANDLER(csrrc)
     set_gpr(exu, req->inst.i.rd, old_val);
 
     u32 mask = get_gpr(exu, req->inst.i.rs1);
-    DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val & (~mask)));
-
+    if (mask != 0) {
+        DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val & (~mask)));
+    }
     DBG_LOG(LOG_TRACE, "csrrc, %s, %s, %s\n", gpr_name(req->inst.i.rd),
         csr_name(req->inst.i.imm_11_0), gpr_name(req->inst.i.rs1));
 }
@@ -89,8 +91,9 @@ DECL_SYS_HANDLER(csrrsi)
     set_gpr(exu, req->inst.i.rd, old_val);
 
     u32 mask = req->inst.i.rs1;
-    DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val | mask));
-
+    if (mask != 0) {
+        DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val | mask));
+    }
     DBG_LOG(LOG_TRACE, "csrrsi, %s, %s, %u\n", gpr_name(req->inst.i.rd),
         csr_name(req->inst.i.imm_11_0), req->inst.i.rs1);
 }
@@ -102,8 +105,9 @@ DECL_SYS_HANDLER(csrrci)
     set_gpr(exu, req->inst.i.rd, old_val);
 
     u32 mask = req->inst.i.rs1;
-    DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val & (~mask)));
-
+    if (mask != 0) {
+        DBG_CHECK(csr_write(exu->csr, *exu->priv, req->inst.i.imm_11_0, old_val & (~mask)));
+    }
     DBG_LOG(LOG_TRACE, "csrrci, %s, %s, %u\n", gpr_name(req->inst.i.rd),
         csr_name(req->inst.i.imm_11_0), req->inst.i.rs1);
 }

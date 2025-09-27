@@ -1,4 +1,5 @@
 #include "soc.h"
+#include "base/def.h"
 
 #define BOOT_ROM_BASE_ADDR  0x40000000
 #define BOOT_ROM_SIZE       (1 * KiB)

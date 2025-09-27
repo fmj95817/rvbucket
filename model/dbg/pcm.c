@@ -1,6 +1,7 @@
 #include "pcm.h"
 #include <string.h>
 #include <stdio.h>
+#include "base/def.h"
 #include "dbg/chk.h"
 #include "dbg/env.h"
 

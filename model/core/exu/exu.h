@@ -11,6 +11,12 @@
 #include "core/isa.h"
 #include "core/csr.h"
 
+typedef enum amo_stage {
+    AMO_STAGE_IDLE = 0,
+    AMO_STAGE_READ = 1,
+    AMO_STAGE_WRITE = 2
+} amo_stage_t;
+
 typedef struct exu {
     itf_t *fl_req_slv;
     itf_t *ex_req_slv;
@@ -18,10 +24,19 @@ typedef struct exu {
     itf_t *ldst_req_mst;
     itf_t *ldst_rsp_slv;
 
+    u32 cur_opcode;
+
     bool ldst_req_pend;
-    u32 ldst_opcode;
     u32 ld_rd;
     u32 ld_funct3;
+
+    u32 amo_stage;
+    u32 amo_rd;
+    u32 amo_addr;
+    i32 amo_s2;
+    u32 amo_funct375;
+    bool amo_lr_set;
+    u32 amo_rsvd_addr;
 
     u32 gpr[RV32G_GPR_NUM];
 
@@ -40,6 +55,9 @@ extern void branch_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void mem_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void sys_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
+extern void amo_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
+
 extern void ldst_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp);
+extern void amo_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp);
 
 #endif
