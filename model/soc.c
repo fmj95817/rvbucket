@@ -1,143 +1,119 @@
 #include "soc.h"
 #include "base/def.h"
+#include "conf/core.h"
+#include "conf/soc.h"
 
-#define BOOT_ROM_BASE_ADDR  0x40000000
-#define BOOT_ROM_SIZE       (1 * KiB)
-
-#define FLASH_BASE_ADDR     0x80000000
-#define FLASH_SIZE          (1 * MiB)
-
-#define ITCM_BASE_ADDR      0x10000000
-#define ITCM_SIZE           (128 * KiB)
-
-#define DTCM_BASE_ADDR      0x20000000
-#define DTCM_SIZE           (64 * KiB)
-
-#define UART_BASE_ADDR      0x30000000
-#define UART_SIZE           12
-
-void soc_construct(soc_t *soc, const u64 *cycle)
+void soc_construct(soc_t *soc)
 {
-    extern u32 g_boot_code_size;
-    extern u8 g_boot_code[];
+    itf_construct(&soc->mm_i_bti_req_itf, soc->cycle, "mm_i_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->mm_i_bti_rsp_itf, soc->cycle, "mm_i_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->mm_d_bti_req_itf, soc->cycle, "mm_d_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->mm_d_bti_rsp_itf, soc->cycle, "mm_d_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->ddr_d_bti_req_itf, soc->cycle, "ddr_d_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->ddr_d_bti_rsp_itf, soc->cycle, "ddr_d_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->flash_bti_req_itf, soc->cycle, "flash_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
+    itf_construct(&soc->flash_bti_rsp_itf, soc->cycle, "flash_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
+    itf_construct(&soc->uart_apb_req_itf, soc->cycle, "uart_apb_req_itf", &apb_req_if_to_str, sizeof(apb_req_if_t), 1);
+    itf_construct(&soc->uart_apb_rsp_itf, soc->cycle, "uart_apb_rsp_itf", &apb_rsp_if_to_str, sizeof(apb_rsp_if_t), 1);
 
-    const u32 i_gst_base_addrs[] = { BOOT_ROM_BASE_ADDR, ITCM_BASE_ADDR };
-    const u32 i_gst_sizes[] = { BOOT_ROM_SIZE, ITCM_SIZE };
-    const u32 d_gst_base_addrs[] = { FLASH_BASE_ADDR, ITCM_BASE_ADDR, DTCM_BASE_ADDR, UART_BASE_ADDR };
-    const u32 d_gst_sizes[] = { FLASH_SIZE, ITCM_SIZE, DTCM_SIZE, UART_SIZE };
+    soc->cpu.cycle = soc->cycle;
+    soc->cpu.mm_i_bti_req_mst = &soc->mm_i_bti_req_itf;
+    soc->cpu.mm_i_bti_rsp_slv = &soc->mm_i_bti_rsp_itf;
+    soc->cpu.mm_d_bti_req_mst = &soc->mm_d_bti_req_itf;
+    soc->cpu.mm_d_bti_rsp_slv = &soc->mm_d_bti_rsp_itf;
+    soc->cpu.peri_apb_req_mst = &soc->uart_apb_req_itf;
+    soc->cpu.peri_apb_rsp_slv = &soc->uart_apb_rsp_itf;
+    rv32g_conf_t rv32g_conf = {
+        .boot_rom_base = BOOT_ROM_BASE,
+        .boot_rom_size = BOOT_ROM_SIZE,
+        .itcm_base = ITCM_BASE,
+        .itcm_size = ITCM_SIZE,
+        .dtcm_base = DTCM_BASE,
+        .dtcm_size = DTCM_SIZE,
+        .mm_base = MM_BASE,
+        .mm_size = MM_SIZE,
+        .cfg_base = CFG_BASE,
+        .cfg_size = CFG_SIZE,
+        .peri_base = PERI_BASE,
+        .peri_size = PERI_SIZE,
+        .aclint_base = ACLINT_BASE,
+        .aclint_size = ACLINT_SIZE,
+        .aclint_mtimer_base = ACLINT_MTIMER_BASE,
+        .aclint_mtimer_size = ACLINT_MTIMER_SIZE,
+        .aclint_mtimecmp_base = ACLINT_MTIMECMP_BASE,
+        .aclint_mtimecmp_size = ACLINT_MTIMECMP_SIZE,
+        .aclint_mswi_base = ACLINT_MSWI_BASE,
+        .aclint_mswi_size = ACLINT_MSWI_SIZE,
+        .aclint_sswi_base = ACLINT_SSWI_BASE,
+        .aclint_sswi_size = ACLINT_SSWI_SIZE,
+        .plic_base = PLIC_BASE,
+        .plic_size = PLIC_SIZE
+    };
+    rv32g_construct(&soc->cpu, &rv32g_conf);
 
-    itf_construct(&soc->cpu_i_bti_req_itf, cycle, "cpu_i_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->cpu_i_bti_rsp_itf, cycle, "cpu_i_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->cpu_d_bti_req_itf, cycle, "cpu_d_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->cpu_d_bti_rsp_itf, cycle, "cpu_d_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->boot_rom_bti_req_itf, cycle, "boot_rom_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->boot_rom_bti_rsp_itf, cycle, "boot_rom_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->flash_bti_req_itf, cycle, "flash_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->flash_bti_rsp_itf, cycle, "flash_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->itcm_i_bti_req_itf, cycle, "itcm_i_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->itcm_i_bti_rsp_itf, cycle, "itcm_i_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->itcm_d_bti_req_itf, cycle, "itcm_d_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->itcm_d_bti_rsp_itf, cycle, "itcm_d_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->dtcm_bti_req_itf, cycle, "dtcm_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->dtcm_bti_rsp_itf, cycle, "dtcm_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->uart_bti_req_itf, cycle, "uart_bti_req_itf", &bti_req_if_to_str, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->uart_bti_rsp_itf, cycle, "uart_bti_rsp_itf", &bti_rsp_if_to_str, sizeof(bti_rsp_if_t), 1);
-
-    soc->cpu.i_bti_req_mst = &soc->cpu_i_bti_req_itf;
-    soc->cpu.i_bti_rsp_slv = &soc->cpu_i_bti_rsp_itf;
-    soc->cpu.d_bti_req_mst = &soc->cpu_d_bti_req_itf;
-    soc->cpu.d_bti_rsp_slv = &soc->cpu_d_bti_rsp_itf;
-    soc->boot_rom.bti_req_slv = &soc->boot_rom_bti_req_itf;
-    soc->boot_rom.bti_rsp_mst = &soc->boot_rom_bti_rsp_itf;
     soc->flash.bti_req_slv = &soc->flash_bti_req_itf;
     soc->flash.bti_rsp_mst = &soc->flash_bti_rsp_itf;
-    soc->itcm.bti_req_slv[0] = &soc->itcm_i_bti_req_itf;
-    soc->itcm.bti_rsp_mst[0] = &soc->itcm_i_bti_rsp_itf;
-    soc->itcm.bti_req_slv[1] = &soc->itcm_d_bti_req_itf;
-    soc->itcm.bti_rsp_mst[1] = &soc->itcm_d_bti_rsp_itf;
-    soc->dtcm.bti_req_slv[0] = &soc->dtcm_bti_req_itf;
-    soc->dtcm.bti_rsp_mst[0] = &soc->dtcm_bti_rsp_itf;
-    soc->uart.bti_req_slv = &soc->uart_bti_req_itf;
-    soc->uart.bti_rsp_mst = &soc->uart_bti_rsp_itf;
-    soc->uart.uart_tx = soc->uart_tx;
+    rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE);
 
-    soc->i_bti_demux.host_bti_req_slv = &soc->cpu_i_bti_req_itf;
-    soc->i_bti_demux.host_bti_rsp_mst = &soc->cpu_i_bti_rsp_itf;
-    soc->i_bti_demux.gst_bti_req_msts[0] = &soc->boot_rom_bti_req_itf;
-    soc->i_bti_demux.gst_bti_rsp_slvs[0] = &soc->boot_rom_bti_rsp_itf;
-    soc->i_bti_demux.gst_bti_req_msts[1] = &soc->itcm_i_bti_req_itf;
-    soc->i_bti_demux.gst_bti_rsp_slvs[1] = &soc->itcm_i_bti_rsp_itf;
+    soc->uart.apb_req_slv = &soc->uart_apb_req_itf;
+    soc->uart.apb_rsp_mst = &soc->uart_apb_rsp_itf;
+    soc->uart.uart_tx_mst = soc->uart_tx_mst;
+    soc->uart.uart_rx_slv = soc->uart_rx_slv;
+    uart_construct(&soc->uart, UART_BASE, UART_SIZE);
 
-    soc->d_bti_demux.host_bti_req_slv = &soc->cpu_d_bti_req_itf;
-    soc->d_bti_demux.host_bti_rsp_mst = &soc->cpu_d_bti_rsp_itf;
-    soc->d_bti_demux.gst_bti_req_msts[0] = &soc->flash_bti_req_itf;
-    soc->d_bti_demux.gst_bti_rsp_slvs[0] = &soc->flash_bti_rsp_itf;
-    soc->d_bti_demux.gst_bti_req_msts[1] = &soc->itcm_d_bti_req_itf;
-    soc->d_bti_demux.gst_bti_rsp_slvs[1] = &soc->itcm_d_bti_rsp_itf;
-    soc->d_bti_demux.gst_bti_req_msts[2] = &soc->dtcm_bti_req_itf;
-    soc->d_bti_demux.gst_bti_rsp_slvs[2] = &soc->dtcm_bti_rsp_itf;
-    soc->d_bti_demux.gst_bti_req_msts[3] = &soc->uart_bti_req_itf;
-    soc->d_bti_demux.gst_bti_rsp_slvs[3] = &soc->uart_bti_rsp_itf;
+    soc->mm_d_bti_demux.host_bti_req_slv = &soc->mm_d_bti_req_itf;
+    soc->mm_d_bti_demux.host_bti_rsp_mst = &soc->mm_d_bti_rsp_itf;
+    soc->mm_d_bti_demux.gst_bti_req_msts[0] = &soc->ddr_d_bti_req_itf;
+    soc->mm_d_bti_demux.gst_bti_rsp_slvs[0] = &soc->ddr_d_bti_rsp_itf;
+    soc->mm_d_bti_demux.gst_bti_req_msts[1] = &soc->flash_bti_req_itf;
+    soc->mm_d_bti_demux.gst_bti_rsp_slvs[1] = &soc->flash_bti_rsp_itf;
+    const u32 mm_d_bti_gst_bases[] = { DDR_BASE, FLASH_BASE };
+    const u32 mm_d_bti_gst_sizes[] = { DDR_SIZE, FLASH_SIZE };
+    bti_demux_construct(&soc->mm_d_bti_demux, 2, mm_d_bti_gst_bases, mm_d_bti_gst_sizes);
 
-    rv32g_construct(&soc->cpu, cycle, BOOT_ROM_BASE_ADDR, BOOT_ROM_BASE_ADDR, BOOT_ROM_SIZE);
-    ram_construct(&soc->itcm, 2, ITCM_SIZE, ITCM_BASE_ADDR);
-    ram_construct(&soc->dtcm, 1, DTCM_SIZE, DTCM_BASE_ADDR);
-    rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE_ADDR);
-    rom_construct(&soc->boot_rom, BOOT_ROM_SIZE, g_boot_code, g_boot_code_size, BOOT_ROM_BASE_ADDR);
-    uart_construct(&soc->uart, UART_BASE_ADDR, UART_SIZE);
-    bti_demux_construct(&soc->i_bti_demux, 2, i_gst_base_addrs, i_gst_sizes);
-    bti_demux_construct(&soc->d_bti_demux, 4, d_gst_base_addrs, d_gst_sizes);
+    soc->ddr_bti_mux.host_bti_req_slvs[0] = &soc->mm_i_bti_req_itf;
+    soc->ddr_bti_mux.host_bti_rsp_msts[0] = &soc->mm_i_bti_rsp_itf;
+    soc->ddr_bti_mux.host_bti_req_slvs[1] = &soc->ddr_d_bti_req_itf;
+    soc->ddr_bti_mux.host_bti_rsp_msts[1] = &soc->ddr_d_bti_rsp_itf;
+    soc->ddr_bti_mux.gst_bti_req_mst = soc->ddr_bti_req_mst;
+    soc->ddr_bti_mux.gst_bti_rsp_slv = soc->ddr_bti_rsp_slv;
+    bti_mux_construct(&soc->ddr_bti_mux, 2);
 }
 
 void soc_reset(soc_t *soc)
 {
     rv32g_reset(&soc->cpu);
-    ram_reset(&soc->itcm);
-    ram_reset(&soc->dtcm);
     rom_reset(&soc->flash);
-    rom_reset(&soc->boot_rom);
     uart_reset(&soc->uart);
-    bti_demux_reset(&soc->i_bti_demux);
-    bti_demux_reset(&soc->d_bti_demux);
+    bti_demux_reset(&soc->mm_d_bti_demux);
+    bti_mux_reset(&soc->ddr_bti_mux);
 }
 
 void soc_clock(soc_t *soc)
 {
     rv32g_clock(&soc->cpu);
-    rom_clock(&soc->boot_rom);
     rom_clock(&soc->flash);
-    ram_clock(&soc->itcm);
-    ram_clock(&soc->dtcm);
     uart_clock(&soc->uart);
-    bti_demux_clock(&soc->i_bti_demux);
-    bti_demux_clock(&soc->d_bti_demux);
+    bti_demux_clock(&soc->mm_d_bti_demux);
+    bti_mux_clock(&soc->ddr_bti_mux);
 }
 
 void soc_free(soc_t *soc)
 {
     rv32g_free(&soc->cpu);
     rom_free(&soc->flash);
-    rom_free(&soc->boot_rom);
-    ram_free(&soc->itcm);
-    ram_free(&soc->dtcm);
     uart_free(&soc->uart);
-    bti_demux_free(&soc->i_bti_demux);
-    bti_demux_free(&soc->d_bti_demux);
+    bti_demux_free(&soc->mm_d_bti_demux);
+    bti_mux_free(&soc->ddr_bti_mux);
 
-    itf_free(&soc->cpu_i_bti_req_itf);
-    itf_free(&soc->cpu_i_bti_rsp_itf);
-    itf_free(&soc->cpu_d_bti_req_itf);
-    itf_free(&soc->cpu_d_bti_rsp_itf);
-    itf_free(&soc->boot_rom_bti_req_itf);
-    itf_free(&soc->boot_rom_bti_rsp_itf);
+    itf_free(&soc->mm_i_bti_req_itf);
+    itf_free(&soc->mm_i_bti_rsp_itf);
+    itf_free(&soc->mm_d_bti_req_itf);
+    itf_free(&soc->mm_d_bti_rsp_itf);
+    itf_free(&soc->ddr_d_bti_req_itf);
+    itf_free(&soc->ddr_d_bti_rsp_itf);
     itf_free(&soc->flash_bti_req_itf);
     itf_free(&soc->flash_bti_rsp_itf);
-    itf_free(&soc->itcm_i_bti_req_itf);
-    itf_free(&soc->itcm_i_bti_rsp_itf);
-    itf_free(&soc->itcm_d_bti_req_itf);
-    itf_free(&soc->itcm_d_bti_rsp_itf);
-    itf_free(&soc->dtcm_bti_req_itf);
-    itf_free(&soc->dtcm_bti_rsp_itf);
-    itf_free(&soc->uart_bti_req_itf);
-    itf_free(&soc->uart_bti_rsp_itf);
+    itf_free(&soc->uart_apb_req_itf);
+    itf_free(&soc->uart_apb_rsp_itf);
 }

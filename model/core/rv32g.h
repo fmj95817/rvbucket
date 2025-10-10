@@ -3,36 +3,82 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "ifu.h"
-#include "biu.h"
-#include "exu/exu.h"
-#include "csr.h"
+#include "mem/rom.h"
+#include "mem/ram.h"
+#include "hart/hart.h"
+#include "cbi.h"
+#include "aclint.h"
+#include "plic.h"
+
+typedef struct rv32g_conf {
+    u32 boot_rom_base;
+    u32 boot_rom_size;
+    u32 itcm_base;
+    u32 itcm_size;
+    u32 dtcm_base;
+    u32 dtcm_size;
+    u32 mm_base;
+    u32 mm_size;
+    u32 cfg_base;
+    u32 cfg_size;
+    u32 peri_base;
+    u32 peri_size;
+    u32 aclint_base;
+    u32 aclint_size;
+    u32 aclint_mtimer_base;
+    u32 aclint_mtimer_size;
+    u32 aclint_mtimecmp_base;
+    u32 aclint_mtimecmp_size;
+    u32 aclint_mswi_base;
+    u32 aclint_mswi_size;
+    u32 aclint_sswi_base;
+    u32 aclint_sswi_size;
+    u32 plic_base;
+    u32 plic_size;
+} rv32g_conf_t;
 
 typedef struct rv32g {
     const u64 *cycle;
+    itf_t *mm_i_bti_req_mst;
+    itf_t *mm_i_bti_rsp_slv;
+    itf_t *mm_d_bti_req_mst;
+    itf_t *mm_d_bti_rsp_slv;
+    itf_t *peri_apb_req_mst;
+    itf_t *peri_apb_rsp_slv;
+    itf_t *ext_irq_slvs[PLIC_MAX_IRQ_NUM];
 
-    rv32g_priv_t priv;
-    csr_t csr;
+    hart_t hart;
+    cbi_t cbi;
+    rom_t boot_rom;
+    ram_t itcm;
+    ram_t dtcm;
+    aclint_t aclint;
+    plic_t plic;
 
-    ifu_t ifu;
-    exu_t exu;
-    biu_t biu;
+    itf_t boot_rom_bti_req_itf;
+    itf_t boot_rom_bti_rsp_itf;
+    itf_t itcm_i_bti_req_itf;
+    itf_t itcm_i_bti_rsp_itf;
+    itf_t itcm_d_bti_req_itf;
+    itf_t itcm_d_bti_rsp_itf;
+    itf_t dtcm_bti_req_itf;
+    itf_t dtcm_bti_rsp_itf;
 
-    itf_t *i_bti_req_mst;
-    itf_t *i_bti_rsp_slv;
-    itf_t *d_bti_req_mst;
-    itf_t *d_bti_rsp_slv;
+    itf_t aclint_cfg_apb_req_itf;
+    itf_t aclint_cfg_apb_rsp_itf;
+    itf_t plic_cfg_apb_req_itf;
+    itf_t plic_cfg_apb_rsp_itf;
 
-    itf_t fch_req_itf;
-    itf_t fch_rsp_itf;
-    itf_t ex_req_itf;
-    itf_t ex_rsp_itf;
-    itf_t fl_req_itf;
-    itf_t ldst_req_itf;
-    itf_t ldst_rsp_itf;
+    itf_t core_irq_itf;
+    itf_t conv_ext_irq_itf;
+
+    itf_t hart_i_bti_req_itf;
+    itf_t hart_i_bti_rsp_itf;
+    itf_t hart_d_bti_req_itf;
+    itf_t hart_d_bti_rsp_itf;
 } rv32g_t;
 
-extern void rv32g_construct(rv32g_t *s, const u64 *cycle, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
+extern void rv32g_construct(rv32g_t *s, const rv32g_conf_t *conf);
 extern void rv32g_reset(rv32g_t *s);
 extern void rv32g_clock(rv32g_t *s);
 extern void rv32g_free(rv32g_t *s);

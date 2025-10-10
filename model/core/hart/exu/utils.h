@@ -2,7 +2,7 @@
 #define EXU_UTILS_H
 
 #include "base/types.h"
-#include "core/isa.h"
+#include "core/hart/isa.h"
 #include "exu.h"
 #include "dbg/chk.h"
 

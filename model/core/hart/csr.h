@@ -612,6 +612,7 @@ typedef u32 rv32g_csr_mhpmcounter3h_t;
 typedef u32 rv32g_csr_cycle_t;
 typedef u32 rv32g_csr_time_t;
 typedef u32 rv32g_csr_instret_t;
+typedef u32 rv32g_csr_cycleh_t;
 typedef u32 rv32g_csr_timeh_t;
 typedef u32 rv32g_csr_scountovf_t;
 typedef u32 rv32g_csr_mvendorid_t;
@@ -723,6 +724,7 @@ typedef struct csr {
     rv32g_csr_cycle_t cycle;
     rv32g_csr_time_t time;
     rv32g_csr_instret_t instret;
+    rv32g_csr_cycleh_t cycleh;
     rv32g_csr_timeh_t timeh;
     rv32g_csr_scountovf_t scountovf;
     rv32g_csr_mvendorid_t mvendorid;

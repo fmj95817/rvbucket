@@ -19,12 +19,48 @@ DECL_SYS_HANDLER(ebreak)
     DBG_LOG(LOG_TRACE, "ebreak\n");
 }
 
+DECL_SYS_HANDLER(sret)
+{
+    DBG_LOG(LOG_TRACE, "sret\n");
+}
+
+DECL_SYS_HANDLER(mret)
+{
+    DBG_LOG(LOG_TRACE, "mret\n");
+}
+
+DECL_SYS_HANDLER(wfi)
+{
+    DBG_LOG(LOG_TRACE, "wfi\n");
+}
+
+DECL_SYS_HANDLER(sfence_vma)
+{
+    DBG_LOG(LOG_TRACE, "sfence.vma\n");
+}
+
 DECL_SYS_HANDLER(priv_group)
 {
-    if (req->inst.i.imm_11_0 == 0b000000000000) {
+    u32 i_imm = req->inst.i.imm_11_0;
+    u32 i_rs1 = req->inst.i.rs1;
+    u32 i_rd = req->inst.i.rd;
+    u32 r_funct7 = req->inst.r.funct7;
+    u32 r_rs2 = req->inst.r.rs2;
+    u32 r_rs1 = req->inst.r.rs1;
+    u32 r_rd = req->inst.r.rd;
+
+    if (i_imm == 0b000000000000 && i_rs1 == 0b00000 && i_rd == 0b00000) {
         CALL_SYS_HANDLER(ecall, exu, req);
-    } else if (req->inst.i.imm_11_0 == 0b000000000001) {
+    } else if (i_imm == 0b000000000001 && i_rs1 == 0b00000 && i_rd == 0b00000) {
         CALL_SYS_HANDLER(ebreak, exu, req);
+    } else if (r_funct7 == 0b0001000 && r_rs2 == 0b00010 && r_rs1 == 0b00000 && r_rd == 0b00000) {
+        CALL_SYS_HANDLER(sret, exu, req);
+    } else if (r_funct7 == 0b0011000 && r_rs2 == 0b00010 && r_rs1 == 0b00000 && r_rd == 0b00000) {
+        CALL_SYS_HANDLER(mret, exu, req);
+    } else if (r_funct7 == 0b0001000 && r_rs2 == 0b00101 && r_rs1 == 0b00000 && r_rd == 0b00000) {
+        CALL_SYS_HANDLER(wfi, exu, req);
+    } else if (r_funct7 == 0b0001001 && r_rd == 0b00000) {
+        CALL_SYS_HANDLER(sfence_vma, exu, req);
     } else {
         DBG_CHECK(0);
     }

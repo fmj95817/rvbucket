@@ -1,0 +1,76 @@
+{
+    "itfs_desc": {
+        "apb_req": {
+            "type": "none",
+            "payloads": [
+                { "name": "paddr", "width": 32 },
+                { "name": "pwrite", "width": 1 },
+                { "name": "pwdata", "width": 32 },
+                { "name": "pstrb", "width": 4 }
+            ],
+            "ctrl": [
+                { "name": "psel", "width": 1 },
+                { "name": "penable", "width": 1 }
+            ]
+        },
+
+        "apb_rsp": {
+            "type": "none",
+            "payloads": [
+                { "name": "prdata", "width": 32 },
+                { "name": "pslverr", "width": 1 }
+            ],
+            "ctrl": [
+                { "name": "pready", "width": 1 }
+            ]
+        },
+
+        "core_irq": {
+            "type": "none",
+            "payloads": [
+                { "name": "mtimer", "width": 1 },
+                { "name": "stimer", "width": 1 },
+                { "name": "msw", "width": 1 },
+                { "name": "ssw", "width": 1 }
+            ]
+        },
+
+        "ext_irq": {
+            "type": "vld",
+            "payloads": []
+        },
+
+        "hart_expt": {
+            "type": "vld",
+            "enums": {
+                "cause": {
+                    "inst_addr_misaligned": 0,
+                    "inst_access_fault": 1,
+                    "illegal_inst": 2,
+                    "breakpoint": 3,
+                    "load_addr_misaligned": 4,
+                    "load_access_fault": 5,
+                    "store_amo_addr_misaligned": 6,
+                    "store_amo_access_fault": 7,
+                    "ecall": 8,
+                    "inst_page_fault": 12,
+                    "load_page_fault": 13,
+                    "store_amo_page_fault": 15,
+                    "double_trap": 16,
+                    "sw_check": 18,
+                    "hw_error": 19
+                }
+            },
+            "payloads": [
+                { "name": "cause", "type": "cause" }
+            ]
+        },
+
+        "trap_send": {
+            "type": "vld",
+            "payloads": [
+                { "name": "target_pc", "width": 32 }
+            ]
+        }
+    }
+}

@@ -6,39 +6,35 @@
 #include "mem/ram.h"
 #include "mem/rom.h"
 #include "io/uart.h"
-#include "demux.h"
+#include "bus/mux.h"
+#include "bus/demux.h"
 
 typedef struct soc {
-    itf_t *uart_tx;
+    const u64 *cycle;
+    itf_t *ddr_bti_req_mst;
+    itf_t *ddr_bti_rsp_slv;
+    itf_t *uart_tx_mst;
+    itf_t *uart_rx_slv;
 
     rv32g_t cpu;
-    rom_t boot_rom;
     rom_t flash;
-    ram_t itcm;
-    ram_t dtcm;
     uart_t uart;
-    bti_demux_t i_bti_demux;
-    bti_demux_t d_bti_demux;
+    bti_demux_t mm_d_bti_demux;
+    bti_mux_t ddr_bti_mux;
 
-    itf_t cpu_i_bti_req_itf;
-    itf_t cpu_i_bti_rsp_itf;
-    itf_t cpu_d_bti_req_itf;
-    itf_t cpu_d_bti_rsp_itf;
-    itf_t boot_rom_bti_req_itf;
-    itf_t boot_rom_bti_rsp_itf;
+    itf_t mm_i_bti_req_itf;
+    itf_t mm_i_bti_rsp_itf;
+    itf_t mm_d_bti_req_itf;
+    itf_t mm_d_bti_rsp_itf;
+    itf_t ddr_d_bti_req_itf;
+    itf_t ddr_d_bti_rsp_itf;
     itf_t flash_bti_req_itf;
     itf_t flash_bti_rsp_itf;
-    itf_t itcm_i_bti_req_itf;
-    itf_t itcm_i_bti_rsp_itf;
-    itf_t itcm_d_bti_req_itf;
-    itf_t itcm_d_bti_rsp_itf;
-    itf_t dtcm_bti_req_itf;
-    itf_t dtcm_bti_rsp_itf;
-    itf_t uart_bti_req_itf;
-    itf_t uart_bti_rsp_itf;
+    itf_t uart_apb_req_itf;
+    itf_t uart_apb_rsp_itf;
 } soc_t;
 
-extern void soc_construct(soc_t *soc, const u64 *cycle);
+extern void soc_construct(soc_t *soc);
 extern void soc_reset(soc_t *soc);
 extern void soc_clock(soc_t *soc);
 extern void soc_free(soc_t *soc);

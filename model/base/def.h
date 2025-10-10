@@ -1,9 +1,9 @@
 #ifndef RV32G_DEF_H
 #define RV32G_DEF_H
 
-#define KiB (1024)
-#define MiB (1024 * 1024)
-#define GiB (1024 * 1024 * 1024)
+#define KiB (1024u)
+#define MiB (1024u * 1024u)
+#define GiB (1024u * 1024u * 1024u)
 
 #define I32_FMT "%d"
 #define U32_FMT "%u"

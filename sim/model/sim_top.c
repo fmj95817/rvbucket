@@ -49,17 +49,20 @@ static void sim_top_construct(sim_top_t *sim_top, const char *prog_path)
     dbg_vcd_set_clk(sim_top->cycle);
     dbg_vcd_add_sig("cycle[63:0]", DBG_SIG_TYPE_REG, 64, sim_top->cycle);
 
-    sim_top->end_sim = false;
-    sim_top->soc.uart_tx = &sim_top->uart_rx_itf;
+    sim_top->soc.cycle = sim_top->cycle;
+    sim_top->soc.ddr_bti_req_mst = NULL;
+    sim_top->soc.ddr_bti_rsp_slv = NULL;
+    sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
+    sim_top->soc.uart_rx_slv = NULL;
+    soc_construct(&sim_top->soc);
 
-    soc_construct(&sim_top->soc, sim_top->cycle);
     soc_burn_program(&sim_top->soc, prog_path);
-
     dbg_vcd_scope_end();
 }
 
 static void sim_top_reset(sim_top_t *sim_top)
 {
+    sim_top->end_sim = false;
     soc_reset(&sim_top->soc);
     dbg_vcd_reset();
 }

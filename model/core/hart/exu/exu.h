@@ -8,8 +8,9 @@
 #include "itf/fl_req_if.h"
 #include "itf/ldst_req_if.h"
 #include "itf/ldst_rsp_if.h"
-#include "core/isa.h"
-#include "core/csr.h"
+#include "itf/hart_expt_if.h"
+#include "core/hart/isa.h"
+#include "core/hart/csr.h"
 
 typedef enum amo_stage {
     AMO_STAGE_IDLE = 0,
@@ -23,6 +24,7 @@ typedef struct exu {
     itf_t *ex_rsp_mst;
     itf_t *ldst_req_mst;
     itf_t *ldst_rsp_slv;
+    itf_t *hart_expt_mst;
 
     u32 cur_opcode;
 

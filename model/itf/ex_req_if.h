@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include "base/types.h"
-#include "core/isa.h"
+#include "core/hart/isa.h"
 
 typedef struct ex_req_if {
     rv32g_inst_t inst;

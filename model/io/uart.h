@@ -3,8 +3,8 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/bti_req_if.h"
-#include "itf/bti_rsp_if.h"
+#include "itf/apb_req_if.h"
+#include "itf/apb_rsp_if.h"
 
 typedef struct uart_if {
     u32 data;
@@ -17,9 +17,10 @@ static inline void uart_if_to_str(const void *pkt, char *str)
 }
 
 typedef struct uart {
-    itf_t *bti_req_slv;
-    itf_t *bti_rsp_mst;
-    itf_t *uart_tx;
+    itf_t *apb_req_slv;
+    itf_t *apb_rsp_mst;
+    itf_t *uart_tx_mst;
+    itf_t *uart_rx_slv;
 
     u32 base_addr;
     u32 size;

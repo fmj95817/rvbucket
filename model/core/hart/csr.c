@@ -106,6 +106,7 @@ void csr_reset(csr_t *csr)
     csr->cycle = 0;
     csr->time = 0;
     csr->instret = 0;
+    csr->cycleh = 0;
     csr->timeh = 0;
     csr->scountovf = 0;
     csr->mvendorid = 0;
@@ -626,6 +627,11 @@ bool csr_read(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data)
         case 0xc02: {
             CSR_CHECK_PRIV(RV32G_PRIV_USER);
             *data = csr->instret;
+            return true;
+        }
+        case 0xc80: {
+            CSR_CHECK_PRIV(RV32G_PRIV_USER);
+            *data = csr->cycleh;
             return true;
         }
         case 0xc81: {
@@ -1382,6 +1388,8 @@ const char *csr_name(u32 addr)
             return "time";
         case 0xc02:
             return "instret";
+        case 0xc80:
+            return "cycleh";
         case 0xc81:
             return "timeh";
         case 0xda0:

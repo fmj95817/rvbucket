@@ -26,16 +26,37 @@ DECL_MISC_HANDLER(auipc)
 
 DECL_MISC_HANDLER(fence)
 {
-    DBG_LOG(LOG_TRACE, "fence\n");
+    u32 fm = req->inst.i.imm_11_0 >> 8;
+    if (fm == 0b0000) {
+        DBG_LOG(LOG_TRACE, "fence\n");
+    } else if (fm == 0b1000) {
+        DBG_LOG(LOG_TRACE, "fence.tso\n");
+    } else {
+        DBG_CHECK(0);
+    }
+}
+
+DECL_MISC_HANDLER(fence_i)
+{
+    DBG_LOG(LOG_TRACE, "fence.i\n");
 }
 
 void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
 {
-    if (ex_req->inst.base.opcode == OPCODE_LUI) {
+    u32 opcode = ex_req->inst.base.opcode;
+    if (opcode == OPCODE_LUI) {
         CALL_MISC_HANDLER(lui, exu, ex_req);
-    } else if (ex_req->inst.base.opcode == OPCODE_AUIPC) {
+    } else if (opcode == OPCODE_AUIPC) {
         CALL_MISC_HANDLER(auipc, exu, ex_req);
-    } else if (ex_req->inst.base.opcode == OPCODE_MISC_MEM) {
+    } else if (opcode == OPCODE_MISC_MEM) {
+        u32 funct3 = ex_req->inst.i.funct3;
+        if (funct3 == MISC_MEM_FUNCT3_FENCE) {
+            CALL_MISC_HANDLER(fence, exu, ex_req);
+        } else if (funct3 == MISC_MEM_FUNCT3_FENCE_I) {
+            CALL_MISC_HANDLER(fence_i, exu, ex_req);
+        } else {
+            DBG_CHECK(0);
+        }
         CALL_MISC_HANDLER(fence, exu, ex_req);
     } else {
         DBG_CHECK(0);

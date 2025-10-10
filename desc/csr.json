@@ -651,6 +651,11 @@
             "prop": "ur"
         },
         {
+            "name": "cycleh",
+            "addr": "0xc80",
+            "prop": "ur"
+        },
+        {
             "name": "timeh",
             "addr": "0xc81",
             "prop": "ur"

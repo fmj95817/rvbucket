@@ -17,33 +17,32 @@ void uart_free(uart_t *uart) {}
 
 void uart_clock(uart_t *uart)
 {
-    if (itf_fifo_empty(uart->bti_req_slv)) {
+    if (itf_fifo_empty(uart->apb_req_slv)) {
         return;
     }
 
-    if (itf_fifo_full(uart->bti_rsp_mst)) {
+    if (itf_fifo_full(uart->apb_rsp_mst)) {
         return;
     }
 
-    if (itf_fifo_full(uart->uart_tx)) {
+    if (itf_fifo_full(uart->uart_tx_mst)) {
         return;
     }
 
-    bti_req_if_t bti_req;
-    itf_read(uart->bti_req_slv, &bti_req);
-    DBG_CHECK(bti_req.addr >= uart->base_addr);
-    DBG_CHECK(bti_req.addr < uart->base_addr + uart->size);
+    apb_req_if_t apb_req;
+    itf_read(uart->apb_req_slv, &apb_req);
+    DBG_CHECK(apb_req.paddr >= uart->base_addr);
+    DBG_CHECK(apb_req.paddr < uart->base_addr + uart->size);
 
-    const u32 reg_addr = (bti_req.addr - uart->base_addr) >> 2u;
-    if (bti_req.cmd == BTI_CMD_WRITE && reg_addr == REG_TX_ADDR) {
+    const u32 reg_addr = (apb_req.paddr - uart->base_addr) >> 2u;
+    if (apb_req.pwrite && reg_addr == REG_TX_ADDR) {
         uart_if_t uart_if;
-        uart_if.data = bti_req.data;
-        itf_write(uart->uart_tx, &uart_if);
+        uart_if.data = apb_req.pwdata;
+        itf_write(uart->uart_tx_mst, &uart_if);
     }
 
-    bti_rsp_if_t bti_rsp;
-    bti_rsp.trans_id = bti_req.trans_id;
-    bti_rsp.ok = true;
-    bti_rsp.data = 0;
-    itf_write(uart->bti_rsp_mst, &bti_rsp);
+    apb_rsp_if_t apb_rsp;
+    apb_rsp.pslverr = false;
+    apb_rsp.prdata = 0;
+    itf_write(uart->apb_rsp_mst, &apb_rsp);
 }

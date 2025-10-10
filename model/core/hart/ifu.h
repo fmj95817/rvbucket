@@ -8,8 +8,8 @@
 #include "itf/fch_req_if.h"
 #include "itf/fch_rsp_if.h"
 #include "itf/fl_req_if.h"
-
-#define IFU_BHT_SIZE 16
+#include "itf/trap_send_if.h"
+#include "conf/hart.h"
 
 typedef struct ifu {
     itf_t *fch_req_mst;
@@ -17,6 +17,7 @@ typedef struct ifu {
     itf_t *ex_req_mst;
     itf_t *ex_rsp_slv;
     itf_t *fl_req_mst;
+    itf_t *trap_send_slv;
 
     u32 reset_pc;
 
