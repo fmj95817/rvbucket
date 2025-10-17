@@ -37,7 +37,10 @@
 
         "ext_irq": {
             "type": "vld",
-            "payloads": []
+            "payloads": [
+                { "name": "set", "width": 1 },
+                { "name": "clear", "width": 1 }
+            ]
         },
 
         "hart_expt": {

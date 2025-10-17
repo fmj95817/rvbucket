@@ -7,6 +7,7 @@
 #include "exu/exu.h"
 #include "csr.h"
 #include "hbi.h"
+#include "mmu.h"
 #include "trap.h"
 
 typedef struct hart_conf {
@@ -28,6 +29,7 @@ typedef struct hart {
     exu_t exu;
     csr_t csr;
     hbi_t hbi;
+    mmu_t mmu;
     trap_t trap;
 
     itf_t ex_req_itf;
@@ -37,6 +39,10 @@ typedef struct hart {
     itf_t fch_rsp_itf;
     itf_t ldst_req_itf;
     itf_t ldst_rsp_itf;
+    itf_t va_i_bti_req_itf;
+    itf_t va_i_bti_rsp_itf;
+    itf_t va_d_bti_req_itf;
+    itf_t va_d_bti_rsp_itf;
     itf_t hart_expt_itf;
     itf_t trap_send_itf;
 } hart_t;

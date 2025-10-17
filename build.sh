@@ -75,7 +75,7 @@ function build_sw_case {
 
     if [ "${case_name}" = "boot" ]; then
         if [ "${2}" = "model" ]; then
-            ${BIN2X} "${itcm}" c_array > model/boot.c
+            ${BIN2X} "${itcm}" c_array > model/core/boot.c
         elif [ "${2}" = "rtl" ]; then
             ${BIN2X} "${itcm}" sv_rom_header > rtl/boot.svh
             ${BIN2X} "${itcm}" sv_rom_src > rtl/boot.sv

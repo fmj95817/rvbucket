@@ -1,8 +1,6 @@
 #include "hbi.h"
 #include "dbg/chk.h"
-
-#define FCH_TRANS_ID 0
-#define LDST_TRANS_ID 1
+#include "conf/hart.h"
 
 void hbi_construct(hbi_t *hbi) {}
 

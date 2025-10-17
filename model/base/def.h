@@ -1,6 +1,8 @@
 #ifndef RV32G_DEF_H
 #define RV32G_DEF_H
 
+#include <string.h>
+
 #define KiB (1024u)
 #define MiB (1024u * 1024u)
 #define GiB (1024u * 1024u * 1024u)
