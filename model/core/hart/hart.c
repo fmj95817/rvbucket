@@ -98,6 +98,7 @@ void hart_free(hart_t *s)
 void hart_clock(hart_t *s)
 {
     s->csr.cycle = (u32)(*s->cycle);
+    s->csr.cycleh = (u32)(*s->cycle >> 32u);
 
     exu_clock(&s->exu);
     ifu_clock(&s->ifu);

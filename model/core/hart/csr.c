@@ -5,7 +5,7 @@
 void csr_reset(csr_t *csr)
 {
     csr->sstatus.raw = 0;
-    csr->sie = 0;
+    csr->sie.raw = 0;
     csr->stvec.raw = 0;
     csr->scounteren.raw = 0;
     csr->senvcfg.raw = 0;
@@ -13,15 +13,15 @@ void csr_reset(csr_t *csr)
     csr->sepc = 0;
     csr->scause.raw = 0;
     csr->stval = 0;
-    csr->sip = 0;
+    csr->sip.raw = 0;
     csr->stimecmp = 0;
     csr->stimecmph = 0;
     csr->satp.raw = 0;
     csr->mstatus.raw = 0;
-    csr->misa.raw = RV32G_CSR_MISA_I_BIT | RV32G_CSR_MISA_M_BIT | RV32G_CSR_MISA_A_BIT | RV32G_CSR_MISA_U_BIT | RV32G_CSR_MISA_S_BIT;
-    csr->medeleg = 0;
-    csr->mideleg = 0;
-    csr->mie = 0;
+    csr->misa.raw = RV32G_CSR_MISA_i_BIT | RV32G_CSR_MISA_m_BIT | RV32G_CSR_MISA_a_BIT | RV32G_CSR_MISA_u_BIT | RV32G_CSR_MISA_s_BIT;
+    csr->medeleg.raw = 0;
+    csr->mideleg.raw = 0;
+    csr->mie.raw = 0;
     csr->mtvec.raw = 0;
     csr->mcounteren.raw = 0;
     csr->menvcfg.raw = 0;
@@ -49,7 +49,7 @@ void csr_reset(csr_t *csr)
     csr->mepc = 0;
     csr->mcause.raw = 0;
     csr->mtval = 0;
-    csr->mip = 0;
+    csr->mip.raw = 0;
     csr->mtinst = 0;
     csr->mtval2 = 0;
     csr->pmpcfg0 = 0;
@@ -126,7 +126,7 @@ bool csr_read(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data)
         }
         case 0x104: {
             CSR_CHECK_PRIV(RV32G_PRIV_SUPERVISOR);
-            *data = csr->sie;
+            *data = csr->sie.raw;
             return true;
         }
         case 0x105: {
@@ -166,7 +166,7 @@ bool csr_read(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data)
         }
         case 0x144: {
             CSR_CHECK_PRIV(RV32G_PRIV_SUPERVISOR);
-            *data = csr->sip;
+            *data = csr->sip.raw;
             return true;
         }
         case 0x14d: {
@@ -196,17 +196,17 @@ bool csr_read(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data)
         }
         case 0x302: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            *data = csr->medeleg;
+            *data = csr->medeleg.raw;
             return true;
         }
         case 0x303: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            *data = csr->mideleg;
+            *data = csr->mideleg.raw;
             return true;
         }
         case 0x304: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            *data = csr->mie;
+            *data = csr->mie.raw;
             return true;
         }
         case 0x305: {
@@ -346,7 +346,7 @@ bool csr_read(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data)
         }
         case 0x344: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            *data = csr->mip;
+            *data = csr->mip.raw;
             return true;
         }
         case 0x34a: {
@@ -686,7 +686,7 @@ bool csr_write(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data)
         }
         case 0x104: {
             CSR_CHECK_PRIV(RV32G_PRIV_SUPERVISOR);
-            csr->sie = data;
+            csr->sie.raw = data;
             return true;
         }
         case 0x105: {
@@ -726,7 +726,7 @@ bool csr_write(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data)
         }
         case 0x144: {
             CSR_CHECK_PRIV(RV32G_PRIV_SUPERVISOR);
-            csr->sip = data;
+            csr->sip.raw = data;
             return true;
         }
         case 0x14d: {
@@ -756,17 +756,17 @@ bool csr_write(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data)
         }
         case 0x302: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            csr->medeleg = data;
+            csr->medeleg.raw = data;
             return true;
         }
         case 0x303: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            csr->mideleg = data;
+            csr->mideleg.raw = data;
             return true;
         }
         case 0x304: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            csr->mie = data;
+            csr->mie.raw = data;
             return true;
         }
         case 0x305: {
@@ -906,7 +906,7 @@ bool csr_write(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data)
         }
         case 0x344: {
             CSR_CHECK_PRIV(RV32G_PRIV_MACHINE);
-            csr->mip = data;
+            csr->mip.raw = data;
             return true;
         }
         case 0x34a: {

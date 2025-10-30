@@ -79,6 +79,11 @@ typedef enum rv32g_csr_scause_intr {
 #define RV32G_CSR_SSTATUS_SDT_BIT (1u << 24)
 #define RV32G_CSR_SSTATUS_SD_BIT (1u << 31)
 
+#define RV32G_CSR_SIE_SSIE_BIT (1u << 1)
+#define RV32G_CSR_SIE_STIE_BIT (1u << 5)
+#define RV32G_CSR_SIE_SEIE_BIT (1u << 9)
+#define RV32G_CSR_SIE_LCOFIE_BIT (1u << 13)
+
 #define RV32G_CSR_SCOUNTEREN_CY_BIT (1u << 0)
 #define RV32G_CSR_SCOUNTEREN_TM_BIT (1u << 1)
 #define RV32G_CSR_SCOUNTEREN_IR_BIT (1u << 2)
@@ -120,6 +125,11 @@ typedef enum rv32g_csr_scause_intr {
 
 #define RV32G_CSR_SCAUSE_INTERRUPT_BIT (1u << 31)
 
+#define RV32G_CSR_SIP_SSIP_BIT (1u << 1)
+#define RV32G_CSR_SIP_STIP_BIT (1u << 5)
+#define RV32G_CSR_SIP_SEIP_BIT (1u << 9)
+#define RV32G_CSR_SIP_LCOFIP_BIT (1u << 13)
+
 #define RV32G_CSR_SATP_MODE_BIT (1u << 31)
 
 #define RV32G_CSR_MSTATUS_SIE_BIT (1u << 1)
@@ -148,6 +158,40 @@ typedef enum rv32g_csr_scause_intr {
 #define RV32G_CSR_MISA_S_BIT (1u << 18)
 #define RV32G_CSR_MISA_U_BIT (1u << 20)
 #define RV32G_CSR_MISA_V_BIT (1u << 21)
+
+#define RV32G_CSR_MEDELEG_INST_ADDR_MISALIGNED_BIT (1u << 0)
+#define RV32G_CSR_MEDELEG_INST_ACCESS_FAULT_BIT (1u << 1)
+#define RV32G_CSR_MEDELEG_ILLEGAL_INST_BIT (1u << 2)
+#define RV32G_CSR_MEDELEG_BREAKPOINT_BIT (1u << 3)
+#define RV32G_CSR_MEDELEG_LOAD_ADDR_MISALIGNED_BIT (1u << 4)
+#define RV32G_CSR_MEDELEG_LOAD_ACCESS_FAULT_BIT (1u << 5)
+#define RV32G_CSR_MEDELEG_STORE_AMO_ADDR_MISALIGNED_BIT (1u << 6)
+#define RV32G_CSR_MEDELEG_STORE_AMO_ACCESS_FAULT_BIT (1u << 7)
+#define RV32G_CSR_MEDELEG_ECALL_FROM_U_BIT (1u << 8)
+#define RV32G_CSR_MEDELEG_ECALL_FROM_S_BIT (1u << 9)
+#define RV32G_CSR_MEDELEG_ECALL_FROM_M_BIT (1u << 11)
+#define RV32G_CSR_MEDELEG_INST_PAGE_FAULT_BIT (1u << 12)
+#define RV32G_CSR_MEDELEG_LOAD_PAGE_FAULT_BIT (1u << 13)
+#define RV32G_CSR_MEDELEG_STORE_AMO_PAGE_FAULT_BIT (1u << 15)
+#define RV32G_CSR_MEDELEG_DOUBLE_TRAP_BIT (1u << 16)
+#define RV32G_CSR_MEDELEG_SW_CHECK_BIT (1u << 18)
+#define RV32G_CSR_MEDELEG_HW_ERROR_BIT (1u << 19)
+
+#define RV32G_CSR_MIDELEG_S_MODE_SW_BIT (1u << 1)
+#define RV32G_CSR_MIDELEG_M_MODE_SW_BIT (1u << 3)
+#define RV32G_CSR_MIDELEG_S_MODE_TIMER_BIT (1u << 5)
+#define RV32G_CSR_MIDELEG_M_MODE_TIMER_BIT (1u << 7)
+#define RV32G_CSR_MIDELEG_S_MODE_EXT_BIT (1u << 9)
+#define RV32G_CSR_MIDELEG_M_MODE_EXT_BIT (1u << 11)
+#define RV32G_CSR_MIDELEG_COUNTER_OVERFLOW_BIT (1u << 13)
+
+#define RV32G_CSR_MIE_SSIE_BIT (1u << 1)
+#define RV32G_CSR_MIE_MSIE_BIT (1u << 3)
+#define RV32G_CSR_MIE_STIE_BIT (1u << 5)
+#define RV32G_CSR_MIE_MTIE_BIT (1u << 7)
+#define RV32G_CSR_MIE_SEIE_BIT (1u << 9)
+#define RV32G_CSR_MIE_MEIE_BIT (1u << 11)
+#define RV32G_CSR_MIE_LCOFIE_BIT (1u << 13)
 
 #define RV32G_CSR_MCOUNTEREN_CY_BIT (1u << 0)
 #define RV32G_CSR_MCOUNTEREN_TM_BIT (1u << 1)
@@ -235,6 +279,14 @@ typedef enum rv32g_csr_scause_intr {
 
 #define RV32G_CSR_MCAUSE_INTERRUPT_BIT (1u << 31)
 
+#define RV32G_CSR_MIP_SSIP_BIT (1u << 1)
+#define RV32G_CSR_MIP_MSIP_BIT (1u << 3)
+#define RV32G_CSR_MIP_STIP_BIT (1u << 5)
+#define RV32G_CSR_MIP_MTIP_BIT (1u << 7)
+#define RV32G_CSR_MIP_SEIP_BIT (1u << 9)
+#define RV32G_CSR_MIP_MEIP_BIT (1u << 11)
+#define RV32G_CSR_MIP_LCOFIP_BIT (1u << 13)
+
 #pragma pack(1)
 typedef union rv32g_csr_sstatus {
     struct {
@@ -260,6 +312,21 @@ typedef union rv32g_csr_sstatus {
     } reg;
     u32 raw;
 } rv32g_csr_sstatus_t;
+
+typedef union rv32g_csr_sie {
+    struct {
+        u32 rsvd_0 : 1;
+        u32 ssie : 1;
+        u32 rsvd_1 : 3;
+        u32 stie : 1;
+        u32 rsvd_2 : 3;
+        u32 seie : 1;
+        u32 rsvd_3 : 3;
+        u32 lcofie : 1;
+        u32 rsvd_4 : 18;
+    } reg;
+    u32 raw;
+} rv32g_csr_sie_t;
 
 typedef union rv32g_csr_stvec {
     struct {
@@ -329,6 +396,21 @@ typedef union rv32g_csr_scause {
     u32 raw;
 } rv32g_csr_scause_t;
 
+typedef union rv32g_csr_sip {
+    struct {
+        u32 rsvd_0 : 1;
+        u32 ssip : 1;
+        u32 rsvd_1 : 3;
+        u32 stip : 1;
+        u32 rsvd_2 : 3;
+        u32 seip : 1;
+        u32 rsvd_3 : 3;
+        u32 lcofip : 1;
+        u32 rsvd_4 : 18;
+    } reg;
+    u32 raw;
+} rv32g_csr_sip_t;
+
 typedef union rv32g_csr_satp {
     struct {
         u32 ppn : 22;
@@ -389,6 +471,75 @@ typedef union rv32g_csr_misa {
     } reg;
     u32 raw;
 } rv32g_csr_misa_t;
+
+typedef union rv32g_csr_medeleg {
+    struct {
+        u32 inst_addr_misaligned : 1;
+        u32 inst_access_fault : 1;
+        u32 illegal_inst : 1;
+        u32 breakpoint : 1;
+        u32 load_addr_misaligned : 1;
+        u32 load_access_fault : 1;
+        u32 store_amo_addr_misaligned : 1;
+        u32 store_amo_access_fault : 1;
+        u32 ecall_from_u : 1;
+        u32 ecall_from_s : 1;
+        u32 rsvd_0 : 1;
+        u32 ecall_from_m : 1;
+        u32 inst_page_fault : 1;
+        u32 load_page_fault : 1;
+        u32 rsvd_1 : 1;
+        u32 store_amo_page_fault : 1;
+        u32 double_trap : 1;
+        u32 rsvd_2 : 1;
+        u32 sw_check : 1;
+        u32 hw_error : 1;
+        u32 rsvd_3 : 12;
+    } reg;
+    u32 raw;
+} rv32g_csr_medeleg_t;
+
+typedef union rv32g_csr_mideleg {
+    struct {
+        u32 rsvd_0 : 1;
+        u32 s_mode_sw : 1;
+        u32 rsvd_1 : 1;
+        u32 m_mode_sw : 1;
+        u32 rsvd_2 : 1;
+        u32 s_mode_timer : 1;
+        u32 rsvd_3 : 1;
+        u32 m_mode_timer : 1;
+        u32 rsvd_4 : 1;
+        u32 s_mode_ext : 1;
+        u32 rsvd_5 : 1;
+        u32 m_mode_ext : 1;
+        u32 rsvd_6 : 1;
+        u32 counter_overflow : 1;
+        u32 rsvd_7 : 18;
+    } reg;
+    u32 raw;
+} rv32g_csr_mideleg_t;
+
+typedef union rv32g_csr_mie {
+    struct {
+        u32 rsvd_0 : 1;
+        u32 ssie : 1;
+        u32 rsvd_1 : 1;
+        u32 msie : 1;
+        u32 rsvd_2 : 1;
+        u32 stie : 1;
+        u32 rsvd_3 : 1;
+        u32 mtie : 1;
+        u32 rsvd_4 : 1;
+        u32 seie : 1;
+        u32 rsvd_5 : 1;
+        u32 meie : 1;
+        u32 rsvd_6 : 1;
+        u32 lcofie : 1;
+        u32 rsvd_7 : 18;
+    } reg;
+    u32 raw;
+} rv32g_csr_mie_t;
 
 typedef union rv32g_csr_mtvec {
     struct {
@@ -523,18 +674,34 @@ typedef union rv32g_csr_mcause {
     } reg;
     u32 raw;
 } rv32g_csr_mcause_t;
+
+typedef union rv32g_csr_mip {
+    struct {
+        u32 rsvd_0 : 1;
+        u32 ssip : 1;
+        u32 rsvd_1 : 1;
+        u32 msip : 1;
+        u32 rsvd_2 : 1;
+        u32 stip : 1;
+        u32 rsvd_3 : 1;
+        u32 mtip : 1;
+        u32 rsvd_4 : 1;
+        u32 seip : 1;
+        u32 rsvd_5 : 1;
+        u32 meip : 1;
+        u32 rsvd_6 : 1;
+        u32 lcofip : 1;
+        u32 rsvd_7 : 18;
+    } reg;
+    u32 raw;
+} rv32g_csr_mip_t;
 #pragma pack()
 
-typedef u32 rv32g_csr_sie_t;
 typedef u32 rv32g_csr_sscratch_t;
 typedef u32 rv32g_csr_sepc_t;
 typedef u32 rv32g_csr_stval_t;
-typedef u32 rv32g_csr_sip_t;
 typedef u32 rv32g_csr_stimecmp_t;
 typedef u32 rv32g_csr_stimecmph_t;
-typedef u32 rv32g_csr_medeleg_t;
-typedef u32 rv32g_csr_mideleg_t;
-typedef u32 rv32g_csr_mie_t;
 typedef u32 rv32g_csr_mcyclecfg_t;
 typedef u32 rv32g_csr_mhpmevent3_t;
 typedef u32 rv32g_csr_mhpmevent4_t;
@@ -555,7 +722,6 @@ typedef u32 rv32g_csr_mhpmevent18_t;
 typedef u32 rv32g_csr_mscratch_t;
 typedef u32 rv32g_csr_mepc_t;
 typedef u32 rv32g_csr_mtval_t;
-typedef u32 rv32g_csr_mip_t;
 typedef u32 rv32g_csr_mtinst_t;
 typedef u32 rv32g_csr_mtval2_t;
 typedef u32 rv32g_csr_pmpcfg0_t;
