@@ -18,7 +18,7 @@ void csr_reset(csr_t *csr)
     csr->stimecmph = 0;
     csr->satp.raw = 0;
     csr->mstatus.raw = 0;
-    csr->misa.raw = RV32G_CSR_MISA_i_BIT | RV32G_CSR_MISA_m_BIT | RV32G_CSR_MISA_a_BIT | RV32G_CSR_MISA_u_BIT | RV32G_CSR_MISA_s_BIT;
+    csr->misa.raw = RV32G_CSR_MISA_I_BIT | RV32G_CSR_MISA_M_BIT | RV32G_CSR_MISA_A_BIT | RV32G_CSR_MISA_U_BIT | RV32G_CSR_MISA_S_BIT;
     csr->medeleg.raw = 0;
     csr->mideleg.raw = 0;
     csr->mie.raw = 0;

@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "base/types.h"
+#include "dbg/vcd.h"
 
 typedef enum hart_expt_cause {
     HART_EXPT_CAUSE_INST_ADDR_MISALIGNED = 0,
@@ -30,6 +31,12 @@ static inline void hart_expt_if_to_str(const void *pkt, char *str)
 {
     const hart_expt_if_t *hart_expt = (const hart_expt_if_t *)pkt;
     sprintf(str, "%02x\n", (u32)hart_expt->cause);
+}
+
+static inline void hart_expt_if_reg_vcd_sig(const void *pkt)
+{
+    const hart_expt_if_t *hart_expt = (const hart_expt_if_t *)pkt;
+    dbg_vcd_add_sig("cause", DBG_SIG_TYPE_REG, 5, &hart_expt->cause);
 }
 
 #endif

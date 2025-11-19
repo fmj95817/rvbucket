@@ -86,9 +86,9 @@ static void ram_proc_port(ram_t *ram, u32 port_idx)
     bti_rsp.trans_id = bti_req.trans_id;
     u32 addr = bti_req.addr - ram->base_addr;
 
-    if (bti_req.cmd == BTI_CMD_READ) {
+    if (bti_req.cmd == BTI_REQ_CMD_READ) {
         bti_rsp.ok = ram_read(ram, addr, &bti_rsp.data);
-    } else if (bti_req.cmd == BTI_CMD_WRITE) {
+    } else if (bti_req.cmd == BTI_REQ_CMD_WRITE) {
         bti_rsp.ok = ram_write(ram, addr, bti_req.data, bti_req.strobe);
     } else {
         bti_rsp.ok = false;

@@ -53,7 +53,7 @@ static void print_vcd_header()
         "$end\n"
 
         "$version\n"
-        "    RVBucket CA model VCD\n"
+        "    RVBucket C-model VCD\n"
         "$end\n"
 
         "$timescale\n"
@@ -77,14 +77,14 @@ __attribute__((constructor)) void dbg_vcd_constructor()
     }
 }
 
-void dbg_vcd_scope_begin(const char *name)
+void dbg_vcd_scope_begin(const char *type, const char *name)
 {
     if (!g_vcd.enable) {
         return;
     }
     DBG_CHECK(g_vcd.vcd_fp);
 
-    fprintf(g_vcd.vcd_fp, "$scope module %s $end\n", name);
+    fprintf(g_vcd.vcd_fp, "$scope %s %s $end\n", type, name);
 }
 
 void dbg_vcd_set_clk(const u64 *cycle)
@@ -129,7 +129,12 @@ void dbg_vcd_add_sig(const char *name, dbg_sig_type_t type, u32 bits, const void
         [DBG_SIG_TYPE_REG] = "reg"
     };
 
-    fprintf(g_vcd.vcd_fp, "$var %s %u %s %s $end\n", type_names[type], bits, sig->token, name);
+    char bw[64] = "\0";
+    if (bits > 1u) {
+        sprintf(bw, " [%u:0]", bits - 1u);
+    }
+
+    fprintf(g_vcd.vcd_fp, "$var %s %u %s %s%s $end\n", type_names[type], bits, sig->token, name, bw);
 }
 
 void dbg_vcd_scope_end()

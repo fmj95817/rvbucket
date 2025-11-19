@@ -59,7 +59,7 @@ void rom_clock(rom_t *rom)
     bti_rsp.trans_id = bti_req.trans_id;
     u32 addr = bti_req.addr - rom->base_addr;
 
-    if (bti_req.cmd == BTI_CMD_READ) {
+    if (bti_req.cmd == BTI_REQ_CMD_READ) {
         bti_rsp.ok = rom_read(rom, addr, &bti_rsp.data);
     } else {
         bti_rsp.ok = false;

@@ -81,7 +81,7 @@ def gen_c_src(csr_desc, fp):
         if "reset" in csr:
             reset_val = csr["reset"]
             if csr["name"] == "misa":
-                reset_val = ' | '.join(["RV32G_CSR_MISA_{}_BIT".format(c) for c in reset_val])
+                reset_val = ' | '.join(["RV32G_CSR_MISA_{}_BIT".format(c.upper()) for c in reset_val])
         if "fields" in csr:
             fp.write("    csr->{}.raw = {};\n".format(csr["name"], reset_val))
         else:

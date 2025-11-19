@@ -1,5 +1,87 @@
 {
     "itfs_desc": {
+        "fch_req": {
+            "type": "vld-rdy",
+            "payloads": [
+                { "name": "pc", "width": 32 }
+            ]
+        },
+        "fch_rsp": {
+            "type": "vld-rdy",
+            "payloads": [
+                { "name": "ir", "width": 32 },
+                { "name": "ok", "width": 1 }
+            ]
+        },
+
+        "ex_req": {
+            "type": "vld-rdy",
+            "include": ["core/hart/isa.h"],
+            "payloads": [
+                { "name": "inst", "ext_type": "rv32g_inst_t", "raw": "raw", "width": 32 },
+                { "name": "pc", "width": 32 },
+                { "name": "pred_taken", "width": 1 },
+                { "name": "pred_pc", "width": 32 },
+                { "name": "is_boot_code", "width": 1 }
+            ]
+        },
+        "ex_rsp": {
+            "type": "vld-rdy",
+            "payloads": [
+                { "name": "pc", "width": 32 },
+                { "name": "taken", "width": 1 },
+                { "name": "pred_true", "width": 1 },
+                { "name": "target_pc", "width":32  }
+            ]
+        },
+
+        "fl_req": {
+            "type": "vld",
+            "payloads": []
+        },
+
+        "ldst_req": {
+            "type": "vld-rdy",
+            "payloads": [
+                { "name": "addr", "width": 32 },
+                { "name": "st", "width": 1 },
+                { "name": "data", "width": 32 },
+                { "name": "strobe", "width": 8 }
+            ]
+        },
+        "ldst_rsp": {
+            "type": "vld-rdy",
+            "payloads": [
+                { "name": "data", "width": 32 },
+                { "name": "ok", "width": 1 }
+            ]
+        },
+
+        "bti_req": {
+            "type": "vld-rdy",
+             "enums": {
+                "cmd": {
+                    "read": 0,
+                    "write": 1
+                }
+            },
+            "payloads": [
+                { "name": "trans_id", "width": 16 },
+                { "name": "cmd", "type": "cmd" },
+                { "name": "addr", "width": 32 },
+                { "name": "data", "width": 32 },
+                { "name": "strobe", "width": 8 }
+            ]
+        },
+        "bti_rsp": {
+            "type": "vld-rdy",
+            "payloads": [
+                { "name": "trans_id", "width": 16 },
+                { "name": "data", "width": 32 },
+                { "name": "ok", "width": 1 }
+            ]
+        },
+
         "apb_req": {
             "type": "none",
             "payloads": [
@@ -13,7 +95,6 @@
                 { "name": "penable", "width": 1 }
             ]
         },
-
         "apb_rsp": {
             "type": "none",
             "payloads": [

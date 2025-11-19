@@ -1,8 +1,9 @@
-#ifndef EX_RSP_IF_H
-#define EX_RSP_IF_H
+#ifndef EX_RSP_H
+#define EX_RSP_H
 
 #include <stdio.h>
 #include "base/types.h"
+#include "dbg/vcd.h"
 
 typedef struct ex_rsp_if {
     u32 pc;
@@ -14,7 +15,16 @@ typedef struct ex_rsp_if {
 static inline void ex_rsp_if_to_str(const void *pkt, char *str)
 {
     const ex_rsp_if_t *ex_rsp = (const ex_rsp_if_t *)pkt;
-    sprintf(str, "%d %x\n", ex_rsp->taken, ex_rsp->target_pc);
+    sprintf(str, "%08x %01x %01x %08x\n", ex_rsp->pc, ex_rsp->taken, ex_rsp->pred_true, ex_rsp->target_pc);
+}
+
+static inline void ex_rsp_if_reg_vcd_sig(const void *pkt)
+{
+    const ex_rsp_if_t *ex_rsp = (const ex_rsp_if_t *)pkt;
+    dbg_vcd_add_sig("pc", DBG_SIG_TYPE_REG, 32, &ex_rsp->pc);
+    dbg_vcd_add_sig("taken", DBG_SIG_TYPE_REG, 1, &ex_rsp->taken);
+    dbg_vcd_add_sig("pred_true", DBG_SIG_TYPE_REG, 1, &ex_rsp->pred_true);
+    dbg_vcd_add_sig("target_pc", DBG_SIG_TYPE_REG, 32, &ex_rsp->target_pc);
 }
 
 #endif

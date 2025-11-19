@@ -16,6 +16,12 @@ static inline void uart_if_to_str(const void *pkt, char *str)
     sprintf(str, "%x\n", uart_if->data);
 }
 
+static inline void uart_if_reg_vcd_sig(const void *pkt)
+{
+    const uart_if_t *uart_if = (const uart_if_t *)pkt;
+    dbg_vcd_add_sig("data", DBG_SIG_TYPE_REG, 32, &uart_if->data);
+}
+
 typedef struct uart {
     itf_t *apb_req_slv;
     itf_t *apb_rsp_mst;

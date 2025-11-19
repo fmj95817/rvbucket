@@ -1,17 +1,18 @@
-#ifndef BTI_REQ_IF_H
-#define BTI_REQ_IF_H
+#ifndef BTI_REQ_H
+#define BTI_REQ_H
 
 #include <stdio.h>
 #include "base/types.h"
+#include "dbg/vcd.h"
 
-typedef enum bti_cmd {
-    BTI_CMD_READ = 0,
-    BTI_CMD_WRITE = 1
-} bti_cmd_t;
+typedef enum bti_req_cmd {
+    BTI_REQ_CMD_READ = 0,
+    BTI_REQ_CMD_WRITE = 1,
+} bti_req_cmd_t;
 
 typedef struct bti_req_if {
-    u32 trans_id;
-    bti_cmd_t cmd;
+    u16 trans_id;
+    bti_req_cmd_t cmd;
     u32 addr;
     u32 data;
     u8 strobe;
@@ -20,8 +21,17 @@ typedef struct bti_req_if {
 static inline void bti_req_if_to_str(const void *pkt, char *str)
 {
     const bti_req_if_t *bti_req = (const bti_req_if_t *)pkt;
-    sprintf(str, "%u %d %x %x %x\n", bti_req->trans_id,
-        bti_req->cmd, bti_req->addr, bti_req->data, bti_req->strobe);
+    sprintf(str, "%04x %01x %08x %08x %02x\n", bti_req->trans_id, (u32)bti_req->cmd, bti_req->addr, bti_req->data, bti_req->strobe);
+}
+
+static inline void bti_req_if_reg_vcd_sig(const void *pkt)
+{
+    const bti_req_if_t *bti_req = (const bti_req_if_t *)pkt;
+    dbg_vcd_add_sig("trans_id", DBG_SIG_TYPE_REG, 16, &bti_req->trans_id);
+    dbg_vcd_add_sig("cmd", DBG_SIG_TYPE_REG, 1, &bti_req->cmd);
+    dbg_vcd_add_sig("addr", DBG_SIG_TYPE_REG, 32, &bti_req->addr);
+    dbg_vcd_add_sig("data", DBG_SIG_TYPE_REG, 32, &bti_req->data);
+    dbg_vcd_add_sig("strobe", DBG_SIG_TYPE_REG, 8, &bti_req->strobe);
 }
 
 #endif

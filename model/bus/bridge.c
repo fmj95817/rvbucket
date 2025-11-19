@@ -29,7 +29,7 @@ static void bti2apb_proc_req(bti2apb_t *br)
 
     apb_req_if_t apb_req = {
         .paddr = bti_req.addr,
-        .pwrite = (bti_req.cmd == BTI_CMD_WRITE),
+        .pwrite = (bti_req.cmd == BTI_REQ_CMD_WRITE),
         .pwdata = bti_req.data,
         .pstrb = bti_req.strobe
     };

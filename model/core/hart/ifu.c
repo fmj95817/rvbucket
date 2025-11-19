@@ -18,15 +18,13 @@ void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_siz
     ifu->perf.branch = dbg_pcm_reg_perf_cnt("ifu_branch");
     ifu->perf.pred_true = dbg_pcm_reg_perf_cnt("ifu_pred_true");
 
-    dbg_vcd_scope_begin("ifu");
-    dbg_vcd_add_sig("fch.pc", DBG_SIG_TYPE_REG, 32, &ifu->fch.pc);
-    dbg_vcd_add_sig("fch.pend", DBG_SIG_TYPE_REG, 1, &ifu->fch.pend);
-    dbg_vcd_add_sig("fch.vld", DBG_SIG_TYPE_REG, 1, &ifu->fch.vld);
-    dbg_vcd_add_sig("issue.vld", DBG_SIG_TYPE_REG, 1, &ifu->issue.vld);
-    dbg_vcd_add_sig("issue.pc", DBG_SIG_TYPE_REG, 32, &ifu->issue.pc);
-    dbg_vcd_add_sig("resume.vld", DBG_SIG_TYPE_REG, 1, &ifu->resume.vld);
-    dbg_vcd_add_sig("resume.pc", DBG_SIG_TYPE_REG, 32, &ifu->resume.pc);
-    dbg_vcd_scope_end();
+    dbg_vcd_add_sig("fch_pc", DBG_SIG_TYPE_REG, 32, &ifu->fch.pc);
+    dbg_vcd_add_sig("fch_pend", DBG_SIG_TYPE_REG, 1, &ifu->fch.pend);
+    dbg_vcd_add_sig("fch_vld", DBG_SIG_TYPE_REG, 1, &ifu->fch.vld);
+    dbg_vcd_add_sig("issue_vld", DBG_SIG_TYPE_REG, 1, &ifu->issue.vld);
+    dbg_vcd_add_sig("issue_pc", DBG_SIG_TYPE_REG, 32, &ifu->issue.pc);
+    dbg_vcd_add_sig("resume_vld", DBG_SIG_TYPE_REG, 1, &ifu->resume.vld);
+    dbg_vcd_add_sig("resume_pc", DBG_SIG_TYPE_REG, 32, &ifu->resume.pc);
 }
 
 void ifu_reset(ifu_t *ifu)

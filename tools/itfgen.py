@@ -11,7 +11,12 @@ def gen_c_itf(itf_name, desc):
     f.write("#define {}_H\n\n".format(itf_name.upper()))
 
     f.write("#include <stdio.h>\n")
-    f.write("#include \"base/types.h\"\n\n")
+    f.write("#include \"base/types.h\"\n")
+    f.write("#include \"dbg/vcd.h\"\n")
+    if "include" in desc and len(desc["include"]) > 0:
+        for inc in desc["include"]:
+            f.write("#include \"{}\"\n".format(inc))
+    f.write("\n")
 
     enums_bw = {}
     if "enums" in desc:
@@ -32,24 +37,26 @@ def gen_c_itf(itf_name, desc):
         field_name = p["name"]
         if "type" in p:
             f.write("    {}_{}_t {};\n".format(itf_name, p["type"], field_name))
+        elif "ext_type" in p:
+            f.write("    {} {};\n".format(p["ext_type"], field_name))
         else:
             bw = p["width"]
             if bw == 1:
                 f.write("    bool {};\n".format(field_name))
             elif bw > 1 and bw < 8:
-                f.write("    u8 {} : {};\n".format(field_name, bw))
+                f.write("    u8 {}; /* {}-bit */\n".format(field_name, bw))
             elif bw == 8:
                 f.write("    u8 {};\n".format(field_name))
             elif bw > 8 and bw < 16:
-                f.write("    u16 {} : {};\n".format(field_name, bw))
+                f.write("    u16 {}; /* {}-bit */\n".format(field_name, bw))
             elif bw == 16:
                 f.write("    u16 {};\n".format(field_name))
             elif bw > 16 and bw < 32:
-                f.write("    u32 {} : {};\n".format(field_name, bw))
+                f.write("    u32 {}; /* {}-bit */\n".format(field_name, bw))
             elif bw == 32:
                 f.write("    u32 {};\n".format(field_name))
             elif bw > 32 and bw < 64:
-                f.write("    u64 {} : {};\n".format(field_name, bw))
+                f.write("    u64 {}; /* {}-bit */\n".format(field_name, bw))
             elif bw == 64:
                 f.write("    u64 {};\n".format(field_name))
             else:
@@ -79,6 +86,8 @@ def gen_c_itf(itf_name, desc):
         if "type" in p:
             f.write("(u32)")
         f.write("{}->{}".format(itf_name, field_name))
+        if "ext_type" in p:
+            f.write(".{}".format(p["raw"]))
         if payload_idx < (payload_num - 1):
             f.write(", ")
         else:
@@ -86,6 +95,19 @@ def gen_c_itf(itf_name, desc):
         payload_idx += 1
     if payload_num == 0:
         f.write("%08x\\n\", {}->dummy);\n".format(itf_name))
+    f.write("}\n\n")
+
+    f.write("static inline void {}_if_reg_vcd_sig(const void *pkt)\n".format(itf_name))
+    f.write("{\n")
+    f.write("    const {}_if_t *{} = (const {}_if_t *)pkt;\n".format(itf_name, itf_name, itf_name))
+    for p in desc["payloads"]:
+        field_name = p["name"]
+        if "ext_type" in p:
+            field_name = "{}.{}".format(field_name, p["raw"])
+        bw = enums_bw[p["type"]] if "type" in p else p["width"]
+        f.write("    dbg_vcd_add_sig(\"{}\", DBG_SIG_TYPE_REG, {}, &{}->{});\n".format(p["name"], bw, itf_name, field_name))
+    if payload_num == 0:
+        f.write("    dbg_vcd_add_sig(\"dummy\", DBG_SIG_TYPE_REG, 32, &{}->dummy);\n".format(itf_name))
     f.write("}\n\n")
 
     f.write("#endif\n")
