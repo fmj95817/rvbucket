@@ -3,12 +3,10 @@
 
 #include "base/types.h"
 
-#define DBG_VCD_MODULE_SCOPE(name, expr) \
-do { \
-    dbg_vcd_scope_begin("module", name); \
-    expr; \
-    dbg_vcd_scope_end(); \
-} while (0)
+#define DBG_VCD_MODULE_SCOPE(name) \
+    __attribute__((cleanup(dbg_vcd_scope_cleanup))) \
+    void *_dummy_ptr_ = NULL; \
+    dbg_vcd_scope_begin("module", name)
 
 typedef enum dbg_sig_type {
     DBG_SIG_TYPE_WIRE = 0,
@@ -21,5 +19,11 @@ extern void dbg_vcd_add_sig(const char *name, dbg_sig_type_t type, u32 bits, con
 extern void dbg_vcd_scope_end();
 extern void dbg_vcd_reset();
 extern void dbg_vcd_clock();
+
+static inline void dbg_vcd_scope_cleanup(void *p)
+{
+    (void)p;
+    dbg_vcd_scope_end();
+}
 
 #endif

@@ -22,7 +22,7 @@ typedef struct hbi {
     itf_t *ldst_rsp_mst;
 } hbi_t;
 
-extern void hbi_construct(hbi_t *hbi);
+extern void hbi_construct(hbi_t *hbi, const char *name);
 extern void hbi_reset(hbi_t *hbi);
 extern void hbi_clock(hbi_t *hbi);
 extern void hbi_free(hbi_t *hbi);

@@ -4,18 +4,20 @@
 #include "conf/soc.h"
 #include "dbg/vcd.h"
 
-void soc_construct(soc_t *soc)
+void soc_construct(soc_t *soc, const char *name)
 {
-    itf_construct(&soc->mm_i_bti_req_itf, soc->cycle, "mm_i_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->mm_i_bti_rsp_itf, soc->cycle, "mm_i_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->mm_d_bti_req_itf, soc->cycle, "mm_d_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->mm_d_bti_rsp_itf, soc->cycle, "mm_d_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->ddr_d_bti_req_itf, soc->cycle, "ddr_d_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->ddr_d_bti_rsp_itf, soc->cycle, "ddr_d_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->flash_bti_req_itf, soc->cycle, "flash_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&soc->flash_bti_rsp_itf, soc->cycle, "flash_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&soc->uart_apb_req_itf, soc->cycle, "uart_apb_req_itf", &apb_req_if_to_str, &apb_req_if_reg_vcd_sig, sizeof(apb_req_if_t), 1);
-    itf_construct(&soc->uart_apb_rsp_itf, soc->cycle, "uart_apb_rsp_itf", &apb_rsp_if_to_str, &apb_rsp_if_reg_vcd_sig, sizeof(apb_rsp_if_t), 1);
+    DBG_VCD_MODULE_SCOPE(name);
+
+    BTI_REQ_IF_CONSTRUCT(soc, mm_i_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(soc, mm_i_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(soc, mm_d_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(soc, mm_d_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(soc, ddr_d_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(soc, ddr_d_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(soc, flash_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(soc, flash_bti_rsp_itf, 1);
+    APB_REQ_IF_CONSTRUCT(soc, uart_apb_req_itf, 1);
+    APB_RSP_IF_CONSTRUCT(soc, uart_apb_rsp_itf, 1);
 
     soc->cpu.cycle = soc->cycle;
     soc->cpu.mm_i_bti_req_mst = &soc->mm_i_bti_req_itf;
@@ -50,17 +52,17 @@ void soc_construct(soc_t *soc)
         .plic_base = PLIC_BASE,
         .plic_size = PLIC_SIZE
     };
-    DBG_VCD_MODULE_SCOPE("u_rv32g_cpu", rv32g_construct(&soc->cpu, &rv32g_conf));
+    rv32g_construct(&soc->cpu, "u_rv32g_cpu", &rv32g_conf);
 
     soc->flash.bti_req_slv = &soc->flash_bti_req_itf;
     soc->flash.bti_rsp_mst = &soc->flash_bti_rsp_itf;
-    DBG_VCD_MODULE_SCOPE("u_flash", rom_construct(&soc->flash, FLASH_SIZE, NULL, 0, FLASH_BASE));
+    rom_construct(&soc->flash, "u_flash", FLASH_SIZE, NULL, 0, FLASH_BASE);
 
     soc->uart.apb_req_slv = &soc->uart_apb_req_itf;
     soc->uart.apb_rsp_mst = &soc->uart_apb_rsp_itf;
     soc->uart.uart_tx_mst = soc->uart_tx_mst;
     soc->uart.uart_rx_slv = soc->uart_rx_slv;
-    DBG_VCD_MODULE_SCOPE("u_uart", uart_construct(&soc->uart, UART_BASE, UART_SIZE));
+    uart_construct(&soc->uart, "u_uart", UART_BASE, UART_SIZE);
 
     soc->mm_d_bti_demux.host_bti_req_slv = &soc->mm_d_bti_req_itf;
     soc->mm_d_bti_demux.host_bti_rsp_mst = &soc->mm_d_bti_rsp_itf;
@@ -70,7 +72,7 @@ void soc_construct(soc_t *soc)
     soc->mm_d_bti_demux.gst_bti_rsp_slvs[1] = &soc->flash_bti_rsp_itf;
     const u32 mm_d_bti_gst_bases[] = { DDR_BASE, FLASH_BASE };
     const u32 mm_d_bti_gst_sizes[] = { DDR_SIZE, FLASH_SIZE };
-    DBG_VCD_MODULE_SCOPE("u_mm_d_bti_demux", bti_demux_construct(&soc->mm_d_bti_demux, 2, mm_d_bti_gst_bases, mm_d_bti_gst_sizes));
+    bti_demux_construct(&soc->mm_d_bti_demux, "u_mm_d_bti_demux", 2, mm_d_bti_gst_bases, mm_d_bti_gst_sizes);
 
     soc->ddr_bti_mux.host_bti_req_slvs[0] = &soc->mm_i_bti_req_itf;
     soc->ddr_bti_mux.host_bti_rsp_msts[0] = &soc->mm_i_bti_rsp_itf;
@@ -78,7 +80,7 @@ void soc_construct(soc_t *soc)
     soc->ddr_bti_mux.host_bti_rsp_msts[1] = &soc->ddr_d_bti_rsp_itf;
     soc->ddr_bti_mux.gst_bti_req_mst = soc->ddr_bti_req_mst;
     soc->ddr_bti_mux.gst_bti_rsp_slv = soc->ddr_bti_rsp_slv;
-    DBG_VCD_MODULE_SCOPE("u_ddr_bti_mux", bti_mux_construct(&soc->ddr_bti_mux, 2));
+    bti_mux_construct(&soc->ddr_bti_mux, "u_ddr_bti_mux", 2);
 }
 
 void soc_reset(soc_t *soc)

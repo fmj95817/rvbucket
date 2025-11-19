@@ -22,7 +22,8 @@ typedef struct bti_demux {
     u32 gst_sizes[BTI_DEMUX_GST_NUM_MAX];
 } bti_demux_t;
 
-extern void bti_demux_construct(bti_demux_t *bti_demux, u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes);
+extern void bti_demux_construct(bti_demux_t *bti_demux, const char *name,
+    u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes);
 extern void bti_demux_reset(bti_demux_t *bti_demux);
 extern void bti_demux_clock(bti_demux_t *bti_demux);
 extern void bti_demux_free(bti_demux_t *bti_demux);
@@ -38,7 +39,8 @@ typedef struct apb_demux {
     u32 gst_sizes[APB_DEMUX_GST_NUM_MAX];
 } apb_demux_t;
 
-extern void apb_demux_construct(apb_demux_t *apb_demux, u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes);
+extern void apb_demux_construct(apb_demux_t *apb_demux, const char *name,
+    u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes);
 extern void apb_demux_reset(apb_demux_t *apb_demux);
 extern void apb_demux_clock(apb_demux_t *apb_demux);
 extern void apb_demux_free(apb_demux_t *apb_demux);

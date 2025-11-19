@@ -1,9 +1,11 @@
-#ifndef BTI_REQ_H
-#define BTI_REQ_H
+#ifndef BTI_REQ_IF_H
+#define BTI_REQ_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define BTI_REQ_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), depth)
 
 typedef enum bti_req_cmd {
     BTI_REQ_CMD_READ = 0,

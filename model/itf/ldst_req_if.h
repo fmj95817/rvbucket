@@ -1,9 +1,11 @@
-#ifndef LDST_REQ_H
-#define LDST_REQ_H
+#ifndef LDST_REQ_IF_H
+#define LDST_REQ_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define LDST_REQ_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &ldst_req_if_to_str, &ldst_req_if_reg_vcd_sig, sizeof(ldst_req_if_t), depth)
 
 typedef struct ldst_req_if {
     u32 addr;

@@ -78,7 +78,7 @@ typedef struct rv32g {
     itf_t hart_d_bti_rsp_itf;
 } rv32g_t;
 
-extern void rv32g_construct(rv32g_t *s, const rv32g_conf_t *conf);
+extern void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf);
 extern void rv32g_reset(rv32g_t *s);
 extern void rv32g_clock(rv32g_t *s);
 extern void rv32g_free(rv32g_t *s);

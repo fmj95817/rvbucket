@@ -1,10 +1,12 @@
-#ifndef EX_REQ_H
-#define EX_REQ_H
+#ifndef EX_REQ_IF_H
+#define EX_REQ_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
 #include "core/hart/isa.h"
+
+#define EX_REQ_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &ex_req_if_to_str, &ex_req_if_reg_vcd_sig, sizeof(ex_req_if_t), depth)
 
 typedef struct ex_req_if {
     rv32g_inst_t inst;

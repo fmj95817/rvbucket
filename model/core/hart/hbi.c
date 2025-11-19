@@ -1,8 +1,12 @@
 #include "hbi.h"
 #include "dbg/chk.h"
+#include "dbg/vcd.h"
 #include "conf/hart.h"
 
-void hbi_construct(hbi_t *hbi) {}
+void hbi_construct(hbi_t *hbi, const char *name)
+{
+    DBG_VCD_MODULE_SCOPE(name);
+}
 
 void hbi_reset(hbi_t *hbi) {}
 

@@ -1,6 +1,7 @@
 #include "exu.h"
 #include "dbg/chk.h"
 #include "dbg/log.h"
+#include "dbg/vcd.h"
 
 static inline void print_split_line(bool newline)
 {
@@ -106,8 +107,10 @@ void exu_clock(exu_t *exu)
     exu_proc_biu_rsp(exu);
 }
 
-void exu_construct(exu_t *exu, rv32g_priv_t *priv, csr_t *csr)
+void exu_construct(exu_t *exu, const char *name, rv32g_priv_t *priv, csr_t *csr)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     exu->priv = priv;
     exu->csr = csr;
 }

@@ -210,6 +210,13 @@
             "payloads": [
                 { "name": "target_pc", "width": 32 }
             ]
+        },
+
+        "uart": {
+            "type": "vld",
+            "payloads": [
+                { "name": "data", "width": 32 }
+            ]
         }
     }
 }

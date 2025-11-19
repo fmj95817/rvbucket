@@ -8,7 +8,7 @@
 
 #define ITF_DUMP_DIR "itf_dump"
 #define ITF_DUMP_ENV "ITF_DUMP"
-#define ITF_TRACE_ENV "ITF_VCD"
+#define ITF_VCD_ENV "ITF_VCD"
 
 static inline void *get_pkt_addr(itf_t *itf, u32 index)
 {
@@ -20,13 +20,17 @@ void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt
     DBG_CHECK(pkt2str != NULL);
     DBG_CHECK(reg_vcd_sig != NULL);
 
-    itf->pkt_size = pkt_size;
-    itf->fifo_depth = fifo_depth;
-
     itf->cycle = cycle;
 
+    itf->pkt_size = pkt_size;
+    itf->fifo_depth = fifo_depth;
+    itf->pkts_data = malloc(pkt_size * fifo_depth);
+    itf->pkt_num = 0;
+    itf->rptr = 0;
+    itf->wptr = 0;
+
     itf->dump_enable = dbg_get_bool_env(ITF_DUMP_ENV);
-    itf->trace_enable = dbg_get_bool_env(ITF_TRACE_ENV);
+    itf->vcd_enable = dbg_get_bool_env(ITF_VCD_ENV);
     itf->name = name;
     itf->pkt2str = pkt2str;
     itf->reg_vcd_sig = reg_vcd_sig;
@@ -50,12 +54,7 @@ void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt
         itf->dump_mst_fp = NULL;
     }
 
-    itf->pkts_data = malloc(pkt_size * fifo_depth);
-    itf->pkt_num = 0;
-    itf->rptr = 0;
-    itf->wptr = 0;
-
-    if (itf->trace_enable) {
+    if (itf->vcd_enable) {
         itf->pkts_pend_mask = malloc(sizeof(bool) * fifo_depth);
         memset(itf->pkts_pend_mask, 0, fifo_depth);
 
@@ -130,7 +129,7 @@ void itf_write(itf_t *itf, const void *pkt)
 {
     DBG_CHECK(itf->pkt_num < itf->fifo_depth);
 
-    if (itf->trace_enable) {
+    if (itf->vcd_enable) {
         memcpy(itf->write_pkt, pkt, itf->pkt_size);
         itf->pkts_pend_mask[itf->wptr] = true;
         itf->write_vld = true;
@@ -155,7 +154,7 @@ void itf_read(itf_t *itf, void *pkt)
 {
     DBG_CHECK(itf->pkt_num > 0);
 
-    if (itf->trace_enable) {
+    if (itf->vcd_enable) {
         memcpy(itf->read_pkt, get_pkt_addr(itf, itf->rptr), itf->pkt_size);
         itf->pkts_pend_mask[itf->rptr] = false;
         itf->read_vld = true;
@@ -186,7 +185,7 @@ void itf_fifo_pop_front(itf_t *itf)
 {
     DBG_CHECK(itf->pkt_num > 0);
 
-    if (itf->trace_enable) {
+    if (itf->vcd_enable) {
         memcpy(itf->read_pkt, get_pkt_addr(itf, itf->rptr), itf->pkt_size);
         itf->pkts_pend_mask[itf->rptr] = false;
         itf->read_vld = true;
@@ -218,7 +217,7 @@ bool itf_fifo_full(itf_t *itf)
 
 void itf_dbg_clock(itf_t *itf)
 {
-    if (!itf->trace_enable) {
+    if (!itf->vcd_enable) {
         return;
     }
 

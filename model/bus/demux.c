@@ -1,9 +1,13 @@
 #include "demux.h"
 #include "base/def.h"
 #include "dbg/chk.h"
+#include "dbg/vcd.h"
 
-void bti_demux_construct(bti_demux_t *bti_demux, u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
+void bti_demux_construct(bti_demux_t *bti_demux, const char *name,
+    u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     DBG_CHECK(gst_num <= BTI_DEMUX_GST_NUM_MAX);
     bti_demux->gst_num = gst_num;
 
@@ -75,8 +79,11 @@ void bti_demux_clock(bti_demux_t *bti_demux)
 
 void bti_demux_free(bti_demux_t *bti_demux) {}
 
-void apb_demux_construct(apb_demux_t *apb_demux, u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
+void apb_demux_construct(apb_demux_t *apb_demux, const char *name,
+    u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     DBG_CHECK(gst_num <= APB_DEMUX_GST_NUM_MAX);
     apb_demux->gst_num = gst_num;
 

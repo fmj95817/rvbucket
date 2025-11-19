@@ -39,21 +39,22 @@ static void soc_burn_program(soc_t *soc, const char *path)
     free(program.code);
 }
 
-static void sim_top_construct(sim_top_t *sim_top, const char *prog_path)
+static void sim_top_construct(sim_top_t *sim_top, const char *name, const char *prog_path)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     sim_top->cycle = dbg_pcm_reg_perf_cnt("cycles");
-    itf_construct(&sim_top->uart_rx_itf, sim_top->cycle,
-        "uart_rx_itf", &uart_if_to_str, &uart_if_reg_vcd_sig, sizeof(uart_if_t), 1);
 
-    dbg_vcd_set_clk(sim_top->cycle);
-    dbg_vcd_add_sig("cycle", DBG_SIG_TYPE_REG, 64, sim_top->cycle);
-
+    UART_IF_CONSTRUCT(sim_top, uart_rx_itf, 1);
     sim_top->soc.cycle = sim_top->cycle;
     sim_top->soc.ddr_bti_req_mst = NULL;
     sim_top->soc.ddr_bti_rsp_slv = NULL;
     sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
     sim_top->soc.uart_rx_slv = NULL;
-    DBG_VCD_MODULE_SCOPE("u_soc", soc_construct(&sim_top->soc));
+    soc_construct(&sim_top->soc, "u_soc");
+
+    dbg_vcd_set_clk(sim_top->cycle);
+    dbg_vcd_add_sig("cycle", DBG_SIG_TYPE_REG, 64, sim_top->cycle);
 
     soc_burn_program(&sim_top->soc, prog_path);
 }
@@ -103,7 +104,7 @@ int main(int argc, char *argv[])
 
     sim_top_t sim_top;
 
-    DBG_VCD_MODULE_SCOPE("u_sim_top", sim_top_construct(&sim_top, argv[1]));
+    sim_top_construct(&sim_top, "sim_top", argv[1]);
     sim_top_reset(&sim_top);
 
     while (!sim_top.end_sim) {

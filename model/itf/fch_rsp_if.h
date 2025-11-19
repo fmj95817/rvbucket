@@ -1,9 +1,11 @@
-#ifndef FCH_RSP_H
-#define FCH_RSP_H
+#ifndef FCH_RSP_IF_H
+#define FCH_RSP_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define FCH_RSP_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &fch_rsp_if_to_str, &fch_rsp_if_reg_vcd_sig, sizeof(fch_rsp_if_t), depth)
 
 typedef struct fch_rsp_if {
     u32 ir;

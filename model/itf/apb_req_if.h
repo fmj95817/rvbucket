@@ -1,15 +1,17 @@
-#ifndef APB_REQ_H
-#define APB_REQ_H
+#ifndef APB_REQ_IF_H
+#define APB_REQ_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
 
+#define APB_REQ_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &apb_req_if_to_str, &apb_req_if_reg_vcd_sig, sizeof(apb_req_if_t), depth)
+
 typedef struct apb_req_if {
     u32 paddr;
     bool pwrite;
     u32 pwdata;
-    u8 pstrb; /* 4-bit */
+    u8 pstrb; // 4-bit
 } apb_req_if_t;
 
 static inline void apb_req_if_to_str(const void *pkt, char *str)

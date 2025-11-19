@@ -1,9 +1,11 @@
-#ifndef LDST_RSP_H
-#define LDST_RSP_H
+#ifndef LDST_RSP_IF_H
+#define LDST_RSP_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define LDST_RSP_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &ldst_rsp_if_to_str, &ldst_rsp_if_reg_vcd_sig, sizeof(ldst_rsp_if_t), depth)
 
 typedef struct ldst_rsp_if {
     u32 data;

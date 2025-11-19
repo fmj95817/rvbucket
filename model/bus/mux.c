@@ -1,8 +1,9 @@
 #include "mux.h"
+#include "dbg/vcd.h"
 
-void bti_mux_construct(bti_mux_t *bti_mux, u32 host_num)
+void bti_mux_construct(bti_mux_t *bti_mux, const char *name, u32 host_num)
 {
-
+    DBG_VCD_MODULE_SCOPE(name);
 }
 
 void bti_mux_reset(bti_mux_t *bti_mux)

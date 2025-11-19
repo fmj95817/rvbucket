@@ -72,7 +72,7 @@ typedef struct cbi {
     itf_t cfg_apb_rsp_itf;
 } cbi_t;
 
-extern void cbi_construct(cbi_t *cbi, const cbi_conf_t *conf);
+extern void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf);
 extern void cbi_reset(cbi_t *cbi);
 extern void cbi_clock(cbi_t *cbi);
 extern void cbi_free(cbi_t *cbi);

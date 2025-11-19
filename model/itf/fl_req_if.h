@@ -1,9 +1,11 @@
-#ifndef FL_REQ_H
-#define FL_REQ_H
+#ifndef FL_REQ_IF_H
+#define FL_REQ_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define FL_REQ_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &fl_req_if_to_str, &fl_req_if_reg_vcd_sig, sizeof(fl_req_if_t), depth)
 
 typedef struct fl_req_if {
     u32 dummy;

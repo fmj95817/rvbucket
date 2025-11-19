@@ -1,9 +1,11 @@
-#ifndef BTI_RSP_H
-#define BTI_RSP_H
+#ifndef BTI_RSP_IF_H
+#define BTI_RSP_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define BTI_RSP_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), depth)
 
 typedef struct bti_rsp_if {
     u16 trans_id;

@@ -63,7 +63,7 @@ typedef struct ifu {
     } perf;
 } ifu_t;
 
-extern void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
+extern void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
 extern void ifu_reset(ifu_t *ifu);
 extern void ifu_clock(ifu_t *ifu);
 extern void ifu_free(ifu_t *ifu);

@@ -16,7 +16,7 @@ typedef struct bti2apb {
     u32 bti_trans_id;
 } bti2apb_t;
 
-extern void bti2apb_construct(bti2apb_t *br);
+extern void bti2apb_construct(bti2apb_t *br, const char *name);
 extern void bti2apb_reset(bti2apb_t *br);
 extern void bti2apb_clock(bti2apb_t *br);
 extern void bti2apb_free(bti2apb_t *br);

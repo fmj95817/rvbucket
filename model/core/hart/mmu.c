@@ -1,10 +1,11 @@
 #include "mmu.h"
 #include "base/def.h"
 #include "dbg/chk.h"
+#include "dbg/vcd.h"
 
-void mmu_construct(mmu_t *mmu, const mmu_conf_t *conf)
+void mmu_construct(mmu_t *mmu, const char *name, const mmu_conf_t *conf)
 {
-
+    DBG_VCD_MODULE_SCOPE(name);
 }
 
 void mmu_reset(mmu_t *mmu)

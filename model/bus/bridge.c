@@ -1,8 +1,11 @@
 #include "bridge.h"
 #include "dbg/chk.h"
+#include "dbg/vcd.h"
 
-void bti2apb_construct(bti2apb_t *br)
+void bti2apb_construct(bti2apb_t *br, const char *name)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     DBG_CHECK(br->bti_req_slv);
     DBG_CHECK(br->bti_rsp_mst);
     DBG_CHECK(br->apb_req_mst);

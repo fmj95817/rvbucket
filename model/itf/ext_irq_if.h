@@ -1,9 +1,11 @@
-#ifndef EXT_IRQ_H
-#define EXT_IRQ_H
+#ifndef EXT_IRQ_IF_H
+#define EXT_IRQ_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define EXT_IRQ_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &ext_irq_if_to_str, &ext_irq_if_reg_vcd_sig, sizeof(ext_irq_if_t), depth)
 
 typedef struct ext_irq_if {
     bool set;

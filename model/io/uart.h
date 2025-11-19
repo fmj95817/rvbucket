@@ -5,22 +5,7 @@
 #include "base/itf.h"
 #include "itf/apb_req_if.h"
 #include "itf/apb_rsp_if.h"
-
-typedef struct uart_if {
-    u32 data;
-} uart_if_t;
-
-static inline void uart_if_to_str(const void *pkt, char *str)
-{
-    const uart_if_t *uart_if = (const uart_if_t *)pkt;
-    sprintf(str, "%x\n", uart_if->data);
-}
-
-static inline void uart_if_reg_vcd_sig(const void *pkt)
-{
-    const uart_if_t *uart_if = (const uart_if_t *)pkt;
-    dbg_vcd_add_sig("data", DBG_SIG_TYPE_REG, 32, &uart_if->data);
-}
+#include "itf/uart_if.h"
 
 typedef struct uart {
     itf_t *apb_req_slv;
@@ -32,7 +17,7 @@ typedef struct uart {
     u32 size;
 } uart_t;
 
-extern void uart_construct(uart_t *uart, u32 base_addr, u32 size);
+extern void uart_construct(uart_t *uart, const char *name, u32 base_addr, u32 size);
 extern void uart_reset(uart_t *uart);
 extern void uart_clock(uart_t *uart);
 extern void uart_free(uart_t *uart);

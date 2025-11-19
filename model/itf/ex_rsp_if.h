@@ -1,9 +1,11 @@
-#ifndef EX_RSP_H
-#define EX_RSP_H
+#ifndef EX_RSP_IF_H
+#define EX_RSP_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define EX_RSP_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &ex_rsp_if_to_str, &ex_rsp_if_reg_vcd_sig, sizeof(ex_rsp_if_t), depth)
 
 typedef struct ex_rsp_if {
     u32 pc;

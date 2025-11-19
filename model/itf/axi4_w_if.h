@@ -1,13 +1,15 @@
-#ifndef AXI4_W_H
-#define AXI4_W_H
+#ifndef AXI4_W_IF_H
+#define AXI4_W_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
 
+#define AXI4_W_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &axi4_w_if_to_str, &axi4_w_if_reg_vcd_sig, sizeof(axi4_w_if_t), depth)
+
 typedef struct axi4_w_if {
     u32 data;
-    u8 strb; /* 4-bit */
+    u8 strb; // 4-bit
     bool last;
 } axi4_w_if_t;
 

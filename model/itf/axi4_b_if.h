@@ -1,13 +1,15 @@
-#ifndef AXI4_B_H
-#define AXI4_B_H
+#ifndef AXI4_B_IF_H
+#define AXI4_B_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
 
+#define AXI4_B_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &axi4_b_if_to_str, &axi4_b_if_reg_vcd_sig, sizeof(axi4_b_if_t), depth)
+
 typedef struct axi4_b_if {
     u8 id;
-    u8 resp; /* 2-bit */
+    u8 resp; // 2-bit
 } axi4_b_if_t;
 
 static inline void axi4_b_if_to_str(const void *pkt, char *str)

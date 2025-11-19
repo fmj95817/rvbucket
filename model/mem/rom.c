@@ -2,9 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "dbg/chk.h"
+#include "dbg/vcd.h"
 
-void rom_construct(rom_t *rom, u32 size, const void *data, u32 data_size, u32 base_addr)
+void rom_construct(rom_t *rom, const char *name,
+    u32 size, const void *data, u32 data_size, u32 base_addr)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     rom->size = size;
     rom->data = malloc(size + 3);
     DBG_CHECK(rom->data);

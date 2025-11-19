@@ -8,10 +8,14 @@ typedef void (*pkt2str_t)(const void *, char *);
 typedef void (*pkt_reg_vcd_sig_t)(const void *);
 
 typedef struct itf {
+    const u64 *cycle;
+
     u32 pkt_size;
     u32 fifo_depth;
-
-    const u64 *cycle;
+    void *pkts_data;
+    u32 pkt_num;
+    u32 rptr;
+    u32 wptr;
 
     bool dump_enable;
     const char *name;
@@ -19,15 +23,9 @@ typedef struct itf {
     FILE *dump_slv_fp;
     FILE *dump_mst_fp;
 
-    bool trace_enable;
+    bool vcd_enable;
     pkt_reg_vcd_sig_t reg_vcd_sig;
-
-    void *pkts_data;
     bool *pkts_pend_mask;
-    u32 pkt_num;
-    u32 rptr;
-    u32 wptr;
-
     bool read_vld;
     bool write_vld;
     u64 write_cycle;

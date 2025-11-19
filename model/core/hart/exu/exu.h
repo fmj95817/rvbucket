@@ -46,7 +46,7 @@ typedef struct exu {
     rv32g_priv_t *priv;
 } exu_t;
 
-extern void exu_construct(exu_t *exu, rv32g_priv_t *priv, csr_t *csr);
+extern void exu_construct(exu_t *exu, const char *name, rv32g_priv_t *priv, csr_t *csr);
 extern void exu_reset(exu_t *exu);
 extern void exu_clock(exu_t *exu);
 extern void exu_free(exu_t *exu);

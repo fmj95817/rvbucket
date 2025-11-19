@@ -27,7 +27,7 @@ typedef struct aclint {
     itf_t *core_irq_mst;
 } aclint_t;
 
-extern void aclint_construct(aclint_t *aclint, const aclint_conf_t *conf);
+extern void aclint_construct(aclint_t *aclint, const char *name, const aclint_conf_t *conf);
 extern void aclint_reset(aclint_t *aclint);
 extern void aclint_clock(aclint_t *aclint);
 extern void aclint_free(aclint_t *aclint);

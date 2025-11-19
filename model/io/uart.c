@@ -1,12 +1,15 @@
 #include "uart.h"
 #include "dbg/chk.h"
+#include "dbg/vcd.h"
 
 #define REG_BC_ADDR 0u
 #define REG_TX_ADDR 1u
 #define REG_RX_ADDR 2u
 
-void uart_construct(uart_t *uart, u32 base_addr, u32 size)
+void uart_construct(uart_t *uart, const char *name, u32 base_addr, u32 size)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     uart->base_addr = base_addr;
     uart->size = size;
 }

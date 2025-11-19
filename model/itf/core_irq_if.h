@@ -1,9 +1,11 @@
-#ifndef CORE_IRQ_H
-#define CORE_IRQ_H
+#ifndef CORE_IRQ_IF_H
+#define CORE_IRQ_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define CORE_IRQ_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &core_irq_if_to_str, &core_irq_if_reg_vcd_sig, sizeof(core_irq_if_t), depth)
 
 typedef struct core_irq_if {
     bool mtimer;

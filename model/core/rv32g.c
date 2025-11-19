@@ -1,26 +1,28 @@
 #include "rv32g.h"
 #include "dbg/vcd.h"
 
-void rv32g_construct(rv32g_t *s, const rv32g_conf_t *conf)
+void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
 {
-    itf_construct(&s->boot_rom_bti_req_itf, s->cycle, "boot_rom_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&s->boot_rom_bti_rsp_itf, s->cycle, "boot_rom_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&s->itcm_i_bti_req_itf, s->cycle, "itcm_i_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&s->itcm_i_bti_rsp_itf, s->cycle, "itcm_i_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&s->itcm_d_bti_req_itf, s->cycle, "itcm_d_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&s->itcm_d_bti_rsp_itf, s->cycle, "itcm_d_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&s->dtcm_bti_req_itf, s->cycle, "dtcm_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&s->dtcm_bti_rsp_itf, s->cycle, "dtcm_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&s->aclint_cfg_apb_req_itf, s->cycle, "aclint_cfg_apb_req_itf", &apb_req_if_to_str, &apb_req_if_reg_vcd_sig, sizeof(apb_req_if_t), 1);
-    itf_construct(&s->aclint_cfg_apb_rsp_itf, s->cycle, "aclint_cfg_apb_rsp_itf", &apb_rsp_if_to_str, &apb_rsp_if_reg_vcd_sig, sizeof(apb_rsp_if_t), 1);
-    itf_construct(&s->plic_cfg_apb_req_itf, s->cycle, "plic_cfg_apb_req_itf", &apb_req_if_to_str, &apb_req_if_reg_vcd_sig, sizeof(apb_req_if_t), 1);
-    itf_construct(&s->plic_cfg_apb_rsp_itf, s->cycle, "plic_cfg_apb_rsp_itf", &apb_rsp_if_to_str, &apb_rsp_if_reg_vcd_sig, sizeof(apb_rsp_if_t), 1);
-    itf_construct(&s->hart_i_bti_req_itf, s->cycle, "hart_i_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&s->hart_i_bti_rsp_itf, s->cycle, "hart_i_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&s->hart_d_bti_req_itf, s->cycle, "hart_d_bti_req_itf", &bti_req_if_to_str, &bti_req_if_reg_vcd_sig, sizeof(bti_req_if_t), 1);
-    itf_construct(&s->hart_d_bti_rsp_itf, s->cycle, "hart_d_bti_rsp_itf", &bti_rsp_if_to_str, &bti_rsp_if_reg_vcd_sig, sizeof(bti_rsp_if_t), 1);
-    itf_construct(&s->core_irq_itf, s->cycle, "core_irq_itf", &core_irq_if_to_str, &core_irq_if_reg_vcd_sig, sizeof(core_irq_if_t), 1);
-    itf_construct(&s->conv_ext_irq_itf, s->cycle, "conv_ext_irq_itf", &ext_irq_if_to_str, &ext_irq_if_reg_vcd_sig, sizeof(ext_irq_if_t), 1);
+    DBG_VCD_MODULE_SCOPE(name);
+
+    BTI_REQ_IF_CONSTRUCT(s, boot_rom_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(s, boot_rom_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(s, itcm_i_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(s, itcm_i_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(s, itcm_d_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(s, itcm_d_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(s, dtcm_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(s, dtcm_bti_rsp_itf, 1);
+    APB_REQ_IF_CONSTRUCT(s, aclint_cfg_apb_req_itf, 1);
+    APB_RSP_IF_CONSTRUCT(s, aclint_cfg_apb_rsp_itf, 1);
+    APB_REQ_IF_CONSTRUCT(s, plic_cfg_apb_req_itf, 1);
+    APB_RSP_IF_CONSTRUCT(s, plic_cfg_apb_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(s, hart_i_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(s, hart_i_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(s, hart_d_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(s, hart_d_bti_rsp_itf, 1);
+    CORE_IRQ_IF_CONSTRUCT(s, core_irq_itf, 1);
+    EXT_IRQ_IF_CONSTRUCT(s, conv_ext_irq_itf, 1);
 
     s->hart.cycle = s->cycle;
     s->hart.i_bti_req_mst = &s->hart_i_bti_req_itf;
@@ -33,7 +35,7 @@ void rv32g_construct(rv32g_t *s, const rv32g_conf_t *conf)
         .boot_rom_base = conf->boot_rom_base,
         .boot_rom_size = conf->boot_rom_size
     };
-    DBG_VCD_MODULE_SCOPE("u_hart", hart_construct(&s->hart, &hart_conf));
+    hart_construct(&s->hart, "u_hart", &hart_conf);
 
     s->cbi.cycle = s->cycle;
     s->cbi.mm_i_bti_req_mst = s->mm_i_bti_req_mst;
@@ -76,23 +78,23 @@ void rv32g_construct(rv32g_t *s, const rv32g_conf_t *conf)
         .plic_base = conf->plic_base,
         .plic_size = conf->plic_size
     };
-    DBG_VCD_MODULE_SCOPE("u_cbi", cbi_construct(&s->cbi, &cbi_conf));
+    cbi_construct(&s->cbi, "u_cbi", &cbi_conf);
 
     s->boot_rom.bti_req_slv = &s->boot_rom_bti_req_itf;
     s->boot_rom.bti_rsp_mst = &s->boot_rom_bti_rsp_itf;
     extern u32 g_boot_code_size;
     extern u8 g_boot_code[];
-    DBG_VCD_MODULE_SCOPE("u_boot_rom", rom_construct(&s->boot_rom, conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base));
+    rom_construct(&s->boot_rom, "u_boot_rom", conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base);
 
     s->itcm.bti_req_slv[0] = &s->itcm_i_bti_req_itf;
     s->itcm.bti_rsp_mst[0] = &s->itcm_i_bti_rsp_itf;
     s->itcm.bti_req_slv[1] = &s->itcm_d_bti_req_itf;
     s->itcm.bti_rsp_mst[1] = &s->itcm_d_bti_rsp_itf;
-    DBG_VCD_MODULE_SCOPE("u_itcm", ram_construct(&s->itcm, 2, conf->itcm_size, conf->itcm_base));
+    ram_construct(&s->itcm, "u_itcm", 2, conf->itcm_size, conf->itcm_base);
 
     s->dtcm.bti_req_slv[0] = &s->dtcm_bti_req_itf;
     s->dtcm.bti_rsp_mst[0] = &s->dtcm_bti_rsp_itf;
-    DBG_VCD_MODULE_SCOPE("u_dtcm", ram_construct(&s->dtcm, 1, conf->dtcm_size, conf->dtcm_base));
+    ram_construct(&s->dtcm, "u_dtcm", 1, conf->dtcm_size, conf->dtcm_base);
 
     s->aclint.cycle= s->cycle;
     s->aclint.csr_stimecmp = &s->hart.csr.stimecmp;
@@ -110,7 +112,7 @@ void rv32g_construct(rv32g_t *s, const rv32g_conf_t *conf)
         .sswi_base = conf->aclint_sswi_base,
         .sswi_size = conf->aclint_sswi_size
     };
-    DBG_VCD_MODULE_SCOPE("u_aclint", aclint_construct(&s->aclint, &aclint_conf));
+    aclint_construct(&s->aclint, "u_aclint", &aclint_conf);
 
     s->plic.cfg_apb_req_slv = &s->plic_cfg_apb_req_itf;
     s->plic.cfg_apb_rsp_mst = &s->plic_cfg_apb_rsp_itf;
@@ -119,7 +121,7 @@ void rv32g_construct(rv32g_t *s, const rv32g_conf_t *conf)
     }
     s->plic.conv_ext_irq_mst = &s->conv_ext_irq_itf;
     plic_conf_t plic_conf = {};
-    DBG_VCD_MODULE_SCOPE("u_plic", plic_construct(&s->plic, &plic_conf));
+    plic_construct(&s->plic, "u_plic", &plic_conf);
 }
 
 void rv32g_reset(rv32g_t *s)

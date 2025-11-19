@@ -2,9 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "dbg/chk.h"
+#include "dbg/vcd.h"
 
-void ram_construct(ram_t *ram, u32 port_num, u32 size, u32 base_addr)
+void ram_construct(ram_t *ram, const char *name, u32 port_num, u32 size, u32 base_addr)
 {
+    DBG_VCD_MODULE_SCOPE(name);
+
     DBG_CHECK(port_num > 0);
     DBG_CHECK(port_num <= RAM_MAX_PORT_NUM);
 

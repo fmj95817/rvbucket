@@ -1,9 +1,11 @@
-#ifndef APB_RSP_H
-#define APB_RSP_H
+#ifndef APB_RSP_IF_H
+#define APB_RSP_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define APB_RSP_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &apb_rsp_if_to_str, &apb_rsp_if_reg_vcd_sig, sizeof(apb_rsp_if_t), depth)
 
 typedef struct apb_rsp_if {
     u32 prdata;

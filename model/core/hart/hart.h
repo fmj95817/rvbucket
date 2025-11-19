@@ -47,7 +47,7 @@ typedef struct hart {
     itf_t trap_send_itf;
 } hart_t;
 
-extern void hart_construct(hart_t *s, const hart_conf_t *conf);
+extern void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf);
 extern void hart_reset(hart_t *s);
 extern void hart_clock(hart_t *s);
 extern void hart_free(hart_t *s);

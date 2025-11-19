@@ -18,7 +18,7 @@ typedef struct plic {
     itf_t *conv_ext_irq_mst;
 } plic_t;
 
-extern void plic_construct(plic_t *plic, const plic_conf_t *conf);
+extern void plic_construct(plic_t *plic, const char *name, const plic_conf_t *conf);
 extern void plic_reset(plic_t *plic);
 extern void plic_clock(plic_t *plic);
 extern void plic_free(plic_t *plic);

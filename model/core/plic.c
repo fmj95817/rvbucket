@@ -1,8 +1,9 @@
 #include "plic.h"
+#include "dbg/vcd.h"
 
-void plic_construct(plic_t *plic, const plic_conf_t *conf)
+void plic_construct(plic_t *plic, const char *name, const plic_conf_t *conf)
 {
-
+    DBG_VCD_MODULE_SCOPE(name);
 }
 
 void plic_reset(plic_t *plic)

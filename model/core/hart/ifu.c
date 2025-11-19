@@ -6,10 +6,11 @@
 #include "dbg/pcm.h"
 #include "dbg/env.h"
 
-void ifu_construct(ifu_t *ifu, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
+void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
 {
-    ifu->reset_pc = reset_pc;
+    DBG_VCD_MODULE_SCOPE(name);
 
+    ifu->reset_pc = reset_pc;
     ifu->boot_rom_info.base = boot_rom_base;
     ifu->boot_rom_info.size = boot_rom_size;
 

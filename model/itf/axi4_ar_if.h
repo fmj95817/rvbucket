@@ -1,20 +1,22 @@
-#ifndef AXI4_AR_H
-#define AXI4_AR_H
+#ifndef AXI4_AR_IF_H
+#define AXI4_AR_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
 
+#define AXI4_AR_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &axi4_ar_if_to_str, &axi4_ar_if_reg_vcd_sig, sizeof(axi4_ar_if_t), depth)
+
 typedef struct axi4_ar_if {
     u8 id;
     u32 addr;
     u8 len;
-    u8 size; /* 3-bit */
-    u8 burst; /* 2-bit */
+    u8 size; // 3-bit
+    u8 burst; // 2-bit
     bool lock;
-    u8 cache; /* 4-bit */
-    u8 prot; /* 3-bit */
-    u8 qos; /* 4-bit */
+    u8 cache; // 4-bit
+    u8 prot; // 3-bit
+    u8 qos; // 4-bit
     u32 user;
 } axi4_ar_if_t;
 

@@ -34,7 +34,7 @@ typedef struct soc {
     itf_t uart_apb_rsp_itf;
 } soc_t;
 
-extern void soc_construct(soc_t *soc);
+extern void soc_construct(soc_t *soc, const char *name);
 extern void soc_reset(soc_t *soc);
 extern void soc_clock(soc_t *soc);
 extern void soc_free(soc_t *soc);

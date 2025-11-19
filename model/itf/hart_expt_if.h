@@ -1,9 +1,11 @@
-#ifndef HART_EXPT_H
-#define HART_EXPT_H
+#ifndef HART_EXPT_IF_H
+#define HART_EXPT_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define HART_EXPT_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &hart_expt_if_to_str, &hart_expt_if_reg_vcd_sig, sizeof(hart_expt_if_t), depth)
 
 typedef enum hart_expt_cause {
     HART_EXPT_CAUSE_INST_ADDR_MISALIGNED = 0,

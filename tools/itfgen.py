@@ -7,8 +7,8 @@ import math
 def gen_c_itf(itf_name, desc):
     c_path = "model/itf/{}_if.h".format(itf_name)
     f = open(c_path, "w")
-    f.write("#ifndef {}_H\n".format(itf_name.upper()))
-    f.write("#define {}_H\n\n".format(itf_name.upper()))
+    f.write("#ifndef {}_IF_H\n".format(itf_name.upper()))
+    f.write("#define {}_IF_H\n\n".format(itf_name.upper()))
 
     f.write("#include <stdio.h>\n")
     f.write("#include \"base/types.h\"\n")
@@ -17,6 +17,11 @@ def gen_c_itf(itf_name, desc):
         for inc in desc["include"]:
             f.write("#include \"{}\"\n".format(inc))
     f.write("\n")
+
+    f.write("#define {}_IF_CONSTRUCT(m, name, depth) ".format(itf_name.upper()))
+    f.write("itf_construct(&m->name, m->cycle, #name, ");
+    f.write("&{}_if_to_str, &{}_if_reg_vcd_sig, sizeof({}_if_t), depth)\n\n" \
+        .format(itf_name, itf_name, itf_name))
 
     enums_bw = {}
     if "enums" in desc:
@@ -44,19 +49,19 @@ def gen_c_itf(itf_name, desc):
             if bw == 1:
                 f.write("    bool {};\n".format(field_name))
             elif bw > 1 and bw < 8:
-                f.write("    u8 {}; /* {}-bit */\n".format(field_name, bw))
+                f.write("    u8 {}; // {}-bit\n".format(field_name, bw))
             elif bw == 8:
                 f.write("    u8 {};\n".format(field_name))
             elif bw > 8 and bw < 16:
-                f.write("    u16 {}; /* {}-bit */\n".format(field_name, bw))
+                f.write("    u16 {}; // {}-bit\n".format(field_name, bw))
             elif bw == 16:
                 f.write("    u16 {};\n".format(field_name))
             elif bw > 16 and bw < 32:
-                f.write("    u32 {}; /* {}-bit */\n".format(field_name, bw))
+                f.write("    u32 {}; // {}-bit\n".format(field_name, bw))
             elif bw == 32:
                 f.write("    u32 {};\n".format(field_name))
             elif bw > 32 and bw < 64:
-                f.write("    u64 {}; /* {}-bit */\n".format(field_name, bw))
+                f.write("    u64 {}; // {}-bit\n".format(field_name, bw))
             elif bw == 64:
                 f.write("    u64 {};\n".format(field_name))
             else:

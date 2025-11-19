@@ -1,9 +1,11 @@
-#ifndef TRAP_SEND_H
-#define TRAP_SEND_H
+#ifndef TRAP_SEND_IF_H
+#define TRAP_SEND_IF_H
 
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
+
+#define TRAP_SEND_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &trap_send_if_to_str, &trap_send_if_reg_vcd_sig, sizeof(trap_send_if_t), depth)
 
 typedef struct trap_send_if {
     u32 target_pc;

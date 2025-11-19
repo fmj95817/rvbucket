@@ -21,7 +21,7 @@ typedef struct mmu {
     itf_t *pa_d_bti_rsp_slv;
 } mmu_t;
 
-extern void mmu_construct(mmu_t *mmu, const mmu_conf_t *conf);
+extern void mmu_construct(mmu_t *mmu, const char *name, const mmu_conf_t *conf);
 extern void mmu_reset(mmu_t *mmu);
 extern void mmu_clock(mmu_t *mmu);
 extern void mmu_free(mmu_t *mmu);
