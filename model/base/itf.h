@@ -5,7 +5,15 @@
 #include <stdio.h>
 
 typedef void (*pkt2str_t)(const void *, char *);
-typedef void (*pkt_reg_vcd_sig_t)(const void *);
+typedef void (*pkt_reg_vcd_t)(const void *);
+
+typedef struct itf_conf {
+    const u64 *cycle;
+    pkt2str_t pkt2str;
+    pkt_reg_vcd_t reg_vcd;
+    u32 pkt_size;
+    u32 fifo_depth;
+} itf_conf_t;
 
 typedef struct itf {
     const u64 *cycle;
@@ -24,7 +32,7 @@ typedef struct itf {
     FILE *dump_mst_fp;
 
     bool vcd_enable;
-    pkt_reg_vcd_sig_t reg_vcd_sig;
+    pkt_reg_vcd_t reg_vcd;
     bool *pkts_pend_mask;
     bool read_vld;
     bool write_vld;
@@ -34,7 +42,7 @@ typedef struct itf {
     void *write_pkt;
 } itf_t;
 
-extern void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt2str, pkt_reg_vcd_sig_t reg_vcd_sig, u32 pkt_size, u32 fifo_depth);
+extern void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf);
 extern void itf_free(itf_t *itf);
 extern void itf_write(itf_t *itf, const void *pkt);
 extern void itf_read(itf_t *itf, void *pkt);

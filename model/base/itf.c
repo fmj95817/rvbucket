@@ -15,16 +15,18 @@ static inline void *get_pkt_addr(itf_t *itf, u32 index)
     return (void *)((u8 *)itf->pkts_data + index * itf->pkt_size);
 }
 
-void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt2str, pkt_reg_vcd_sig_t reg_vcd_sig, u32 pkt_size, u32 fifo_depth)
+void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
 {
-    DBG_CHECK(pkt2str != NULL);
-    DBG_CHECK(reg_vcd_sig != NULL);
+    DBG_CHECK(name != NULL);
+    DBG_CHECK(conf != NULL);
+    DBG_CHECK(conf->pkt2str != NULL);
+    DBG_CHECK(conf->reg_vcd != NULL);
 
-    itf->cycle = cycle;
+    itf->cycle = conf->cycle;
 
-    itf->pkt_size = pkt_size;
-    itf->fifo_depth = fifo_depth;
-    itf->pkts_data = malloc(pkt_size * fifo_depth);
+    itf->pkt_size = conf->pkt_size;
+    itf->fifo_depth = conf->fifo_depth;
+    itf->pkts_data = malloc(conf->pkt_size * conf->fifo_depth);
     itf->pkt_num = 0;
     itf->rptr = 0;
     itf->wptr = 0;
@@ -32,8 +34,8 @@ void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt
     itf->dump_enable = dbg_get_bool_env(ITF_DUMP_ENV);
     itf->vcd_enable = dbg_get_bool_env(ITF_VCD_ENV);
     itf->name = name;
-    itf->pkt2str = pkt2str;
-    itf->reg_vcd_sig = reg_vcd_sig;
+    itf->pkt2str = conf->pkt2str;
+    itf->reg_vcd = conf->reg_vcd;
 
     if (itf->dump_enable) {
         struct stat s;
@@ -55,34 +57,34 @@ void itf_construct(itf_t *itf, const u64 *cycle, const char *name, pkt2str_t pkt
     }
 
     if (itf->vcd_enable) {
-        itf->pkts_pend_mask = malloc(sizeof(bool) * fifo_depth);
-        memset(itf->pkts_pend_mask, 0, fifo_depth);
+        itf->pkts_pend_mask = malloc(sizeof(bool) * conf->fifo_depth);
+        memset(itf->pkts_pend_mask, 0, conf->fifo_depth);
 
         itf->read_vld = false;
         itf->write_vld = false;
-        itf->read_pkt = malloc(pkt_size);
-        itf->write_pkt = malloc(pkt_size);
+        itf->read_pkt = malloc(conf->pkt_size);
+        itf->write_pkt = malloc(conf->pkt_size);
 
         dbg_vcd_scope_begin("interface", name);
         dbg_vcd_scope_begin("interface", "fifo_pkts");
-        for (u32 i = 0; i < fifo_depth; i++) {
+        for (u32 i = 0; i < conf->fifo_depth; i++) {
             char pkt_name[32];
             sprintf(pkt_name, "pkt [%u]", i);
             dbg_vcd_scope_begin("interface", pkt_name);
             dbg_vcd_add_sig("pend", DBG_SIG_TYPE_REG, 1, &itf->pkts_pend_mask[i]);
-            itf->reg_vcd_sig(get_pkt_addr(itf, i));
+            itf->reg_vcd(get_pkt_addr(itf, i));
             dbg_vcd_scope_end();
         }
         dbg_vcd_scope_end();
 
         dbg_vcd_scope_begin("interface", "slv");
         dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->read_vld);
-        itf->reg_vcd_sig(itf->read_pkt);
+        itf->reg_vcd(itf->read_pkt);
         dbg_vcd_scope_end();
 
         dbg_vcd_scope_begin("interface", "mst");
         dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->write_vld);
-        itf->reg_vcd_sig(itf->write_pkt);
+        itf->reg_vcd(itf->write_pkt);
         dbg_vcd_scope_end();
         dbg_vcd_scope_end();
     } else {

@@ -18,10 +18,16 @@ def gen_c_itf(itf_name, desc):
             f.write("#include \"{}\"\n".format(inc))
     f.write("\n")
 
-    f.write("#define {}_IF_CONSTRUCT(m, name, depth) ".format(itf_name.upper()))
-    f.write("itf_construct(&m->name, m->cycle, #name, ");
-    f.write("&{}_if_to_str, &{}_if_reg_vcd_sig, sizeof({}_if_t), depth)\n\n" \
-        .format(itf_name, itf_name, itf_name))
+    f.write("#define {}_IF_CONSTRUCT(module, itf, depth) do {{ \\\n".format(itf_name.upper()))
+    f.write("    itf_conf_t conf = { \\\n")
+    f.write("        .cycle = module->cycle, \\\n")
+    f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))
+    f.write("        .reg_vcd = &{}_if_reg_vcd, \\\n".format(itf_name))
+    f.write("        .pkt_size = sizeof({}_if_t), \\\n".format(itf_name))
+    f.write("        .fifo_depth = depth \\\n")
+    f.write("    }; \\\n")
+    f.write("    itf_construct(&module->itf, #itf, &conf); \\\n")
+    f.write("} while (0)\n\n")
 
     enums_bw = {}
     if "enums" in desc:
@@ -102,7 +108,7 @@ def gen_c_itf(itf_name, desc):
         f.write("%08x\\n\", {}->dummy);\n".format(itf_name))
     f.write("}\n\n")
 
-    f.write("static inline void {}_if_reg_vcd_sig(const void *pkt)\n".format(itf_name))
+    f.write("static inline void {}_if_reg_vcd(const void *pkt)\n".format(itf_name))
     f.write("{\n")
     f.write("    const {}_if_t *{} = (const {}_if_t *)pkt;\n".format(itf_name, itf_name, itf_name))
     for p in desc["payloads"]:

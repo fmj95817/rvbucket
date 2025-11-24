@@ -5,7 +5,16 @@
 #include "base/types.h"
 #include "dbg/vcd.h"
 
-#define APB_RSP_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &apb_rsp_if_to_str, &apb_rsp_if_reg_vcd_sig, sizeof(apb_rsp_if_t), depth)
+#define APB_RSP_IF_CONSTRUCT(module, itf, depth) do { \
+    itf_conf_t conf = { \
+        .cycle = module->cycle, \
+        .pkt2str = &apb_rsp_if_to_str, \
+        .reg_vcd = &apb_rsp_if_reg_vcd, \
+        .pkt_size = sizeof(apb_rsp_if_t), \
+        .fifo_depth = depth \
+    }; \
+    itf_construct(&module->itf, #itf, &conf); \
+} while (0)
 
 typedef struct apb_rsp_if {
     u32 prdata;
@@ -18,7 +27,7 @@ static inline void apb_rsp_if_to_str(const void *pkt, char *str)
     sprintf(str, "%08x %01x\n", apb_rsp->prdata, apb_rsp->pslverr);
 }
 
-static inline void apb_rsp_if_reg_vcd_sig(const void *pkt)
+static inline void apb_rsp_if_reg_vcd(const void *pkt)
 {
     const apb_rsp_if_t *apb_rsp = (const apb_rsp_if_t *)pkt;
     dbg_vcd_add_sig("prdata", DBG_SIG_TYPE_REG, 32, &apb_rsp->prdata);

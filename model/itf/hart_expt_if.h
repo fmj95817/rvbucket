@@ -5,7 +5,16 @@
 #include "base/types.h"
 #include "dbg/vcd.h"
 
-#define HART_EXPT_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &hart_expt_if_to_str, &hart_expt_if_reg_vcd_sig, sizeof(hart_expt_if_t), depth)
+#define HART_EXPT_IF_CONSTRUCT(module, itf, depth) do { \
+    itf_conf_t conf = { \
+        .cycle = module->cycle, \
+        .pkt2str = &hart_expt_if_to_str, \
+        .reg_vcd = &hart_expt_if_reg_vcd, \
+        .pkt_size = sizeof(hart_expt_if_t), \
+        .fifo_depth = depth \
+    }; \
+    itf_construct(&module->itf, #itf, &conf); \
+} while (0)
 
 typedef enum hart_expt_cause {
     HART_EXPT_CAUSE_INST_ADDR_MISALIGNED = 0,
@@ -35,7 +44,7 @@ static inline void hart_expt_if_to_str(const void *pkt, char *str)
     sprintf(str, "%02x\n", (u32)hart_expt->cause);
 }
 
-static inline void hart_expt_if_reg_vcd_sig(const void *pkt)
+static inline void hart_expt_if_reg_vcd(const void *pkt)
 {
     const hart_expt_if_t *hart_expt = (const hart_expt_if_t *)pkt;
     dbg_vcd_add_sig("cause", DBG_SIG_TYPE_REG, 5, &hart_expt->cause);

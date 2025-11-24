@@ -5,7 +5,16 @@
 #include "base/types.h"
 #include "dbg/vcd.h"
 
-#define AXI4_AR_IF_CONSTRUCT(m, name, depth) itf_construct(&m->name, m->cycle, #name, &axi4_ar_if_to_str, &axi4_ar_if_reg_vcd_sig, sizeof(axi4_ar_if_t), depth)
+#define AXI4_AR_IF_CONSTRUCT(module, itf, depth) do { \
+    itf_conf_t conf = { \
+        .cycle = module->cycle, \
+        .pkt2str = &axi4_ar_if_to_str, \
+        .reg_vcd = &axi4_ar_if_reg_vcd, \
+        .pkt_size = sizeof(axi4_ar_if_t), \
+        .fifo_depth = depth \
+    }; \
+    itf_construct(&module->itf, #itf, &conf); \
+} while (0)
 
 typedef struct axi4_ar_if {
     u8 id;
@@ -26,7 +35,7 @@ static inline void axi4_ar_if_to_str(const void *pkt, char *str)
     sprintf(str, "%02x %08x %02x %01x %01x %01x %01x %01x %01x %08x\n", axi4_ar->id, axi4_ar->addr, axi4_ar->len, axi4_ar->size, axi4_ar->burst, axi4_ar->lock, axi4_ar->cache, axi4_ar->prot, axi4_ar->qos, axi4_ar->user);
 }
 
-static inline void axi4_ar_if_reg_vcd_sig(const void *pkt)
+static inline void axi4_ar_if_reg_vcd(const void *pkt)
 {
     const axi4_ar_if_t *axi4_ar = (const axi4_ar_if_t *)pkt;
     dbg_vcd_add_sig("id", DBG_SIG_TYPE_REG, 8, &axi4_ar->id);
