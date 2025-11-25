@@ -42,9 +42,6 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
         if (stat(ITF_DUMP_DIR, &s) || !S_ISDIR(s.st_mode)) {
             mkdir(ITF_DUMP_DIR, 0755);
         }
-    }
-
-    if (itf->dump_enable) {
         char slv_path[1024];
         char mst_path[1024];
         sprintf(slv_path, ITF_DUMP_DIR"/%s_slv.txt", name);
@@ -65,28 +62,27 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
         itf->read_pkt = malloc(conf->pkt_size);
         itf->write_pkt = malloc(conf->pkt_size);
 
-        dbg_vcd_scope_begin("interface", name);
-        dbg_vcd_scope_begin("interface", "fifo_pkts");
-        for (u32 i = 0; i < conf->fifo_depth; i++) {
+        DBG_VCD_ITF_SCOPE(name);
+        {
+            DBG_VCD_ITF_SCOPE("fifo_pkts");
             char pkt_name[32];
-            sprintf(pkt_name, "pkt [%u]", i);
-            dbg_vcd_scope_begin("interface", pkt_name);
-            dbg_vcd_add_sig("pend", DBG_SIG_TYPE_REG, 1, &itf->pkts_pend_mask[i]);
-            itf->reg_vcd(get_pkt_addr(itf, i));
-            dbg_vcd_scope_end();
+            for (u32 i = 0; i < conf->fifo_depth; i++) {
+                sprintf(pkt_name, "pkt [%u]", i);
+                DBG_VCD_ITF_SCOPE(pkt_name);
+                dbg_vcd_add_sig("pend", DBG_SIG_TYPE_REG, 1, &itf->pkts_pend_mask[i]);
+                itf->reg_vcd(get_pkt_addr(itf, i));
+            }
         }
-        dbg_vcd_scope_end();
-
-        dbg_vcd_scope_begin("interface", "slv");
-        dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->read_vld);
-        itf->reg_vcd(itf->read_pkt);
-        dbg_vcd_scope_end();
-
-        dbg_vcd_scope_begin("interface", "mst");
-        dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->write_vld);
-        itf->reg_vcd(itf->write_pkt);
-        dbg_vcd_scope_end();
-        dbg_vcd_scope_end();
+        {
+            DBG_VCD_ITF_SCOPE("slv");
+            dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->read_vld);
+            itf->reg_vcd(itf->read_pkt);
+        }
+        {
+            DBG_VCD_ITF_SCOPE("mst");
+            dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->write_vld);
+            itf->reg_vcd(itf->write_pkt);
+        }
     } else {
         itf->pkts_pend_mask = NULL;
         itf->read_pkt = NULL;

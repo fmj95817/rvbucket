@@ -3,10 +3,14 @@
 
 #include "base/types.h"
 
-#define DBG_VCD_MODULE_SCOPE(name) \
+#define DBG_VCD_CONCAT(a, b) a ## b
+#define DBG_VCD_SCOPE(scope, name) \
     __attribute__((cleanup(dbg_vcd_scope_cleanup))) \
-    void *_dummy_ptr_ = NULL; \
-    dbg_vcd_scope_begin("module", name)
+    void *DBG_VCD_CONCAT(_dummy_ptr_, __LINE__) = NULL; \
+    dbg_vcd_scope_begin(scope, name)
+
+#define DBG_VCD_MODULE_SCOPE(name) DBG_VCD_SCOPE("module", name)
+#define DBG_VCD_ITF_SCOPE(name) DBG_VCD_SCOPE("interface", name)
 
 typedef enum dbg_sig_type {
     DBG_SIG_TYPE_WIRE = 0,
