@@ -3,6 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
+#include "itf/core_timer_if.h"
 #include "ifu.h"
 #include "exu/exu.h"
 #include "csr.h"
@@ -21,6 +22,7 @@ typedef struct hart {
     itf_t *i_bti_rsp_slv;
     itf_t *d_bti_req_mst;
     itf_t *d_bti_rsp_slv;
+    itf_t *core_timer_slv;
     itf_t *core_irq_slv;
     itf_t *ext_irq_slv;
 

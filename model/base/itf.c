@@ -10,9 +10,100 @@
 #define ITF_DUMP_ENV "ITF_DUMP"
 #define ITF_VCD_ENV "ITF_VCD"
 
-static inline void *get_pkt_addr(itf_t *itf, u32 index)
+static void signal_itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
 {
-    return (void *)((u8 *)itf->pkts_data + index * itf->pkt_size);
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(name != NULL);
+    DBG_CHECK(conf != NULL);
+
+    itf->ctx.signal.ext_signal_src = conf->ext_signal_src;
+    if (!conf->ext_signal_src) {
+        itf->ctx.signal.shared_pkt_data = malloc(conf->pkt_size);
+        memset(itf->ctx.signal.shared_pkt_data, 0, conf->pkt_size);
+    }
+
+    itf->ctx.signal.old_pkt_data = malloc(conf->pkt_size);
+    memset(itf->ctx.signal.old_pkt_data, 0, conf->pkt_size);
+
+    if (itf->dump_enable) {
+        char dump_path[1024];
+        sprintf(dump_path, ITF_DUMP_DIR"/%s_drv.txt", name);
+        itf->ctx.signal.dump_fp = fopen(dump_path, "w");
+    } else {
+        itf->ctx.signal.dump_fp = NULL;
+    }
+
+    if (itf->vcd_enable) {
+        DBG_VCD_ITF_SCOPE(name);
+        itf->reg_vcd(itf->ctx.signal.shared_pkt_data, DBG_SIG_TYPE_WIRE);
+    }
+}
+
+static inline void *get_fifo_pkt_addr(itf_t *itf, u32 index)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    return (void *)((u8 *)itf->ctx.fifo.pkts_data + index * itf->pkt_size);
+}
+
+static void fifo_itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    DBG_CHECK(name != NULL);
+    DBG_CHECK(conf != NULL);
+
+    itf->ctx.fifo.fifo_depth = conf->fifo_depth;
+    itf->ctx.fifo.pkts_data = malloc(conf->pkt_size * conf->fifo_depth);
+    itf->ctx.fifo.pkt_num = 0;
+    itf->ctx.fifo.rptr = 0;
+    itf->ctx.fifo.wptr = 0;
+
+    if (itf->dump_enable) {
+        char slv_path[1024];
+        char mst_path[1024];
+        sprintf(slv_path, ITF_DUMP_DIR"/%s_slv.txt", name);
+        sprintf(mst_path, ITF_DUMP_DIR"/%s_mst.txt", name);
+        itf->ctx.fifo.dump_slv_fp = fopen(slv_path, "w");
+        itf->ctx.fifo.dump_mst_fp = fopen(mst_path, "w");
+    } else {
+        itf->ctx.fifo.dump_slv_fp = NULL;
+        itf->ctx.fifo.dump_mst_fp = NULL;
+    }
+
+    if (itf->vcd_enable) {
+        itf->ctx.fifo.pkts_pend_mask = malloc(sizeof(bool) * conf->fifo_depth);
+        memset(itf->ctx.fifo.pkts_pend_mask, 0, conf->fifo_depth);
+
+        itf->ctx.fifo.read_vld = false;
+        itf->ctx.fifo.write_vld = false;
+        itf->ctx.fifo.read_pkt = malloc(conf->pkt_size);
+        itf->ctx.fifo.write_pkt = malloc(conf->pkt_size);
+
+        DBG_VCD_ITF_SCOPE(name);
+        {
+            DBG_VCD_ITF_SCOPE("fifo_pkts");
+            char pkt_name[32];
+            for (u32 i = 0; i < conf->fifo_depth; i++) {
+                sprintf(pkt_name, "pkt [%u]", i);
+                DBG_VCD_ITF_SCOPE(pkt_name);
+                dbg_vcd_add_sig("pend", DBG_SIG_TYPE_REG, 1, &itf->ctx.fifo.pkts_pend_mask[i]);
+                itf->reg_vcd(get_fifo_pkt_addr(itf, i), DBG_SIG_TYPE_REG);
+            }
+        }
+        {
+            DBG_VCD_ITF_SCOPE("slv");
+            dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->ctx.fifo.read_vld);
+            itf->reg_vcd(itf->ctx.fifo.read_pkt, DBG_SIG_TYPE_REG);
+        }
+        {
+            DBG_VCD_ITF_SCOPE("mst");
+            dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->ctx.fifo.write_vld);
+            itf->reg_vcd(itf->ctx.fifo.write_pkt, DBG_SIG_TYPE_REG);
+        }
+    } else {
+        itf->ctx.fifo.pkts_pend_mask = NULL;
+        itf->ctx.fifo.read_pkt = NULL;
+        itf->ctx.fifo.write_pkt = NULL;
+    }
 }
 
 void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
@@ -23,17 +114,13 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
     DBG_CHECK(conf->reg_vcd != NULL);
 
     itf->cycle = conf->cycle;
-
-    itf->pkt_size = conf->pkt_size;
-    itf->fifo_depth = conf->fifo_depth;
-    itf->pkts_data = malloc(conf->pkt_size * conf->fifo_depth);
-    itf->pkt_num = 0;
-    itf->rptr = 0;
-    itf->wptr = 0;
-
-    itf->dump_enable = dbg_get_bool_env(ITF_DUMP_ENV);
-    itf->vcd_enable = dbg_get_bool_env(ITF_VCD_ENV);
     itf->name = name;
+    itf->mode = conf->mode;
+    itf->pkt_size = conf->pkt_size;
+    DBG_CHECK(itf->mode <= ITF_MODE_MAX);
+
+    itf->dump_enable = dbg_get_bool_env(ITF_DUMP_ENV) && (!conf->force_disable_dump);
+    itf->vcd_enable = dbg_get_bool_env(ITF_VCD_ENV);
     itf->pkt2str = conf->pkt2str;
     itf->reg_vcd = conf->reg_vcd;
 
@@ -42,188 +129,278 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
         if (stat(ITF_DUMP_DIR, &s) || !S_ISDIR(s.st_mode)) {
             mkdir(ITF_DUMP_DIR, 0755);
         }
-        char slv_path[1024];
-        char mst_path[1024];
-        sprintf(slv_path, ITF_DUMP_DIR"/%s_slv.txt", name);
-        sprintf(mst_path, ITF_DUMP_DIR"/%s_mst.txt", name);
-        itf->dump_slv_fp = fopen(slv_path, "w");
-        itf->dump_mst_fp = fopen(mst_path, "w");
-    } else {
-        itf->dump_slv_fp = NULL;
-        itf->dump_mst_fp = NULL;
     }
 
-    if (itf->vcd_enable) {
-        itf->pkts_pend_mask = malloc(sizeof(bool) * conf->fifo_depth);
-        memset(itf->pkts_pend_mask, 0, conf->fifo_depth);
+    typedef void (*itf_construct_t)(itf_t *, const char *, const itf_conf_t *);
+    itf_construct_t construct_list[ITF_MODE_NUM] = {
+        [ITF_MODE_SIGNAL] = &signal_itf_construct,
+        [ITF_MODE_FIFO] = &fifo_itf_construct
+    };
+    itf_construct_t construct = construct_list[itf->mode];
+    DBG_CHECK(construct != NULL);
+    construct(itf, name, conf);
+}
 
-        itf->read_vld = false;
-        itf->write_vld = false;
-        itf->read_pkt = malloc(conf->pkt_size);
-        itf->write_pkt = malloc(conf->pkt_size);
+static void signal_itf_free(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
 
-        DBG_VCD_ITF_SCOPE(name);
-        {
-            DBG_VCD_ITF_SCOPE("fifo_pkts");
-            char pkt_name[32];
-            for (u32 i = 0; i < conf->fifo_depth; i++) {
-                sprintf(pkt_name, "pkt [%u]", i);
-                DBG_VCD_ITF_SCOPE(pkt_name);
-                dbg_vcd_add_sig("pend", DBG_SIG_TYPE_REG, 1, &itf->pkts_pend_mask[i]);
-                itf->reg_vcd(get_pkt_addr(itf, i));
-            }
-        }
-        {
-            DBG_VCD_ITF_SCOPE("slv");
-            dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->read_vld);
-            itf->reg_vcd(itf->read_pkt);
-        }
-        {
-            DBG_VCD_ITF_SCOPE("mst");
-            dbg_vcd_add_sig("vld", DBG_SIG_TYPE_WIRE, 1, &itf->write_vld);
-            itf->reg_vcd(itf->write_pkt);
-        }
-    } else {
-        itf->pkts_pend_mask = NULL;
-        itf->read_pkt = NULL;
-        itf->write_pkt = NULL;
+    if ((itf->ctx.signal.shared_pkt_data != NULL) &&
+        (!itf->ctx.signal.ext_signal_src)) {
+        free(itf->ctx.signal.shared_pkt_data);
+        itf->ctx.signal.shared_pkt_data = NULL;
+    }
+
+    if (itf->ctx.signal.old_pkt_data != NULL) {
+        free(itf->ctx.signal.old_pkt_data);
+        itf->ctx.signal.old_pkt_data = NULL;
+    }
+
+    if (itf->ctx.signal.dump_fp) {
+        fclose(itf->ctx.signal.dump_fp);
+        itf->ctx.signal.dump_fp = NULL;
+    }
+}
+
+static void fifo_itf_free(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+
+    if (itf->ctx.fifo.pkts_data != NULL) {
+        free(itf->ctx.fifo.pkts_data);
+        itf->ctx.fifo.pkts_data = NULL;
+    }
+
+    if (itf->ctx.fifo.read_pkt != NULL) {
+        free(itf->ctx.fifo.read_pkt);
+        itf->ctx.fifo.read_pkt = NULL;
+    }
+
+    if (itf->ctx.fifo.write_pkt != NULL) {
+        free(itf->ctx.fifo.write_pkt);
+        itf->ctx.fifo.write_pkt = NULL;
+    }
+
+    if (itf->ctx.fifo.pkts_pend_mask != NULL) {
+        free(itf->ctx.fifo.pkts_pend_mask);
+        itf->ctx.fifo.pkts_pend_mask = NULL;
+    }
+
+    if (itf->ctx.fifo.dump_slv_fp) {
+        fclose(itf->ctx.fifo.dump_slv_fp);
+        itf->ctx.fifo.dump_slv_fp = NULL;
+    }
+
+    if (itf->ctx.fifo.dump_mst_fp) {
+        fclose(itf->ctx.fifo.dump_mst_fp);
+        itf->ctx.fifo.dump_mst_fp = NULL;
     }
 }
 
 void itf_free(itf_t *itf)
 {
-    if (itf->pkts_data != NULL) {
-        free(itf->pkts_data);
-        itf->pkts_data = NULL;
+    typedef void (*itf_free_t)(itf_t *);
+    itf_free_t free_list[ITF_MODE_NUM] = {
+        [ITF_MODE_SIGNAL] = &signal_itf_free,
+        [ITF_MODE_FIFO] = &fifo_itf_free
+    };
+    itf_free_t free_func = free_list[itf->mode];
+    DBG_CHECK(free_func != NULL);
+    free_func(itf);
+}
+
+static void signal_itf_write(itf_t *itf, const void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+
+    memcpy(itf->ctx.signal.shared_pkt_data, pkt, itf->pkt_size);
+}
+
+static void fifo_itf_write(itf_t *itf, const void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    DBG_CHECK(itf->ctx.fifo.pkt_num < itf->ctx.fifo.fifo_depth);
+
+    if (itf->vcd_enable) {
+        memcpy(itf->ctx.fifo.write_pkt, pkt, itf->pkt_size);
+        itf->ctx.fifo.pkts_pend_mask[itf->ctx.fifo.wptr] = true;
+        itf->ctx.fifo.write_vld = true;
+        itf->ctx.fifo.write_cycle = *itf->cycle;
     }
 
-    if (itf->read_pkt != NULL) {
-        free(itf->read_pkt);
-        itf->read_pkt = NULL;
-    }
+    memcpy(get_fifo_pkt_addr(itf, itf->ctx.fifo.wptr), pkt, itf->pkt_size);
+    itf->ctx.fifo.pkt_num++;
+    itf->ctx.fifo.wptr = (itf->ctx.fifo.wptr + 1) % itf->ctx.fifo.fifo_depth;
 
-    if (itf->write_pkt != NULL) {
-        free(itf->write_pkt);
-        itf->write_pkt = NULL;
-    }
-
-    if (itf->pkts_pend_mask != NULL) {
-        free(itf->pkts_pend_mask);
-        itf->pkts_pend_mask = NULL;
-    }
-
-    if (itf->dump_slv_fp) {
-        fclose(itf->dump_slv_fp);
-        itf->dump_slv_fp = NULL;
-    }
-
-    if (itf->dump_mst_fp) {
-        fclose(itf->dump_mst_fp);
-        itf->dump_mst_fp = NULL;
+    if (itf->dump_enable) {
+        if (itf->ctx.fifo.dump_mst_fp) {
+            char pkt_str[1024];
+            itf->pkt2str(pkt, pkt_str);
+            fprintf(itf->ctx.fifo.dump_mst_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.dump_mst_fp);
+        }
     }
 }
 
 void itf_write(itf_t *itf, const void *pkt)
 {
-    DBG_CHECK(itf->pkt_num < itf->fifo_depth);
+    typedef void (*itf_write_t)(itf_t *, const void *);
+    itf_write_t write_list[ITF_MODE_NUM] = {
+        [ITF_MODE_SIGNAL] = &signal_itf_write,
+        [ITF_MODE_FIFO] = &fifo_itf_write
+    };
+    itf_write_t write_func = write_list[itf->mode];
+    DBG_CHECK(write_func != NULL);
+    write_func(itf, pkt);
+}
+
+static void signal_itf_read(itf_t *itf, void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    memcpy(pkt, itf->ctx.signal.shared_pkt_data, itf->pkt_size);
+}
+
+static void fifo_itf_read(itf_t *itf, void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    DBG_CHECK(itf->ctx.fifo.pkt_num > 0);
 
     if (itf->vcd_enable) {
-        memcpy(itf->write_pkt, pkt, itf->pkt_size);
-        itf->pkts_pend_mask[itf->wptr] = true;
-        itf->write_vld = true;
-        itf->write_cycle = *itf->cycle;
+        memcpy(itf->ctx.fifo.read_pkt, get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), itf->pkt_size);
+        itf->ctx.fifo.pkts_pend_mask[itf->ctx.fifo.rptr] = false;
+        itf->ctx.fifo.read_vld = true;
+        itf->ctx.fifo.read_cycle = *itf->cycle;
     }
 
-    memcpy(get_pkt_addr(itf, itf->wptr), pkt, itf->pkt_size);
-    itf->pkt_num++;
-    itf->wptr = (itf->wptr + 1) % itf->fifo_depth;
+    memcpy(pkt, get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), itf->pkt_size);
+    itf->ctx.fifo.pkt_num--;
+    itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
 
     if (itf->dump_enable) {
-        if (itf->dump_mst_fp) {
+        if (itf->ctx.fifo.dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->dump_mst_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->dump_mst_fp);
+            fprintf(itf->ctx.fifo.dump_slv_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.dump_slv_fp);
         }
     }
 }
 
 void itf_read(itf_t *itf, void *pkt)
 {
-    DBG_CHECK(itf->pkt_num > 0);
+    typedef void (*itf_read_t)(itf_t *, void *);
+    itf_read_t read_list[ITF_MODE_NUM] = {
+        [ITF_MODE_SIGNAL] = &signal_itf_read,
+        [ITF_MODE_FIFO] = &fifo_itf_read
+    };
+    itf_read_t read_func = read_list[itf->mode];
+    DBG_CHECK(read_func != NULL);
+    read_func(itf, pkt);
+}
 
-    if (itf->vcd_enable) {
-        memcpy(itf->read_pkt, get_pkt_addr(itf, itf->rptr), itf->pkt_size);
-        itf->pkts_pend_mask[itf->rptr] = false;
-        itf->read_vld = true;
-        itf->read_cycle = *itf->cycle;
+static void signal_itf_dbg_clock(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    if (!itf->dump_enable) {
+        return;
     }
 
-    memcpy(pkt, get_pkt_addr(itf, itf->rptr), itf->pkt_size);
-    itf->pkt_num--;
-    itf->rptr = (itf->rptr + 1) % itf->fifo_depth;
+    if (itf->ctx.signal.dump_fp == NULL) {
+        return;
+    }
 
-    if (itf->dump_enable) {
-        if (itf->dump_slv_fp) {
-            char pkt_str[1024];
-            itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->dump_slv_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->dump_slv_fp);
-        }
+    void *old = itf->ctx.signal.old_pkt_data;
+    void *cur = itf->ctx.signal.shared_pkt_data;
+    if (memcmp(cur, old, itf->pkt_size) != 0) {
+        char pkt_str[1024];
+        itf->pkt2str(cur, pkt_str);
+        fprintf(itf->ctx.signal.dump_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+        fflush(itf->ctx.signal.dump_fp);
+        memcpy(old, cur, itf->pkt_size);
     }
 }
 
-void itf_fifo_get_front(itf_t *itf, void *pkt)
+static void fifo_itf_dbg_clock(itf_t *itf)
 {
-    DBG_CHECK(itf->pkt_num > 0);
-    memcpy(pkt, get_pkt_addr(itf, itf->rptr), itf->pkt_size);
-}
-
-void itf_fifo_pop_front(itf_t *itf)
-{
-    DBG_CHECK(itf->pkt_num > 0);
-
-    if (itf->vcd_enable) {
-        memcpy(itf->read_pkt, get_pkt_addr(itf, itf->rptr), itf->pkt_size);
-        itf->pkts_pend_mask[itf->rptr] = false;
-        itf->read_vld = true;
-        itf->read_cycle = *itf->cycle;
-    }
-
-    if (itf->dump_enable) {
-        if (itf->dump_slv_fp) {
-            char pkt_str[1024];
-            itf->pkt2str(get_pkt_addr(itf, itf->rptr), pkt_str);
-            fprintf(itf->dump_slv_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->dump_slv_fp);
-        }
-    }
-
-    itf->pkt_num--;
-    itf->rptr = (itf->rptr + 1) % itf->fifo_depth;
-}
-
-bool itf_fifo_empty(itf_t *itf)
-{
-    return itf->pkt_num == 0;
-}
-
-bool itf_fifo_full(itf_t *itf)
-{
-    return itf->pkt_num == itf->fifo_depth;
-}
-
-void itf_dbg_clock(itf_t *itf)
-{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
     if (!itf->vcd_enable) {
         return;
     }
 
-    if (itf->read_vld && ((*itf->cycle - itf->read_cycle) == 1u)) {
-        itf->read_vld = false;
+    if (itf->ctx.fifo.read_vld && ((*itf->cycle - itf->ctx.fifo.read_cycle) == 1u)) {
+        itf->ctx.fifo.read_vld = false;
+    }
+    if (itf->ctx.fifo.write_vld && ((*itf->cycle - itf->ctx.fifo.write_cycle) == 1u)) {
+        itf->ctx.fifo.write_vld = false;
+    }
+}
+
+void itf_dbg_clock(itf_t *itf)
+{
+    typedef void (*itf_dbg_clock_t)(itf_t *);
+    itf_dbg_clock_t dbg_clock_list[ITF_MODE_NUM] = {
+        [ITF_MODE_SIGNAL] = &signal_itf_dbg_clock,
+        [ITF_MODE_FIFO] = &fifo_itf_dbg_clock
+    };
+    itf_dbg_clock_t dbg_clock_func = dbg_clock_list[itf->mode];
+    DBG_CHECK(dbg_clock_func != NULL);
+    dbg_clock_func(itf);
+}
+
+void *itf_signal_get_src(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    return itf->ctx.signal.shared_pkt_data;
+}
+
+void itf_signal_set_src(itf_t *itf, void *src)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(itf->ctx.signal.ext_signal_src);
+
+    itf->ctx.signal.shared_pkt_data = src;
+}
+
+void itf_fifo_get_front(itf_t *itf, void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    DBG_CHECK(itf->ctx.fifo.pkt_num > 0);
+    memcpy(pkt, get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), itf->pkt_size);
+}
+
+void itf_fifo_pop_front(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    DBG_CHECK(itf->ctx.fifo.pkt_num > 0);
+
+    if (itf->vcd_enable) {
+        memcpy(itf->ctx.fifo.read_pkt, get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), itf->pkt_size);
+        itf->ctx.fifo.pkts_pend_mask[itf->ctx.fifo.rptr] = false;
+        itf->ctx.fifo.read_vld = true;
+        itf->ctx.fifo.read_cycle = *itf->cycle;
     }
 
-    if (itf->write_vld && ((*itf->cycle - itf->write_cycle) == 1u)) {
-        itf->write_vld = false;
+    if (itf->dump_enable) {
+        if (itf->ctx.fifo.dump_slv_fp) {
+            char pkt_str[1024];
+            itf->pkt2str(get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), pkt_str);
+            fprintf(itf->ctx.fifo.dump_slv_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.dump_slv_fp);
+        }
     }
+
+    itf->ctx.fifo.pkt_num--;
+    itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
+}
+
+bool itf_fifo_empty(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    return itf->ctx.fifo.pkt_num == 0;
+}
+
+bool itf_fifo_full(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    return itf->ctx.fifo.pkt_num == itf->ctx.fifo.fifo_depth;
 }

@@ -161,21 +161,26 @@
              ]
         },
 
+        "core_timer": {
+            "type": "none",
+            "payloads": [
+                { "name": "time", "width": 64 }
+            ]
+        },
+
         "core_irq": {
             "type": "none",
             "payloads": [
                 { "name": "mtimer", "width": 1 },
-                { "name": "stimer", "width": 1 },
                 { "name": "msw", "width": 1 },
                 { "name": "ssw", "width": 1 }
             ]
         },
 
         "ext_irq": {
-            "type": "vld",
+            "type": "none",
             "payloads": [
-                { "name": "set", "width": 1 },
-                { "name": "clear", "width": 1 }
+                { "name": "irq", "width": 1 }
             ]
         },
 

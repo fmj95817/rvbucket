@@ -18,12 +18,27 @@ def gen_c_itf(itf_name, desc):
             f.write("#include \"{}\"\n".format(inc))
     f.write("\n")
 
+    f.write("#define {}_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do {{ \\\n".format(itf_name.upper()))
+    f.write("    itf_conf_t conf = { \\\n")
+    f.write("        .cycle = module->cycle, \\\n")
+    f.write("        .mode = ITF_MODE_SIGNAL, \\\n")
+    f.write("        .pkt_size = sizeof({}_if_t), \\\n".format(itf_name))
+    f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))
+    f.write("        .reg_vcd = &{}_if_reg_vcd, \\\n".format(itf_name))
+    f.write("        .force_disable_dump = dis_dump, \\\n")
+    f.write("        .ext_signal_src = ext_src \\\n")
+    f.write("    }; \\\n")
+    f.write("    itf_construct(&module->itf, #itf, &conf); \\\n")
+    f.write("} while (0)\n\n")
+
     f.write("#define {}_IF_CONSTRUCT(module, itf, depth) do {{ \\\n".format(itf_name.upper()))
     f.write("    itf_conf_t conf = { \\\n")
     f.write("        .cycle = module->cycle, \\\n")
+    f.write("        .mode = ITF_MODE_FIFO, \\\n")
+    f.write("        .pkt_size = sizeof({}_if_t), \\\n".format(itf_name))
     f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))
     f.write("        .reg_vcd = &{}_if_reg_vcd, \\\n".format(itf_name))
-    f.write("        .pkt_size = sizeof({}_if_t), \\\n".format(itf_name))
+    f.write("        .force_disable_dump = false, \\\n")
     f.write("        .fifo_depth = depth \\\n")
     f.write("    }; \\\n")
     f.write("    itf_construct(&module->itf, #itf, &conf); \\\n")
@@ -85,7 +100,10 @@ def gen_c_itf(itf_name, desc):
         field_name = p["name"]
         bw = enums_bw[p["type"]] if "type" in p else p["width"]
         hex_w = math.ceil(bw / 4)
-        f.write("%0{}x".format(hex_w))
+        if bw > 32:
+            f.write("%0{}lx".format(hex_w))
+        else:
+            f.write("%0{}x".format(hex_w))
         if payload_idx < (payload_num - 1):
             f.write(" ")
         else:
@@ -108,7 +126,7 @@ def gen_c_itf(itf_name, desc):
         f.write("%08x\\n\", {}->dummy);\n".format(itf_name))
     f.write("}\n\n")
 
-    f.write("static inline void {}_if_reg_vcd(const void *pkt)\n".format(itf_name))
+    f.write("static inline void {}_if_reg_vcd(const void *pkt, dbg_sig_type_t type)\n".format(itf_name))
     f.write("{\n")
     f.write("    const {}_if_t *{} = (const {}_if_t *)pkt;\n".format(itf_name, itf_name, itf_name))
     for p in desc["payloads"]:
@@ -116,9 +134,9 @@ def gen_c_itf(itf_name, desc):
         if "ext_type" in p:
             field_name = "{}.{}".format(field_name, p["raw"])
         bw = enums_bw[p["type"]] if "type" in p else p["width"]
-        f.write("    dbg_vcd_add_sig(\"{}\", DBG_SIG_TYPE_REG, {}, &{}->{});\n".format(p["name"], bw, itf_name, field_name))
+        f.write("    dbg_vcd_add_sig(\"{}\", type, {}, &{}->{});\n".format(p["name"], bw, itf_name, field_name))
     if payload_num == 0:
-        f.write("    dbg_vcd_add_sig(\"dummy\", DBG_SIG_TYPE_REG, 32, &{}->dummy);\n".format(itf_name))
+        f.write("    dbg_vcd_add_sig(\"dummy\", type, 32, &{}->dummy);\n".format(itf_name))
     f.write("}\n\n")
 
     f.write("#endif\n")

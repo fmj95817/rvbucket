@@ -69,6 +69,7 @@ typedef struct rv32g {
     itf_t plic_cfg_apb_req_itf;
     itf_t plic_cfg_apb_rsp_itf;
 
+    itf_t core_timer_itf;
     itf_t core_irq_itf;
     itf_t conv_ext_irq_itf;
 

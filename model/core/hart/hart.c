@@ -1,5 +1,6 @@
 #include "hart.h"
 #include "dbg/vcd.h"
+#include "dbg/chk.h"
 
 void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
 {
@@ -98,10 +99,22 @@ void hart_free(hart_t *s)
     itf_free(&s->trap_send_itf);
 }
 
-void hart_clock(hart_t *s)
+static void hart_csr_update(hart_t *s)
 {
+    DBG_CHECK(s->core_timer_slv != NULL);
+
+    const core_timer_if_t *core_timer = itf_signal_get_src(s->core_timer_slv);
+    DBG_CHECK(core_timer != NULL);
+    s->csr.time = (u32)(core_timer->time);
+    s->csr.timeh = (u32)(core_timer->time >> 32u);
+
     s->csr.cycle = (u32)(*s->cycle);
     s->csr.cycleh = (u32)(*s->cycle >> 32u);
+}
+
+void hart_clock(hart_t *s)
+{
+    hart_csr_update(s);
 
     exu_clock(&s->exu);
     ifu_clock(&s->ifu);

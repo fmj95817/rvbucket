@@ -3,6 +3,8 @@
 
 #include "base/def.h"
 
+#define HART_NUM       1u
+
 #define BOOT_ROM_BASE  0x00000000
 #define BOOT_ROM_SIZE  (1u * KiB)
 #define ITCM_BASE      0x10000000

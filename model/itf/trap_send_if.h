@@ -5,12 +5,27 @@
 #include "base/types.h"
 #include "dbg/vcd.h"
 
+#define TRAP_SEND_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
+    itf_conf_t conf = { \
+        .cycle = module->cycle, \
+        .mode = ITF_MODE_SIGNAL, \
+        .pkt_size = sizeof(trap_send_if_t), \
+        .pkt2str = &trap_send_if_to_str, \
+        .reg_vcd = &trap_send_if_reg_vcd, \
+        .force_disable_dump = dis_dump, \
+        .ext_signal_src = ext_src \
+    }; \
+    itf_construct(&module->itf, #itf, &conf); \
+} while (0)
+
 #define TRAP_SEND_IF_CONSTRUCT(module, itf, depth) do { \
     itf_conf_t conf = { \
         .cycle = module->cycle, \
+        .mode = ITF_MODE_FIFO, \
+        .pkt_size = sizeof(trap_send_if_t), \
         .pkt2str = &trap_send_if_to_str, \
         .reg_vcd = &trap_send_if_reg_vcd, \
-        .pkt_size = sizeof(trap_send_if_t), \
+        .force_disable_dump = false, \
         .fifo_depth = depth \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
@@ -26,10 +41,10 @@ static inline void trap_send_if_to_str(const void *pkt, char *str)
     sprintf(str, "%08x\n", trap_send->target_pc);
 }
 
-static inline void trap_send_if_reg_vcd(const void *pkt)
+static inline void trap_send_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
 {
     const trap_send_if_t *trap_send = (const trap_send_if_t *)pkt;
-    dbg_vcd_add_sig("target_pc", DBG_SIG_TYPE_REG, 32, &trap_send->target_pc);
+    dbg_vcd_add_sig("target_pc", type, 32, &trap_send->target_pc);
 }
 
 #endif

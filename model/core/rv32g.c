@@ -21,14 +21,16 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     BTI_RSP_IF_CONSTRUCT(s, hart_i_bti_rsp_itf, 1);
     BTI_REQ_IF_CONSTRUCT(s, hart_d_bti_req_itf, 1);
     BTI_RSP_IF_CONSTRUCT(s, hart_d_bti_rsp_itf, 1);
-    CORE_IRQ_IF_CONSTRUCT(s, core_irq_itf, 1);
-    EXT_IRQ_IF_CONSTRUCT(s, conv_ext_irq_itf, 1);
+    CORE_TIMER_SIGNAL_IF_CONSTRUCT(s, core_timer_itf, false, true);
+    CORE_IRQ_SIGNAL_IF_CONSTRUCT(s, core_irq_itf, false, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(s, conv_ext_irq_itf, false, false);
 
     s->hart.cycle = s->cycle;
     s->hart.i_bti_req_mst = &s->hart_i_bti_req_itf;
     s->hart.i_bti_rsp_slv = &s->hart_i_bti_rsp_itf;
     s->hart.d_bti_req_mst = &s->hart_d_bti_req_itf;
     s->hart.d_bti_rsp_slv = &s->hart_d_bti_rsp_itf;
+    s->hart.core_timer_slv = &s->core_timer_itf;
     s->hart.core_irq_slv = &s->core_irq_itf;
     s->hart.ext_irq_slv = &s->conv_ext_irq_itf;
     hart_conf_t hart_conf = {
@@ -97,11 +99,11 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     ram_construct(&s->dtcm, "u_dtcm", 1, conf->dtcm_size, conf->dtcm_base);
 
     s->aclint.cycle= s->cycle;
-    s->aclint.csr_stimecmp = &s->hart.csr.stimecmp;
-    s->aclint.csr_stimecmph = &s->hart.csr.stimecmph;
+    s->aclint.csr_mip[0] = &s->hart.csr.mip;
     s->aclint.cfg_apb_req_slv = &s->aclint_cfg_apb_req_itf;
     s->aclint.cfg_apb_rsp_mst = &s->aclint_cfg_apb_rsp_itf;
-    s->aclint.core_irq_mst = &s->core_irq_itf;
+    s->aclint.core_timer_mst = &s->core_timer_itf;
+    s->aclint.core_irq_msts[0] = &s->core_irq_itf;
     aclint_conf_t aclint_conf = {
         .mtimer_base = conf->aclint_mtimer_base,
         .mtimer_size = conf->aclint_mtimer_size,
@@ -110,7 +112,8 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
         .mswi_base = conf->aclint_mswi_base,
         .mswi_size = conf->aclint_mswi_size,
         .sswi_base = conf->aclint_sswi_base,
-        .sswi_size = conf->aclint_sswi_size
+        .sswi_size = conf->aclint_sswi_size,
+        .mtimer_tick_cycles = 0x1000
     };
     aclint_construct(&s->aclint, "u_aclint", &aclint_conf);
 
@@ -161,6 +164,7 @@ void rv32g_free(rv32g_t *s)
     itf_free(&s->hart_i_bti_rsp_itf);
     itf_free(&s->hart_d_bti_req_itf);
     itf_free(&s->hart_d_bti_rsp_itf);
+    itf_free(&s->core_timer_itf);
     itf_free(&s->core_irq_itf);
     itf_free(&s->conv_ext_irq_itf);
 }
@@ -191,6 +195,7 @@ void rv32g_clock(rv32g_t *s)
     itf_dbg_clock(&s->hart_i_bti_rsp_itf);
     itf_dbg_clock(&s->hart_d_bti_req_itf);
     itf_dbg_clock(&s->hart_d_bti_rsp_itf);
+    itf_dbg_clock(&s->core_timer_itf);
     itf_dbg_clock(&s->core_irq_itf);
     itf_dbg_clock(&s->conv_ext_irq_itf);
 }
