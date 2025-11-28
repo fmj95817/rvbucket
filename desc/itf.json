@@ -16,7 +16,7 @@
 
         "ex_req": {
             "type": "vld-rdy",
-            "include": ["core/hart/isa.h"],
+            "include": ["spec/isa.h"],
             "payloads": [
                 { "name": "inst", "ext_type": "rv32g_inst_t", "raw": "raw", "width": 32 },
                 { "name": "pc", "width": 32 },
@@ -32,6 +32,38 @@
                 { "name": "taken", "width": 1 },
                 { "name": "pred_true", "width": 1 },
                 { "name": "target_pc", "width":32  }
+            ]
+        },
+
+        "exu_csr_read_req": {
+            "type": "none",
+            "payloads": [
+                { "name": "addr", "width": 12 },
+                { "name": "priv", "width": 2 }
+            ]
+        },
+
+        "csr_exu_read_rsp": {
+            "type": "none",
+            "payloads": [
+                { "name": "val", "width": 32 },
+                { "name": "ok", "width": 1 }
+            ]
+        },
+
+        "exu_csr_write_req": {
+            "type": "none",
+            "payloads": [
+                { "name": "addr", "width": 12 },
+                { "name": "val", "width": 32 },
+                { "name": "priv", "width": 2 }
+            ]
+        },
+
+        "csr_exu_write_rsp": {
+            "type": "none",
+            "payloads": [
+                { "name": "ok", "width": 1 }
             ]
         },
 
@@ -168,12 +200,25 @@
             ]
         },
 
-        "core_irq": {
+        "core_m_irq": {
             "type": "none",
             "payloads": [
                 { "name": "mtimer", "width": 1 },
-                { "name": "msw", "width": 1 },
+                { "name": "msw", "width": 1 }
+            ]
+        },
+
+        "core_s_irq": {
+            "type": "none",
+            "payloads": [
                 { "name": "ssw", "width": 1 }
+            ]
+        },
+
+        "core_swi_pend": {
+            "type": "none",
+            "payloads": [
+                { "name": "msip", "width": 1 }
             ]
         },
 

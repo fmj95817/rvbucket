@@ -13,7 +13,7 @@
         .pkt2str = &ext_irq_if_to_str, \
         .reg_vcd = &ext_irq_if_reg_vcd, \
         .force_disable_dump = dis_dump, \
-        .ext_signal_src = ext_src \
+        .ext_sig_src = ext_src \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)

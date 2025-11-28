@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
-#include "core/hart/isa.h"
+#include "spec/isa.h"
 
 #define EX_REQ_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
     itf_conf_t conf = { \
@@ -14,7 +14,7 @@
         .pkt2str = &ex_req_if_to_str, \
         .reg_vcd = &ex_req_if_reg_vcd, \
         .force_disable_dump = dis_dump, \
-        .ext_signal_src = ext_src \
+        .ext_sig_src = ext_src \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)

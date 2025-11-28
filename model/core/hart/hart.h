@@ -3,7 +3,6 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/core_timer_if.h"
 #include "ifu.h"
 #include "exu/exu.h"
 #include "csr.h"
@@ -22,11 +21,12 @@ typedef struct hart {
     itf_t *i_bti_rsp_slv;
     itf_t *d_bti_req_mst;
     itf_t *d_bti_rsp_slv;
-    itf_t *core_timer_slv;
-    itf_t *core_irq_slv;
-    itf_t *ext_irq_slv;
+    itf_t *core_s_irq_slv;
+    itf_t *core_timer_in;
+    itf_t *core_m_irq_in;
+    itf_t *ext_irq_in;
+    itf_t *core_swi_pend_out;
 
-    rv32g_priv_t priv;
     ifu_t ifu;
     exu_t exu;
     csr_t csr;
@@ -47,6 +47,10 @@ typedef struct hart {
     itf_t va_d_bti_rsp_itf;
     itf_t hart_expt_itf;
     itf_t trap_send_itf;
+    itf_t exu_csr_read_req_sig_itf;
+    itf_t csr_exu_read_rsp_sig_itf;
+    itf_t exu_csr_write_req_sig_itf;
+    itf_t csr_exu_write_rsp_sig_itf;
 } hart_t;
 
 extern void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf);

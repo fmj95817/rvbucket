@@ -9,8 +9,11 @@
 #include "itf/ldst_req_if.h"
 #include "itf/ldst_rsp_if.h"
 #include "itf/hart_expt_if.h"
-#include "core/hart/isa.h"
-#include "core/hart/csr.h"
+#include "itf/exu_csr_read_req_if.h"
+#include "itf/csr_exu_read_rsp_if.h"
+#include "itf/exu_csr_write_req_if.h"
+#include "itf/csr_exu_write_rsp_if.h"
+#include "spec/isa.h"
 
 typedef enum amo_stage {
     AMO_STAGE_IDLE = 0,
@@ -25,6 +28,17 @@ typedef struct exu {
     itf_t *ldst_req_mst;
     itf_t *ldst_rsp_slv;
     itf_t *hart_expt_mst;
+    itf_t *exu_csr_read_req_out;
+    itf_t *csr_exu_read_rsp_in;
+    itf_t *exu_csr_write_req_out;
+    itf_t *csr_exu_write_rsp_in;
+
+    exu_csr_read_req_if_t *csr_read_req_o;
+    const csr_exu_read_rsp_if_t *csr_read_rsp_i;
+    exu_csr_write_req_if_t *csr_write_req_o;
+    const csr_exu_write_rsp_if_t *csr_write_rsp_i;
+
+    rv32g_priv_t priv;
 
     u32 cur_opcode;
 
@@ -41,12 +55,9 @@ typedef struct exu {
     u32 amo_rsvd_addr;
 
     u32 gpr[RV32G_GPR_NUM];
-
-    csr_t *csr;
-    rv32g_priv_t *priv;
 } exu_t;
 
-extern void exu_construct(exu_t *exu, const char *name, rv32g_priv_t *priv, csr_t *csr);
+extern void exu_construct(exu_t *exu, const char *name);
 extern void exu_reset(exu_t *exu);
 extern void exu_clock(exu_t *exu);
 extern void exu_free(exu_t *exu);

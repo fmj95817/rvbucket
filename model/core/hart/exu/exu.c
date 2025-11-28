@@ -107,12 +107,14 @@ void exu_clock(exu_t *exu)
     exu_proc_biu_rsp(exu);
 }
 
-void exu_construct(exu_t *exu, const char *name, rv32g_priv_t *priv, csr_t *csr)
+void exu_construct(exu_t *exu, const char *name)
 {
     DBG_VCD_MODULE_SCOPE(name);
 
-    exu->priv = priv;
-    exu->csr = csr;
+    exu->csr_read_req_o = itf_signal_get_src_and_chk(exu->exu_csr_read_req_out);
+    exu->csr_read_rsp_i = itf_signal_get_src_and_chk(exu->csr_exu_read_rsp_in);
+    exu->csr_write_req_o = itf_signal_get_src_and_chk(exu->exu_csr_write_req_out);
+    exu->csr_write_rsp_i = itf_signal_get_src_and_chk(exu->csr_exu_write_rsp_in);
 }
 
 void exu_reset(exu_t *exu)
@@ -123,6 +125,7 @@ void exu_reset(exu_t *exu)
     }
     exu->ldst_req_pend = false;
     exu->amo_stage = AMO_STAGE_IDLE;
+    exu->priv = RV32G_PRIV_MACHINE;
 }
 
 void exu_free(exu_t *exu) {}

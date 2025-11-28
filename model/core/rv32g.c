@@ -21,18 +21,22 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     BTI_RSP_IF_CONSTRUCT(s, hart_i_bti_rsp_itf, 1);
     BTI_REQ_IF_CONSTRUCT(s, hart_d_bti_req_itf, 1);
     BTI_RSP_IF_CONSTRUCT(s, hart_d_bti_rsp_itf, 1);
-    CORE_TIMER_SIGNAL_IF_CONSTRUCT(s, core_timer_itf, false, true);
-    CORE_IRQ_SIGNAL_IF_CONSTRUCT(s, core_irq_itf, false, false);
-    EXT_IRQ_SIGNAL_IF_CONSTRUCT(s, conv_ext_irq_itf, false, false);
+    CORE_TIMER_SIGNAL_IF_CONSTRUCT(s, core_timer_sig_itf, false, false);
+    CORE_M_IRQ_SIGNAL_IF_CONSTRUCT(s, core_m_irq_sig_itf, false, false);
+    CORE_SWI_PEND_SIGNAL_IF_CONSTRUCT(s, core_swi_pend_sig_itf, false, false);
+    CORE_S_IRQ_IF_CONSTRUCT(s, core_s_irq_itf, 1);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(s, conv_ext_irq_sig_itf, false, false);
 
     s->hart.cycle = s->cycle;
     s->hart.i_bti_req_mst = &s->hart_i_bti_req_itf;
     s->hart.i_bti_rsp_slv = &s->hart_i_bti_rsp_itf;
     s->hart.d_bti_req_mst = &s->hart_d_bti_req_itf;
     s->hart.d_bti_rsp_slv = &s->hart_d_bti_rsp_itf;
-    s->hart.core_timer_slv = &s->core_timer_itf;
-    s->hart.core_irq_slv = &s->core_irq_itf;
-    s->hart.ext_irq_slv = &s->conv_ext_irq_itf;
+    s->hart.core_timer_in = &s->core_timer_sig_itf;
+    s->hart.core_m_irq_in = &s->core_m_irq_sig_itf;
+    s->hart.core_s_irq_slv = &s->core_s_irq_itf;
+    s->hart.ext_irq_in = &s->conv_ext_irq_sig_itf;
+    s->hart.core_swi_pend_out = &s->core_swi_pend_sig_itf;
     hart_conf_t hart_conf = {
         .boot_rom_base = conf->boot_rom_base,
         .boot_rom_size = conf->boot_rom_size
@@ -99,11 +103,12 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     ram_construct(&s->dtcm, "u_dtcm", 1, conf->dtcm_size, conf->dtcm_base);
 
     s->aclint.cycle= s->cycle;
-    s->aclint.csr_mip[0] = &s->hart.csr.mip;
     s->aclint.cfg_apb_req_slv = &s->aclint_cfg_apb_req_itf;
     s->aclint.cfg_apb_rsp_mst = &s->aclint_cfg_apb_rsp_itf;
-    s->aclint.core_timer_mst = &s->core_timer_itf;
-    s->aclint.core_irq_msts[0] = &s->core_irq_itf;
+    s->aclint.core_timer_out = &s->core_timer_sig_itf;
+    s->aclint.core_m_irq_outs[0] = &s->core_m_irq_sig_itf;
+    s->aclint.core_s_irq_msts[0] = &s->core_s_irq_itf;
+    s->aclint.core_swi_pend_ins[0] = &s->core_swi_pend_sig_itf;
     aclint_conf_t aclint_conf = {
         .mtimer_base = conf->aclint_mtimer_base,
         .mtimer_size = conf->aclint_mtimer_size,
@@ -120,9 +125,9 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     s->plic.cfg_apb_req_slv = &s->plic_cfg_apb_req_itf;
     s->plic.cfg_apb_rsp_mst = &s->plic_cfg_apb_rsp_itf;
     for (u32 i = 0; i < PLIC_MAX_IRQ_NUM; i++) {
-        s->plic.div_ext_irq_slvs[i] = s->ext_irq_slvs[i];
+        s->plic.div_ext_irq_ins[i] = s->ext_irq_ins[i];
     }
-    s->plic.conv_ext_irq_mst = &s->conv_ext_irq_itf;
+    s->plic.conv_ext_irq_out = &s->conv_ext_irq_sig_itf;
     plic_conf_t plic_conf = {};
     plic_construct(&s->plic, "u_plic", &plic_conf);
 }
@@ -164,9 +169,11 @@ void rv32g_free(rv32g_t *s)
     itf_free(&s->hart_i_bti_rsp_itf);
     itf_free(&s->hart_d_bti_req_itf);
     itf_free(&s->hart_d_bti_rsp_itf);
-    itf_free(&s->core_timer_itf);
-    itf_free(&s->core_irq_itf);
-    itf_free(&s->conv_ext_irq_itf);
+    itf_free(&s->core_timer_sig_itf);
+    itf_free(&s->core_m_irq_sig_itf);
+    itf_free(&s->core_s_irq_itf);
+    itf_free(&s->core_swi_pend_sig_itf);
+    itf_free(&s->conv_ext_irq_sig_itf);
 }
 
 void rv32g_clock(rv32g_t *s)
@@ -195,7 +202,9 @@ void rv32g_clock(rv32g_t *s)
     itf_dbg_clock(&s->hart_i_bti_rsp_itf);
     itf_dbg_clock(&s->hart_d_bti_req_itf);
     itf_dbg_clock(&s->hart_d_bti_rsp_itf);
-    itf_dbg_clock(&s->core_timer_itf);
-    itf_dbg_clock(&s->core_irq_itf);
-    itf_dbg_clock(&s->conv_ext_irq_itf);
+    itf_dbg_clock(&s->core_timer_sig_itf);
+    itf_dbg_clock(&s->core_m_irq_sig_itf);
+    itf_dbg_clock(&s->core_s_irq_itf);
+    itf_dbg_clock(&s->core_swi_pend_sig_itf);
+    itf_dbg_clock(&s->conv_ext_irq_sig_itf);
 }

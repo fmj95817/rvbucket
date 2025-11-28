@@ -26,7 +26,7 @@ def gen_c_itf(itf_name, desc):
     f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))
     f.write("        .reg_vcd = &{}_if_reg_vcd, \\\n".format(itf_name))
     f.write("        .force_disable_dump = dis_dump, \\\n")
-    f.write("        .ext_signal_src = ext_src \\\n")
+    f.write("        .ext_sig_src = ext_src \\\n")
     f.write("    }; \\\n")
     f.write("    itf_construct(&module->itf, #itf, &conf); \\\n")
     f.write("} while (0)\n\n")

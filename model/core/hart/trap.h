@@ -4,16 +4,18 @@
 #include "base/types.h"
 #include "base/itf.h"
 #include "itf/hart_expt_if.h"
-#include "itf/core_irq_if.h"
+#include "itf/core_m_irq_if.h"
+#include "itf/core_s_irq_if.h"
 #include "itf/ext_irq_if.h"
 #include "itf/trap_send_if.h"
 #include "csr.h"
 
 typedef struct trap {
     itf_t *hart_expt_slv;
-    itf_t *core_irq_slv;
-    itf_t *ext_irq_slv;
+    itf_t *core_s_irq_slv;
     itf_t *trap_send_mst;
+    itf_t *core_m_irq_in;
+    itf_t *ext_irq_in;
 
     rv32g_priv_t *priv;
     rv32g_csr_mstatus_t *mstatus;

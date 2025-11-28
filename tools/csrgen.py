@@ -4,8 +4,8 @@ import sys
 import json
 
 def gen_c_header(csr_desc, fp):
-    fp.write("#ifndef CSR_H\n")
-    fp.write("#define CSR_H\n\n")
+    fp.write("#ifndef RV32G_CSR_H\n")
+    fp.write("#define RV32G_CSR_H\n\n")
     fp.write("#include \"base/types.h\"\n")
     fp.write("#include \"isa.h\"\n\n")
 
@@ -54,15 +54,15 @@ def gen_c_header(csr_desc, fp):
             fp.write("typedef u32 rv32g_csr_{}_t;\n".format(csr["name"]))
     fp.write("\n")
 
-    fp.write("typedef struct csr {\n")
+    fp.write("typedef struct rv32g_csr {\n")
     for csr in csr_desc["csr"]:
         fp.write("    rv32g_csr_{}_t {};\n".format(csr["name"], csr["name"]))
-    fp.write("} csr_t;\n\n")
+    fp.write("} rv32g_csr_t;\n\n")
 
-    fp.write("extern void csr_reset(csr_t *csr);\n")
-    fp.write("extern bool csr_read(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data);\n")
-    fp.write("extern bool csr_write(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data);\n")
-    fp.write("extern const char *csr_name(u32 addr);\n\n")
+    fp.write("extern void rv32g_csr_reset(rv32g_csr_t *csr);\n")
+    fp.write("extern bool rv32g_csr_read(rv32g_csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data);\n")
+    fp.write("extern bool rv32g_csr_write(rv32g_csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data);\n")
+    fp.write("extern const char *rv32g_csr_name(u32 addr);\n\n")
     fp.write("#endif")
 
 def gen_c_src(csr_desc, fp):
@@ -74,7 +74,7 @@ def gen_c_src(csr_desc, fp):
     fp.write("#include \"csr.h\"\n\n")
     fp.write("#define CSR_CHECK_PRIV(p) if (priv < p) { return false; }\n\n")
 
-    fp.write("void csr_reset(csr_t *csr)\n")
+    fp.write("void rv32g_csr_reset(rv32g_csr_t *csr)\n")
     fp.write("{\n")
     for csr in csr_desc["csr"]:
         reset_val = "0"
@@ -88,7 +88,7 @@ def gen_c_src(csr_desc, fp):
             fp.write("    csr->{} = {};\n".format(csr["name"], reset_val))
     fp.write("}\n\n")
 
-    fp.write("bool csr_read(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data)\n")
+    fp.write("bool rv32g_csr_read(rv32g_csr_t *csr, rv32g_priv_t priv, u32 addr, u32 *data)\n")
     fp.write("{\n")
     fp.write("    switch (addr) {\n")
     for csr in csr_desc["csr"]:
@@ -106,7 +106,7 @@ def gen_c_src(csr_desc, fp):
     fp.write("    return false;\n")
     fp.write("}\n\n")
 
-    fp.write("bool csr_write(csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data)\n")
+    fp.write("bool rv32g_csr_write(rv32g_csr_t *csr, rv32g_priv_t priv, u32 addr, u32 data)\n")
     fp.write("{\n")
     fp.write("    switch (addr) {\n")
     for csr in csr_desc["csr"]:
@@ -126,7 +126,7 @@ def gen_c_src(csr_desc, fp):
     fp.write("    return false;\n")
     fp.write("}\n\n")
 
-    fp.write("const char *csr_name(u32 addr)\n")
+    fp.write("const char *rv32g_csr_name(u32 addr)\n")
     fp.write("{\n")
     fp.write("    switch (addr) {\n")
     for csr in csr_desc["csr"]:
@@ -143,10 +143,10 @@ csr_desc_fp = open(sys.argv[1], "r")
 csr_desc = json.load(csr_desc_fp)
 csr_desc_fp.close()
 
-c_header_fp = open("model/core/hart/csr.h", "w")
+c_header_fp = open("model/spec/csr.h", "w")
 gen_c_header(csr_desc, c_header_fp)
 c_header_fp.close()
 
-c_src_fp = open("model/core/hart/csr.c", "w")
+c_src_fp = open("model/spec/csr.c", "w")
 gen_c_src(csr_desc, c_src_fp)
 c_src_fp.close()

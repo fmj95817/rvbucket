@@ -1,7 +1,7 @@
 #include "soc.h"
 #include "base/def.h"
-#include "conf/core.h"
-#include "conf/soc.h"
+#include "spec/core.h"
+#include "spec/soc.h"
 #include "dbg/vcd.h"
 
 void soc_construct(soc_t *soc, const char *name)

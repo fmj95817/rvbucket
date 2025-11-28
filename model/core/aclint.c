@@ -13,10 +13,13 @@
 void aclint_construct(aclint_t *aclint, const char *name, const aclint_conf_t *conf)
 {
     DBG_VCD_MODULE_SCOPE(name);
-    DBG_CHECK(aclint->core_timer_mst != NULL);
-
     aclint->conf = *conf;
-    itf_signal_set_src(aclint->core_timer_mst, &aclint->mtime.raw);
+
+    aclint->core_timer_o = itf_signal_get_src_and_chk(aclint->core_timer_out);
+    for (u32 i = 0; i < HART_NUM; i++) {
+        aclint->core_m_irq_o[i] = itf_signal_get_src_and_chk(aclint->core_m_irq_outs[i]);
+        aclint->core_swi_pend_i[i] = itf_signal_get_src_and_chk(aclint->core_swi_pend_ins[i]);
+    }
 }
 
 void aclint_reset(aclint_t *aclint)
@@ -27,10 +30,15 @@ void aclint_reset(aclint_t *aclint)
 
 static void timer_proc(aclint_t *aclint)
 {
+    DBG_CHECK(aclint->core_timer_out != NULL);
+
     aclint->mtime_cycle_cnt++;
     if (aclint->mtime_cycle_cnt == aclint->conf.mtimer_tick_cycles) {
         aclint->mtime_cycle_cnt = 0u;
         aclint->mtime.raw++;
+
+        aclint->core_timer_o->time = aclint->mtime.raw;
+        itf_signal_write_notify(aclint->core_timer_out);
     }
 }
 
@@ -91,11 +99,34 @@ static bool mtimecmp_reg_rw(aclint_t *aclint, u32 addr, u32 *val, bool write, u8
 
 static bool mswi_reg_rw(aclint_t *aclint, u32 addr, u32 *val, bool write, u8 strb)
 {
+    for (u32 i = 0; i < HART_NUM; i++) {
+        if (addr != MSIP(i)) {
+            continue;
+        }
+        if (write && (strb & 1u)) {
+            aclint->core_m_irq_o[i]->msw = ((*val & 1u) != 0);
+            itf_signal_write_notify(aclint->core_m_irq_outs[i]);
+            return true;
+        } else if (!write) {
+            *val = aclint->core_swi_pend_i[i]->msip ? 1u : 0u;
+            return true;
+        }
+    }
     return false;
 }
 
 static bool sswi_reg_rw(aclint_t *aclint, u32 addr, u32 *val, bool write, u8 strb)
 {
+    for (u32 i = 0; i < HART_NUM; i++) {
+        if ((addr == SETSSIP(i)) && write && (strb & 1u) && (*val & 1u)) {
+            DBG_CHECK(aclint->core_s_irq_msts[i] != NULL);
+            DBG_CHECK(!itf_fifo_full(aclint->core_s_irq_msts[i]));
+            core_s_irq_if_t core_s_irq;
+            core_s_irq.ssw = true;
+            itf_write(aclint->core_s_irq_msts[i], &core_s_irq);
+            return true;
+        }
+    }
     return false;
 }
 
@@ -119,7 +150,6 @@ static bool aclint_reg_rw(aclint_t *aclint, u32 addr, u32 *val, bool write, u8 s
 
     return false;
 }
-
 
 static void apb_cfg_proc(aclint_t *aclint)
 {
@@ -147,15 +177,10 @@ static void apb_cfg_proc(aclint_t *aclint)
 static void raise_or_clear_mtimer_irq(aclint_t *aclint, u32 hart_id)
 {
     DBG_CHECK(hart_id < HART_NUM);
-    DBG_CHECK(aclint->core_irq_msts[hart_id] != NULL);
-    DBG_CHECK(aclint->csr_mip[hart_id] != NULL);
-
-    core_irq_if_t *core_irq = itf_signal_get_src(aclint->core_irq_msts[hart_id]);
-    DBG_CHECK(core_irq != NULL);
 
     bool m_exceed = (aclint->mtime.raw >= aclint->mtimecmp[hart_id].raw);
-    core_irq->mtimer = m_exceed;
-    aclint->csr_mip[hart_id]->reg.mtip = m_exceed ? 1u : 0u;
+    aclint->core_m_irq_o[hart_id]->mtimer = m_exceed;
+    itf_signal_write_notify(aclint->core_m_irq_outs[hart_id]);
 }
 
 static void core_irq_proc(aclint_t *aclint)

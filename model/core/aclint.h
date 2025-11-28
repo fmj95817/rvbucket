@@ -6,9 +6,10 @@
 #include "itf/apb_req_if.h"
 #include "itf/apb_rsp_if.h"
 #include "itf/core_timer_if.h"
-#include "itf/core_irq_if.h"
-#include "conf/core.h"
-#include "core/hart/csr.h"
+#include "itf/core_m_irq_if.h"
+#include "itf/core_s_irq_if.h"
+#include "itf/core_swi_pend_if.h"
+#include "spec/core.h"
 
 typedef struct aclint_conf {
     u32 mtimer_base;
@@ -32,12 +33,16 @@ typedef struct aclint_reg64 {
 
 typedef struct aclint {
     const u64 *cycle;
-    rv32g_csr_mip_t *csr_mip[HART_NUM];
-
     itf_t *cfg_apb_req_slv;
     itf_t *cfg_apb_rsp_mst;
-    itf_t *core_timer_mst;
-    itf_t *core_irq_msts[HART_NUM];
+    itf_t *core_timer_out;
+    itf_t *core_m_irq_outs[HART_NUM];
+    itf_t *core_s_irq_msts[HART_NUM];
+    itf_t *core_swi_pend_ins[HART_NUM];
+
+    core_timer_if_t *core_timer_o;
+    core_m_irq_if_t *core_m_irq_o[HART_NUM];
+    const core_swi_pend_if_t *core_swi_pend_i[HART_NUM];
 
     aclint_conf_t conf;
     u32 mtime_cycle_cnt;

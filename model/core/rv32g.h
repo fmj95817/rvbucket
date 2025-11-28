@@ -39,13 +39,14 @@ typedef struct rv32g_conf {
 
 typedef struct rv32g {
     const u64 *cycle;
+
     itf_t *mm_i_bti_req_mst;
     itf_t *mm_i_bti_rsp_slv;
     itf_t *mm_d_bti_req_mst;
     itf_t *mm_d_bti_rsp_slv;
     itf_t *peri_apb_req_mst;
     itf_t *peri_apb_rsp_slv;
-    itf_t *ext_irq_slvs[PLIC_MAX_IRQ_NUM];
+    itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
 
     hart_t hart;
     cbi_t cbi;
@@ -69,9 +70,11 @@ typedef struct rv32g {
     itf_t plic_cfg_apb_req_itf;
     itf_t plic_cfg_apb_rsp_itf;
 
-    itf_t core_timer_itf;
-    itf_t core_irq_itf;
-    itf_t conv_ext_irq_itf;
+    itf_t core_timer_sig_itf;
+    itf_t core_m_irq_sig_itf;
+    itf_t core_swi_pend_sig_itf;
+    itf_t core_s_irq_itf;
+    itf_t conv_ext_irq_sig_itf;
 
     itf_t hart_i_bti_req_itf;
     itf_t hart_i_bti_rsp_itf;

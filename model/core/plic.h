@@ -6,7 +6,7 @@
 #include "itf/apb_req_if.h"
 #include "itf/apb_rsp_if.h"
 #include "itf/ext_irq_if.h"
-#include "conf/core.h"
+#include "spec/core.h"
 
 typedef struct plic_conf {
 } plic_conf_t;
@@ -14,8 +14,8 @@ typedef struct plic_conf {
 typedef struct plic {
     itf_t *cfg_apb_req_slv;
     itf_t *cfg_apb_rsp_mst;
-    itf_t *div_ext_irq_slvs[PLIC_MAX_IRQ_NUM];
-    itf_t *conv_ext_irq_mst;
+    itf_t *div_ext_irq_ins[PLIC_MAX_IRQ_NUM];
+    itf_t *conv_ext_irq_out;
 } plic_t;
 
 extern void plic_construct(plic_t *plic, const char *name, const plic_conf_t *conf);

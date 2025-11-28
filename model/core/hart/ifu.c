@@ -1,5 +1,5 @@
 #include "ifu.h"
-#include "isa.h"
+#include "spec/isa.h"
 #include "base/def.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
