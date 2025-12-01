@@ -23,7 +23,7 @@ typedef struct aclint_conf {
     u32 mtimer_tick_cycles;
 } aclint_conf_t;
 
-typedef struct aclint_reg64 {
+typedef union aclint_reg64 {
     u64 raw;
     struct {
         u32 lo;
@@ -49,6 +49,7 @@ typedef struct aclint {
 
     aclint_reg64_t mtime;
     aclint_reg64_t mtimecmp[HART_NUM];
+    bool mtime_exceed_old[HART_NUM];
 } aclint_t;
 
 extern void aclint_construct(aclint_t *aclint, const char *name, const aclint_conf_t *conf);

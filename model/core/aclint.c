@@ -14,6 +14,8 @@ void aclint_construct(aclint_t *aclint, const char *name, const aclint_conf_t *c
 {
     DBG_VCD_MODULE_SCOPE(name);
     aclint->conf = *conf;
+    dbg_vcd_add_sig("mtime", DBG_SIG_TYPE_REG, 64, &aclint->mtime.raw);
+    dbg_vcd_add_sig("mtimecmp", DBG_SIG_TYPE_REG, 64, &aclint->mtimecmp[0].raw);
 
     aclint->core_timer_o = itf_signal_get_src_and_chk(aclint->core_timer_out);
     for (u32 i = 0; i < HART_NUM; i++) {
@@ -26,6 +28,9 @@ void aclint_reset(aclint_t *aclint)
 {
     aclint->mtime.raw = 0ull;
     aclint->mtime_cycle_cnt = 0u;
+    for (u32 i = 0; i < HART_NUM; i++) {
+        aclint->mtime_exceed_old[i] = false;
+    }
 }
 
 static void timer_proc(aclint_t *aclint)
@@ -179,8 +184,11 @@ static void raise_or_clear_mtimer_irq(aclint_t *aclint, u32 hart_id)
     DBG_CHECK(hart_id < HART_NUM);
 
     bool m_exceed = (aclint->mtime.raw >= aclint->mtimecmp[hart_id].raw);
-    aclint->core_m_irq_o[hart_id]->mtimer = m_exceed;
-    itf_signal_write_notify(aclint->core_m_irq_outs[hart_id]);
+    if (m_exceed != aclint->mtime_exceed_old[hart_id]) {
+        aclint->core_m_irq_o[hart_id]->mtimer = m_exceed;
+        itf_signal_write_notify(aclint->core_m_irq_outs[hart_id]);
+        aclint->mtime_exceed_old[hart_id] = m_exceed;
+    }
 }
 
 static void core_irq_proc(aclint_t *aclint)
