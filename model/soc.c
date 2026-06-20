@@ -2,6 +2,7 @@
 #include "base/def.h"
 #include "spec/core.h"
 #include "spec/soc.h"
+#include "itf/ext_irq_if.h"
 #include "dbg/vcd.h"
 
 void soc_construct(soc_t *soc, const char *name)
@@ -18,6 +19,7 @@ void soc_construct(soc_t *soc, const char *name)
     BTI_RSP_IF_CONSTRUCT(soc, flash_bti_rsp_itf, 1);
     APB_REQ_IF_CONSTRUCT(soc, uart_apb_req_itf, 1);
     APB_RSP_IF_CONSTRUCT(soc, uart_apb_rsp_itf, 1);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, uart_irq_sig_itf, false, false);
 
     soc->cpu.cycle = soc->cycle;
     soc->cpu.mm_i_bti_req_mst = &soc->mm_i_bti_req_itf;
@@ -26,6 +28,10 @@ void soc_construct(soc_t *soc, const char *name)
     soc->cpu.mm_d_bti_rsp_slv = &soc->mm_d_bti_rsp_itf;
     soc->cpu.peri_apb_req_mst = &soc->uart_apb_req_itf;
     soc->cpu.peri_apb_rsp_slv = &soc->uart_apb_rsp_itf;
+    soc->cpu.ext_irq_ins[0] = &soc->uart_irq_sig_itf;
+    for (u32 i = 1; i < PLIC_MAX_IRQ_NUM; i++) {
+        soc->cpu.ext_irq_ins[i] = soc->ext_irq_ins[i];
+    }
     rv32g_conf_t rv32g_conf = {
         .boot_rom_base = BOOT_ROM_BASE,
         .boot_rom_size = BOOT_ROM_SIZE,
@@ -62,6 +68,7 @@ void soc_construct(soc_t *soc, const char *name)
     soc->uart.apb_rsp_mst = &soc->uart_apb_rsp_itf;
     soc->uart.uart_tx_mst = soc->uart_tx_mst;
     soc->uart.uart_rx_slv = soc->uart_rx_slv;
+    soc->uart.irq_out = &soc->uart_irq_sig_itf;
     uart_construct(&soc->uart, "u_uart", UART_BASE, UART_SIZE);
 
     soc->mm_d_bti_demux.host_bti_req_slv = &soc->mm_d_bti_req_itf;
@@ -110,6 +117,7 @@ void soc_clock(soc_t *soc)
     itf_dbg_clock(&soc->flash_bti_rsp_itf);
     itf_dbg_clock(&soc->uart_apb_req_itf);
     itf_dbg_clock(&soc->uart_apb_rsp_itf);
+    itf_dbg_clock(&soc->uart_irq_sig_itf);
 }
 
 void soc_free(soc_t *soc)
@@ -130,4 +138,5 @@ void soc_free(soc_t *soc)
     itf_free(&soc->flash_bti_rsp_itf);
     itf_free(&soc->uart_apb_req_itf);
     itf_free(&soc->uart_apb_rsp_itf);
+    itf_free(&soc->uart_irq_sig_itf);
 }

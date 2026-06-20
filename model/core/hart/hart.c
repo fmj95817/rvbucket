@@ -69,18 +69,44 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->mmu.va_i_bti_rsp_mst = &s->va_i_bti_rsp_itf;
     s->mmu.va_d_bti_req_slv = &s->va_d_bti_req_itf;
     s->mmu.va_d_bti_rsp_mst = &s->va_d_bti_rsp_itf;
+    s->mmu.hart_expt_mst = &s->hart_expt_itf;
     s->mmu.pa_i_bti_req_mst = s->i_bti_req_mst;
     s->mmu.pa_i_bti_rsp_slv = s->i_bti_rsp_slv;
     s->mmu.pa_d_bti_req_mst = s->d_bti_req_mst;
     s->mmu.pa_d_bti_rsp_slv = s->d_bti_rsp_slv;
+    s->mmu.priv = &s->exu.priv;
+    s->mmu.satp = &s->csr.regs.satp;
+    s->mmu.mstatus = &s->csr.regs.mstatus;
+    s->mmu.ifu_pc = &s->ifu.fch.pc;
+    s->mmu.exu_pc = &s->exu.cur_pc;
     mmu_conf_t mmu_conf = {};
     mmu_construct(&s->mmu, "u_mmu", &mmu_conf);
 
     s->trap.hart_expt_slv = &s->hart_expt_itf;
-    s->trap.core_s_irq_slv = s->core_s_irq_slv;
     s->trap.trap_send_mst = &s->trap_send_itf;
+    s->trap.fl_req_mst = &s->fl_req_itf;
     s->trap.core_m_irq_in = s->core_m_irq_in;
     s->trap.ext_irq_in = s->ext_irq_in;
+    s->trap.priv = &s->exu.priv;
+    s->trap.mstatus = &s->csr.regs.mstatus;
+    s->trap.mcause = &s->csr.regs.mcause;
+    s->trap.mip = &s->csr.regs.mip;
+    s->trap.mie = &s->csr.regs.mie;
+    s->trap.mtvec = &s->csr.regs.mtvec;
+    s->trap.mepc = &s->csr.regs.mepc;
+    s->trap.mtval = &s->csr.regs.mtval;
+    s->trap.medeleg = &s->csr.regs.medeleg;
+    s->trap.mideleg = &s->csr.regs.mideleg;
+    s->trap.sstatus = &s->csr.regs.sstatus;
+    s->trap.scause = &s->csr.regs.scause;
+    s->trap.sip = &s->csr.regs.sip;
+    s->trap.sie = &s->csr.regs.sie;
+    s->trap.stvec = &s->csr.regs.stvec;
+    s->trap.sepc = &s->csr.regs.sepc;
+    s->trap.stval = &s->csr.regs.stval;
+    s->trap.ifu_pc = &s->ifu.fch.pc;
+    s->trap.exu_wfi = &s->exu.wfi;
+    s->trap.exu_wfi_resume_pc = &s->exu.wfi_resume_pc;
     trap_construct(&s->trap, "u_trap");
 }
 
@@ -126,10 +152,10 @@ void hart_clock(hart_t *s)
 {
     exu_clock(&s->exu);
     csr_clock(&s->csr);
+    trap_clock(&s->trap);
     ifu_clock(&s->ifu);
     hbi_clock(&s->hbi);
     mmu_clock(&s->mmu);
-    trap_clock(&s->trap);
 
     itf_dbg_clock(&s->ex_req_itf);
     itf_dbg_clock(&s->ex_rsp_itf);

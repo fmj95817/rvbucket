@@ -101,7 +101,7 @@ def gen_c_itf(itf_name, desc):
         bw = enums_bw[p["type"]] if "type" in p else p["width"]
         hex_w = math.ceil(bw / 4)
         if bw > 32:
-            f.write("%0{}lx".format(hex_w))
+            f.write("%0{}llx".format(hex_w))
         else:
             f.write("%0{}x".format(hex_w))
         if payload_idx < (payload_num - 1):

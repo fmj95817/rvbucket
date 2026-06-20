@@ -38,7 +38,7 @@ typedef struct core_timer_if {
 static inline void core_timer_if_to_str(const void *pkt, char *str)
 {
     const core_timer_if_t *core_timer = (const core_timer_if_t *)pkt;
-    sprintf(str, "%016lx\n", core_timer->time);
+    sprintf(str, "%016llx\n", core_timer->time);
 }
 
 static inline void core_timer_if_reg_vcd(const void *pkt, dbg_sig_type_t type)

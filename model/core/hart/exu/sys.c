@@ -10,29 +10,45 @@
 
 typedef void (*sys_ex_req_handler_t)(exu_t *exu, const ex_req_if_t *req);
 
+static void exu_send_expt(exu_t *exu, hart_expt_type_t type, hart_expt_cause_t cause, u32 pc, u32 tval)
+{
+    hart_expt_if_t pkt;
+    pkt.type = type;
+    pkt.cause = cause;
+    pkt.pc = pc;
+    pkt.tval = tval;
+    itf_write(exu->hart_expt_mst, &pkt);
+}
+
 DECL_SYS_HANDLER(ecall)
 {
     DBG_LOG(LOG_TRACE, "ecall\n");
+    exu_send_expt(exu, HART_EXPT_TYPE_EXCEPTION, HART_EXPT_CAUSE_ECALL, req->pc, 0);
 }
 
 DECL_SYS_HANDLER(ebreak)
 {
     DBG_LOG(LOG_TRACE, "ebreak\n");
+    exu_send_expt(exu, HART_EXPT_TYPE_EXCEPTION, HART_EXPT_CAUSE_BREAKPOINT, req->pc, req->pc);
 }
 
 DECL_SYS_HANDLER(sret)
 {
     DBG_LOG(LOG_TRACE, "sret\n");
+    exu_send_expt(exu, HART_EXPT_TYPE_SRET, (hart_expt_cause_t)0, req->pc, 0);
 }
 
 DECL_SYS_HANDLER(mret)
 {
     DBG_LOG(LOG_TRACE, "mret\n");
+    exu_send_expt(exu, HART_EXPT_TYPE_MRET, (hart_expt_cause_t)0, req->pc, 0);
 }
 
 DECL_SYS_HANDLER(wfi)
 {
     DBG_LOG(LOG_TRACE, "wfi\n");
+    exu->wfi = true;
+    exu->wfi_resume_pc = req->pc + 4;
 }
 
 DECL_SYS_HANDLER(sfence_vma)
@@ -87,86 +103,140 @@ static bool csr_write(exu_t *exu, u32 addr, u32 data)
     return exu->csr_write_rsp_i->ok;
 }
 
+static void csr_access_trap(exu_t *exu, const ex_req_if_t *req)
+{
+    exu_send_expt(exu, HART_EXPT_TYPE_EXCEPTION,
+        HART_EXPT_CAUSE_ILLEGAL_INST, req->pc, req->inst.raw);
+}
+
 DECL_SYS_HANDLER(csrrw)
 {
-    u32 old_val;
-    DBG_CHECK(csr_read(exu, req->inst.i.imm_11_0, &old_val));
-    set_gpr(exu, req->inst.i.rd, old_val);
+    u32 old_val = 0;
+    u32 addr = req->inst.i.imm_11_0;
+
+    if (req->inst.i.rd != 0 && !csr_read(exu, addr, &old_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
 
     u32 new_val = get_gpr(exu, req->inst.i.rs1);
-    DBG_CHECK(csr_write(exu, req->inst.i.imm_11_0, new_val));
+    if (!csr_write(exu, addr, new_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
+    set_gpr(exu, req->inst.i.rd, old_val);
 
     DBG_LOG(LOG_TRACE, "csrrw, %s, %s, %s\n", gpr_name(req->inst.i.rd),
-        rv32g_csr_name(req->inst.i.imm_11_0), gpr_name(req->inst.i.rs1));
+        rv32g_csr_name(addr), gpr_name(req->inst.i.rs1));
 }
 
 DECL_SYS_HANDLER(csrrs)
 {
     u32 old_val;
-    DBG_CHECK(csr_read(exu, req->inst.i.imm_11_0, &old_val));
-    set_gpr(exu, req->inst.i.rd, old_val);
+    u32 addr = req->inst.i.imm_11_0;
+
+    if (!csr_read(exu, addr, &old_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
 
     u32 mask = get_gpr(exu, req->inst.i.rs1);
     if (mask != 0) {
-        DBG_CHECK(csr_write(exu, req->inst.i.imm_11_0, old_val | mask));
+        if (!csr_write(exu, addr, old_val | mask)) {
+            csr_access_trap(exu, req);
+            return;
+        }
     }
+    set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrs, %s, %s, %s\n", gpr_name(req->inst.i.rd),
-        rv32g_csr_name(req->inst.i.imm_11_0), gpr_name(req->inst.i.rs1));
+        rv32g_csr_name(addr), gpr_name(req->inst.i.rs1));
 }
 
 DECL_SYS_HANDLER(csrrc)
 {
     u32 old_val;
-    DBG_CHECK(csr_read(exu, req->inst.i.imm_11_0, &old_val));
-    set_gpr(exu, req->inst.i.rd, old_val);
+    u32 addr = req->inst.i.imm_11_0;
+
+    if (!csr_read(exu, addr, &old_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
 
     u32 mask = get_gpr(exu, req->inst.i.rs1);
     if (mask != 0) {
-        DBG_CHECK(csr_write(exu, req->inst.i.imm_11_0, old_val & (~mask)));
+        if (!csr_write(exu, addr, old_val & (~mask))) {
+            csr_access_trap(exu, req);
+            return;
+        }
     }
+    set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrc, %s, %s, %s\n", gpr_name(req->inst.i.rd),
-        rv32g_csr_name(req->inst.i.imm_11_0), gpr_name(req->inst.i.rs1));
+        rv32g_csr_name(addr), gpr_name(req->inst.i.rs1));
 }
 
 DECL_SYS_HANDLER(csrrwi)
 {
-    u32 old_val;
-    DBG_CHECK(csr_read(exu, req->inst.i.imm_11_0, &old_val));
-    set_gpr(exu, req->inst.i.rd, old_val);
+    u32 old_val = 0;
+    u32 addr = req->inst.i.imm_11_0;
+
+    if (req->inst.i.rd != 0 && !csr_read(exu, addr, &old_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
 
     u32 new_val = req->inst.i.rs1;
-    DBG_CHECK(csr_write(exu, req->inst.i.imm_11_0, new_val));
+    if (!csr_write(exu, addr, new_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
+    set_gpr(exu, req->inst.i.rd, old_val);
 
     DBG_LOG(LOG_TRACE, "csrrwi, %s, %s, %u\n", gpr_name(req->inst.i.rd),
-        rv32g_csr_name(req->inst.i.imm_11_0), req->inst.i.rs1);
+        rv32g_csr_name(addr), req->inst.i.rs1);
 }
 
 DECL_SYS_HANDLER(csrrsi)
 {
     u32 old_val;
-    DBG_CHECK(csr_read(exu, req->inst.i.imm_11_0, &old_val));
-    set_gpr(exu, req->inst.i.rd, old_val);
+    u32 addr = req->inst.i.imm_11_0;
+
+    if (!csr_read(exu, addr, &old_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
 
     u32 mask = req->inst.i.rs1;
     if (mask != 0) {
-        DBG_CHECK(csr_write(exu, req->inst.i.imm_11_0, old_val | mask));
+        if (!csr_write(exu, addr, old_val | mask)) {
+            csr_access_trap(exu, req);
+            return;
+        }
     }
+    set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrsi, %s, %s, %u\n", gpr_name(req->inst.i.rd),
-        rv32g_csr_name(req->inst.i.imm_11_0), req->inst.i.rs1);
+        rv32g_csr_name(addr), req->inst.i.rs1);
 }
 
 DECL_SYS_HANDLER(csrrci)
 {
     u32 old_val;
-    DBG_CHECK(csr_read(exu, req->inst.i.imm_11_0, &old_val));
-    set_gpr(exu, req->inst.i.rd, old_val);
+    u32 addr = req->inst.i.imm_11_0;
+
+    if (!csr_read(exu, addr, &old_val)) {
+        csr_access_trap(exu, req);
+        return;
+    }
 
     u32 mask = req->inst.i.rs1;
     if (mask != 0) {
-        DBG_CHECK(csr_write(exu, req->inst.i.imm_11_0, old_val & (~mask)));
+        if (!csr_write(exu, addr, old_val & (~mask))) {
+            csr_access_trap(exu, req);
+            return;
+        }
     }
+    set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrci, %s, %s, %u\n", gpr_name(req->inst.i.rd),
-        rv32g_csr_name(req->inst.i.imm_11_0), req->inst.i.rs1);
+        rv32g_csr_name(addr), req->inst.i.rs1);
 }
 
 DECL_SYS_HANDLER(sys_group)

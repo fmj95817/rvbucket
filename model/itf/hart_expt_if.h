@@ -31,6 +31,11 @@
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)
 
+typedef enum hart_expt_type {
+    HART_EXPT_TYPE_EXCEPTION = 0,
+    HART_EXPT_TYPE_MRET = 1,
+    HART_EXPT_TYPE_SRET = 2,
+} hart_expt_type_t;
 typedef enum hart_expt_cause {
     HART_EXPT_CAUSE_INST_ADDR_MISALIGNED = 0,
     HART_EXPT_CAUSE_INST_ACCESS_FAULT = 1,
@@ -50,19 +55,25 @@ typedef enum hart_expt_cause {
 } hart_expt_cause_t;
 
 typedef struct hart_expt_if {
+    hart_expt_type_t type;
     hart_expt_cause_t cause;
+    u32 pc;
+    u32 tval;
 } hart_expt_if_t;
 
 static inline void hart_expt_if_to_str(const void *pkt, char *str)
 {
     const hart_expt_if_t *hart_expt = (const hart_expt_if_t *)pkt;
-    sprintf(str, "%02x\n", (u32)hart_expt->cause);
+    sprintf(str, "%01x %02x %08x %08x\n", (u32)hart_expt->type, (u32)hart_expt->cause, hart_expt->pc, hart_expt->tval);
 }
 
 static inline void hart_expt_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
 {
     const hart_expt_if_t *hart_expt = (const hart_expt_if_t *)pkt;
+    dbg_vcd_add_sig("type", type, 2, &hart_expt->type);
     dbg_vcd_add_sig("cause", type, 5, &hart_expt->cause);
+    dbg_vcd_add_sig("pc", type, 32, &hart_expt->pc);
+    dbg_vcd_add_sig("tval", type, 32, &hart_expt->tval);
 }
 
 #endif

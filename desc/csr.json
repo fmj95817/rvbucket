@@ -180,7 +180,7 @@
             "fields": {
                 "a": [0, 1], "c": [2, 1], "d": [3, 1], "f": [5, 1],
                 "h": [7, 1], "i": [8, 1], "m": [12, 1], "s": [18, 1],
-                "u": [20, 1], "v": [21, 1]
+                "u": [20, 1], "v": [21, 1], "mxl": [30, 2]
             }
         },
         {
@@ -301,6 +301,11 @@
             "prop": "mrw"
         },
         {
+            "name": "minstretcfg",
+            "addr": "0x322",
+            "prop": "mrw"
+        },
+        {
             "name": "mhpmevent3",
             "addr": "0x323",
             "prop": "mrw"
@@ -381,6 +386,226 @@
             "prop": "mrw"
         },
         {
+            "name": "mhpmevent19",
+            "addr": "0x333",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent20",
+            "addr": "0x334",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent21",
+            "addr": "0x335",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent22",
+            "addr": "0x336",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent23",
+            "addr": "0x337",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent24",
+            "addr": "0x338",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent25",
+            "addr": "0x339",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent26",
+            "addr": "0x33a",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent27",
+            "addr": "0x33b",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent28",
+            "addr": "0x33c",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent29",
+            "addr": "0x33d",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent30",
+            "addr": "0x33e",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent31",
+            "addr": "0x33f",
+            "prop": "mrw"
+        },
+        {
+            "name": "mcyclecfgh",
+            "addr": "0x721",
+            "prop": "mrw"
+        },
+        {
+            "name": "minstretcfgh",
+            "addr": "0x722",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent3h",
+            "addr": "0x723",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent4h",
+            "addr": "0x724",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent5h",
+            "addr": "0x725",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent6h",
+            "addr": "0x726",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent7h",
+            "addr": "0x727",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent8h",
+            "addr": "0x728",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent9h",
+            "addr": "0x729",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent10h",
+            "addr": "0x72a",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent11h",
+            "addr": "0x72b",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent12h",
+            "addr": "0x72c",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent13h",
+            "addr": "0x72d",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent14h",
+            "addr": "0x72e",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent15h",
+            "addr": "0x72f",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent16h",
+            "addr": "0x730",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent17h",
+            "addr": "0x731",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent18h",
+            "addr": "0x732",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent19h",
+            "addr": "0x733",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent20h",
+            "addr": "0x734",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent21h",
+            "addr": "0x735",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent22h",
+            "addr": "0x736",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent23h",
+            "addr": "0x737",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent24h",
+            "addr": "0x738",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent25h",
+            "addr": "0x739",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent26h",
+            "addr": "0x73a",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent27h",
+            "addr": "0x73b",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent28h",
+            "addr": "0x73c",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent29h",
+            "addr": "0x73d",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent30h",
+            "addr": "0x73e",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmevent31h",
+            "addr": "0x73f",
+            "prop": "mrw"
+        },
+        {
             "name": "mscratch",
             "addr": "0x340",
             "prop": "mrw"
@@ -430,6 +655,76 @@
         {
             "name": "pmpcfg1",
             "addr": "0x3a1",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg2",
+            "addr": "0x3a2",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg3",
+            "addr": "0x3a3",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg4",
+            "addr": "0x3a4",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg5",
+            "addr": "0x3a5",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg6",
+            "addr": "0x3a6",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg7",
+            "addr": "0x3a7",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg8",
+            "addr": "0x3a8",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg9",
+            "addr": "0x3a9",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg10",
+            "addr": "0x3aa",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg11",
+            "addr": "0x3ab",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg12",
+            "addr": "0x3ac",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg13",
+            "addr": "0x3ad",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg14",
+            "addr": "0x3ae",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpcfg15",
+            "addr": "0x3af",
             "prop": "mrw"
         },
         {
@@ -515,6 +810,241 @@
         {
             "name": "pmpaddr16",
             "addr": "0x3c0",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr17",
+            "addr": "0x3c1",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr18",
+            "addr": "0x3c2",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr19",
+            "addr": "0x3c3",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr20",
+            "addr": "0x3c4",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr21",
+            "addr": "0x3c5",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr22",
+            "addr": "0x3c6",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr23",
+            "addr": "0x3c7",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr24",
+            "addr": "0x3c8",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr25",
+            "addr": "0x3c9",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr26",
+            "addr": "0x3ca",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr27",
+            "addr": "0x3cb",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr28",
+            "addr": "0x3cc",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr29",
+            "addr": "0x3cd",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr30",
+            "addr": "0x3ce",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr31",
+            "addr": "0x3cf",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr32",
+            "addr": "0x3d0",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr33",
+            "addr": "0x3d1",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr34",
+            "addr": "0x3d2",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr35",
+            "addr": "0x3d3",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr36",
+            "addr": "0x3d4",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr37",
+            "addr": "0x3d5",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr38",
+            "addr": "0x3d6",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr39",
+            "addr": "0x3d7",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr40",
+            "addr": "0x3d8",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr41",
+            "addr": "0x3d9",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr42",
+            "addr": "0x3da",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr43",
+            "addr": "0x3db",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr44",
+            "addr": "0x3dc",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr45",
+            "addr": "0x3dd",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr46",
+            "addr": "0x3de",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr47",
+            "addr": "0x3df",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr48",
+            "addr": "0x3e0",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr49",
+            "addr": "0x3e1",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr50",
+            "addr": "0x3e2",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr51",
+            "addr": "0x3e3",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr52",
+            "addr": "0x3e4",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr53",
+            "addr": "0x3e5",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr54",
+            "addr": "0x3e6",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr55",
+            "addr": "0x3e7",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr56",
+            "addr": "0x3e8",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr57",
+            "addr": "0x3e9",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr58",
+            "addr": "0x3ea",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr59",
+            "addr": "0x3eb",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr60",
+            "addr": "0x3ec",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr61",
+            "addr": "0x3ed",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr62",
+            "addr": "0x3ee",
+            "prop": "mrw"
+        },
+        {
+            "name": "pmpaddr63",
+            "addr": "0x3ef",
             "prop": "mrw"
         },
         {
@@ -675,6 +1205,146 @@
         {
             "name": "mhpmcounter3h",
             "addr": "0xb83",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter4h",
+            "addr": "0xb84",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter5h",
+            "addr": "0xb85",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter6h",
+            "addr": "0xb86",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter7h",
+            "addr": "0xb87",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter8h",
+            "addr": "0xb88",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter9h",
+            "addr": "0xb89",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter10h",
+            "addr": "0xb8a",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter11h",
+            "addr": "0xb8b",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter12h",
+            "addr": "0xb8c",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter13h",
+            "addr": "0xb8d",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter14h",
+            "addr": "0xb8e",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter15h",
+            "addr": "0xb8f",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter16h",
+            "addr": "0xb90",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter17h",
+            "addr": "0xb91",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter18h",
+            "addr": "0xb92",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter19h",
+            "addr": "0xb93",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter20h",
+            "addr": "0xb94",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter21h",
+            "addr": "0xb95",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter22h",
+            "addr": "0xb96",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter23h",
+            "addr": "0xb97",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter24h",
+            "addr": "0xb98",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter25h",
+            "addr": "0xb99",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter26h",
+            "addr": "0xb9a",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter27h",
+            "addr": "0xb9b",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter28h",
+            "addr": "0xb9c",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter29h",
+            "addr": "0xb9d",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter30h",
+            "addr": "0xb9e",
+            "prop": "mrw"
+        },
+        {
+            "name": "mhpmcounter31h",
+            "addr": "0xb9f",
             "prop": "mrw"
         },
         {

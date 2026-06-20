@@ -26,7 +26,22 @@ static inline void exu_dump(exu_t *exu, u32 pc)
 
 static void exu_proc_ex_req(exu_t *exu)
 {
+    if (!itf_fifo_empty(exu->fl_req_slv)) {
+        fl_req_if_t fl_req;
+        itf_read(exu->fl_req_slv, &fl_req);
+
+        if (!itf_fifo_empty(exu->ex_req_slv)) {
+            ex_req_if_t ex_req;
+            itf_read(exu->ex_req_slv, &ex_req);
+        }
+        return;
+    }
+
     if (itf_fifo_empty(exu->ex_req_slv)) {
+        return;
+    }
+
+    if (exu->wfi) {
         return;
     }
 
@@ -71,6 +86,7 @@ static void exu_proc_ex_req(exu_t *exu)
     if (proc) {
         print_split_line(false);
         exu_dump(exu, ex_req.pc);
+        exu->cur_pc = ex_req.pc;
         proc(exu, &ex_req);
         print_split_line(true);
     } else {
@@ -90,7 +106,11 @@ static void exu_proc_biu_rsp(exu_t *exu)
 
     ldst_rsp_if_t ldst_rsp;
     itf_read(exu->ldst_rsp_slv, &ldst_rsp);
-    DBG_CHECK(ldst_rsp.ok);
+    if (!ldst_rsp.ok) {
+        exu->ldst_req_pend = false;
+        exu->amo_stage = AMO_STAGE_IDLE;
+        return;
+    }
 
     if (exu->cur_opcode == OPCODE_LOAD || exu->cur_opcode == OPCODE_STORE) {
         ldst_biu_rsp_proc(exu, &ldst_rsp);
@@ -125,7 +145,9 @@ void exu_reset(exu_t *exu)
     }
     exu->ldst_req_pend = false;
     exu->amo_stage = AMO_STAGE_IDLE;
+    exu->wfi = false;
     exu->priv = RV32G_PRIV_MACHINE;
+    exu->cur_pc = 0;
 }
 
 void exu_free(exu_t *exu) {}

@@ -24,6 +24,7 @@ typedef struct ifu {
     struct {
         bool pend;
         bool vld;
+        bool drop_rsp;
         u32 pc;
         u32 ir;
     } fch;
@@ -43,12 +44,13 @@ typedef struct ifu {
 
     struct {
         bool enable;
+        u32 access_seq;
         struct {
             bool vld;
             u32 pc;
-            bool taken;
+            u8 counter;
             u32 target_pc;
-            u16 used_bits;
+            u32 last_used;
         } bht[IFU_BHT_SIZE];
     } bpu;
 

@@ -9,6 +9,6 @@
 #define FLASH_SIZE          (16u * MiB)
 
 #define UART_BASE           0x30000000u
-#define UART_SIZE           12u
+#define UART_SIZE           16u
 
 #endif

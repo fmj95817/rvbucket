@@ -39,6 +39,7 @@ typedef struct exu {
     const csr_exu_write_rsp_if_t *csr_write_rsp_i;
 
     rv32g_priv_t priv;
+    u32 cur_pc;
 
     u32 cur_opcode;
 
@@ -53,6 +54,9 @@ typedef struct exu {
     u32 amo_funct375;
     bool amo_lr_set;
     u32 amo_rsvd_addr;
+
+    bool wfi;
+    u32 wfi_resume_pc;
 
     u32 gpr[RV32G_GPR_NUM];
 } exu_t;

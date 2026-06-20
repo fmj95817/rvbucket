@@ -26,8 +26,40 @@ function build_tools {
     ${HOST_CC} -Wall -O3 -o ${MKBIN} tools/mkbin.c -lm
 }
 
+function build_opensbi_case {
+    local case_name="opensbi"
+    local output_dir="build/sw/${case_name}"
+    local opensbi_dir="opensbi"
+    local fw_dir="${opensbi_dir}/build/platform/rvbucket/firmware"
+    local fw_bin="${fw_dir}/fw_payload.bin"
+    local fw_elf="${fw_dir}/fw_payload.elf"
+    local empty_dtcm="${output_dir}/${case_name}.dtcm"
+    local bin="${output_dir}/${case_name}.bin"
+    local hex="${output_dir}/${case_name}.hex"
+
+    mkdir -p "${output_dir}"
+
+    make -C "${opensbi_dir}" \
+        PLATFORM=rvbucket \
+        CROSS_COMPILE="${CROSS_PREFIX}-" \
+        FW_PAYLOAD_OFFSET=0x50000 \
+        FW_PIC=n
+
+    cp "${fw_elf}" "${output_dir}/${case_name}.elf"
+    cp "${fw_bin}" "${output_dir}/${case_name}.itcm"
+    : > "${empty_dtcm}"
+
+    ${MKBIN} "${fw_bin}" "${empty_dtcm}" "${bin}"
+    ${BIN2X} "${bin}" hex > "${hex}"
+}
+
 function build_sw_case {
     local case_name="${1}"
+    if [ "${case_name}" = "opensbi" ]; then
+        build_opensbi_case
+        return
+    fi
+
     local case_dir="cases/${case_name}"
     local output_dir="build/sw/${case_name}"
 
