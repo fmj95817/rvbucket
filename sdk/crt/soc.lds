@@ -13,7 +13,7 @@ SECTIONS
     {
         *(.init)
         *(.text.entry)
-        *(.text)
+        *(.text .text.*)
     } > ITCM
 
     /* data segment */

@@ -21,6 +21,8 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     BTI_RSP_IF_CONSTRUCT(s, hart_i_bti_rsp_itf, 1);
     BTI_REQ_IF_CONSTRUCT(s, hart_d_bti_req_itf, 1);
     BTI_RSP_IF_CONSTRUCT(s, hart_d_bti_rsp_itf, 1);
+    BTI_REQ_IF_CONSTRUCT(s, hart_ptw_bti_req_itf, 1);
+    BTI_RSP_IF_CONSTRUCT(s, hart_ptw_bti_rsp_itf, 1);
     CORE_TIMER_SIGNAL_IF_CONSTRUCT(s, core_timer_sig_itf, false, false);
     CORE_M_IRQ_SIGNAL_IF_CONSTRUCT(s, core_m_irq_sig_itf, false, false);
     CORE_SWI_PEND_SIGNAL_IF_CONSTRUCT(s, core_swi_pend_sig_itf, false, false);
@@ -32,6 +34,8 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     s->hart.i_bti_rsp_slv = &s->hart_i_bti_rsp_itf;
     s->hart.d_bti_req_mst = &s->hart_d_bti_req_itf;
     s->hart.d_bti_rsp_slv = &s->hart_d_bti_rsp_itf;
+    s->hart.ptw_bti_req_mst = &s->hart_ptw_bti_req_itf;
+    s->hart.ptw_bti_rsp_slv = &s->hart_ptw_bti_rsp_itf;
     s->hart.core_timer_in = &s->core_timer_sig_itf;
     s->hart.core_m_irq_in = &s->core_m_irq_sig_itf;
     s->hart.core_s_irq_slv = &s->core_s_irq_itf;
@@ -66,6 +70,8 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     s->cbi.hart_i_bti_rsp_mst = &s->hart_i_bti_rsp_itf;
     s->cbi.hart_d_bti_req_slv = &s->hart_d_bti_req_itf;
     s->cbi.hart_d_bti_rsp_mst = &s->hart_d_bti_rsp_itf;
+    s->cbi.hart_ptw_bti_req_slv = &s->hart_ptw_bti_req_itf;
+    s->cbi.hart_ptw_bti_rsp_mst = &s->hart_ptw_bti_rsp_itf;
     cbi_conf_t cbi_conf = {
         .boot_rom_base = conf->boot_rom_base,
         .boot_rom_size = conf->boot_rom_size,
@@ -169,6 +175,8 @@ void rv32g_free(rv32g_t *s)
     itf_free(&s->hart_i_bti_rsp_itf);
     itf_free(&s->hart_d_bti_req_itf);
     itf_free(&s->hart_d_bti_rsp_itf);
+    itf_free(&s->hart_ptw_bti_req_itf);
+    itf_free(&s->hart_ptw_bti_rsp_itf);
     itf_free(&s->core_timer_sig_itf);
     itf_free(&s->core_m_irq_sig_itf);
     itf_free(&s->core_s_irq_itf);
@@ -202,6 +210,8 @@ void rv32g_clock(rv32g_t *s)
     itf_dbg_clock(&s->hart_i_bti_rsp_itf);
     itf_dbg_clock(&s->hart_d_bti_req_itf);
     itf_dbg_clock(&s->hart_d_bti_rsp_itf);
+    itf_dbg_clock(&s->hart_ptw_bti_req_itf);
+    itf_dbg_clock(&s->hart_ptw_bti_rsp_itf);
     itf_dbg_clock(&s->core_timer_sig_itf);
     itf_dbg_clock(&s->core_m_irq_sig_itf);
     itf_dbg_clock(&s->core_s_irq_itf);

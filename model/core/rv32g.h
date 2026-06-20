@@ -81,6 +81,8 @@ typedef struct rv32g {
     itf_t hart_i_bti_rsp_itf;
     itf_t hart_d_bti_req_itf;
     itf_t hart_d_bti_rsp_itf;
+    itf_t hart_ptw_bti_req_itf;
+    itf_t hart_ptw_bti_rsp_itf;
 } rv32g_t;
 
 extern void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf);

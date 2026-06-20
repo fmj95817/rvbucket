@@ -55,6 +55,9 @@ DECL_SYS_HANDLER(wfi)
 DECL_SYS_HANDLER(sfence_vma)
 {
     DBG_LOG(LOG_TRACE, "sfence.vma\n");
+    DBG_CHECK(!itf_fifo_full(exu->tlb_flush_mst));
+    tlb_flush_if_t pkt = {};
+    itf_write(exu->tlb_flush_mst, &pkt);
 }
 
 DECL_SYS_HANDLER(priv_group)

@@ -21,6 +21,8 @@ typedef struct hart {
     itf_t *i_bti_rsp_slv;
     itf_t *d_bti_req_mst;
     itf_t *d_bti_rsp_slv;
+    itf_t *ptw_bti_req_mst;
+    itf_t *ptw_bti_rsp_slv;
     itf_t *core_s_irq_slv;
     itf_t *core_timer_in;
     itf_t *core_m_irq_in;
@@ -45,6 +47,7 @@ typedef struct hart {
     itf_t va_i_bti_rsp_itf;
     itf_t va_d_bti_req_itf;
     itf_t va_d_bti_rsp_itf;
+    itf_t tlb_flush_itf;
     itf_t hart_expt_itf;
     itf_t trap_send_itf;
     itf_t exu_csr_read_req_sig_itf;

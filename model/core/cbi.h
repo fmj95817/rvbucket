@@ -60,12 +60,17 @@ typedef struct cbi {
     itf_t *hart_i_bti_rsp_mst;
     itf_t *hart_d_bti_req_slv;
     itf_t *hart_d_bti_rsp_mst;
+    itf_t *hart_ptw_bti_req_slv;
+    itf_t *hart_ptw_bti_rsp_mst;
 
     bti_demux_t i_bti_demux;
+    bti_mux_t d_bti_mux;
     bti_demux_t d_bti_demux;
     bti2apb_t cfg_bti2apb;
     apb_demux_t cfg_apb_demux;
 
+    itf_t d_mux_bti_req_itf;
+    itf_t d_mux_bti_rsp_itf;
     itf_t cfg_bti_req_itf;
     itf_t cfg_bti_rsp_itf;
     itf_t cfg_apb_req_itf;

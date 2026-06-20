@@ -18,6 +18,7 @@ typedef struct bti_mux {
     u32 host_num;
     bool rsp_pending;
     u32 rsp_host_idx;
+    u32 req_rr_idx;
 } bti_mux_t;
 
 extern void bti_mux_construct(bti_mux_t *bti_mux, const char *name, u32 host_num);

@@ -72,6 +72,11 @@
             "payloads": []
         },
 
+        "tlb_flush": {
+            "type": "vld",
+            "payloads": []
+        },
+
         "ldst_req": {
             "type": "vld-rdy",
             "payloads": [
