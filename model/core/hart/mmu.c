@@ -112,9 +112,15 @@ static void mmu_send_pa_req(mmu_t *mmu, itf_t *pa_req_mst, const bti_req_if_t *r
 
 static void mmu_start_req(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
 {
+    mmu_access_t access = is_inst ? MMU_ACCESS_INST :
+        (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
+
     mmu->busy = true;
     mmu->is_inst = is_inst;
     mmu->req = *req;
+    mmu->req_priv = mmu_effective_priv(mmu, access);
+    mmu->req_sum = mmu->mstatus->reg.sum;
+    mmu->req_mxr = mmu->mstatus->reg.mxr;
     mmu->fault_pc = is_inst ? *mmu->ifu_pc : *mmu->exu_pc;
     mmu->va = req->addr;
     mmu->root_base = mmu->satp->reg.ppn << MMU_PGSHIFT;
@@ -216,16 +222,14 @@ static bool mmu_pte_valid(u32 pte)
 
 static bool mmu_pte_permits(const mmu_t *mmu, u32 pte)
 {
-    rv32g_priv_t priv = mmu_effective_priv(mmu,
-        mmu->is_inst ? MMU_ACCESS_INST :
-        (mmu->req.cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD));
+    rv32g_priv_t priv = mmu->req_priv;
     bool user_page = (pte & PTE_U) != 0;
 
     if (priv == RV32G_PRIV_USER && !user_page) {
         return false;
     }
     if (priv == RV32G_PRIV_SUPERVISOR && user_page) {
-        if (mmu->is_inst || !mmu->mstatus->reg.sum) {
+        if (mmu->is_inst || !mmu->req_sum) {
             return false;
         }
     }
@@ -237,7 +241,7 @@ static bool mmu_pte_permits(const mmu_t *mmu, u32 pte)
         return (pte & PTE_W) != 0;
     }
 
-    return (pte & PTE_R) || (mmu->mstatus->reg.mxr && (pte & PTE_X));
+    return (pte & PTE_R) || (mmu->req_mxr && (pte & PTE_X));
 }
 
 static bool mmu_pte_ad_ok(const mmu_t *mmu, u32 pte)

@@ -10,6 +10,9 @@ static void trap_send_redirect(trap_t *trap, u32 target_pc)
     trap_send_if_t pkt;
     pkt.target_pc = target_pc;
     itf_write(trap->trap_send_mst, &pkt);
+    if (trap->irq_epc) {
+        *trap->irq_epc = target_pc;
+    }
 
     if (!itf_fifo_full(trap->fl_req_mst)) {
         fl_req_if_t fl_req = {};
@@ -60,7 +63,7 @@ static void trap_enter_m_mode(trap_t *trap, u32 cause, bool is_interrupt, u32 ep
     u32 target_pc = trap_compute_tvec_pc(trap->mtvec, is_interrupt, cause);
     trap_send_redirect(trap, target_pc);
 
-    DBG_LOG(LOG_TRACE, "trap: enter M-mode, cause=%u, int=%u, epc=%08x, tval=%08x, pc->%08x\n",
+    DBG_LOG(LOG_TRAP, "trap: enter M-mode, cause=%u, int=%u, epc=%08x, tval=%08x, pc->%08x\n",
         cause, is_interrupt, epc, tval, target_pc);
 }
 
@@ -84,7 +87,7 @@ static void trap_enter_s_mode(trap_t *trap, u32 cause, bool is_interrupt, u32 ep
     u32 target_pc = trap_compute_stvec_pc(trap->stvec, is_interrupt, cause);
     trap_send_redirect(trap, target_pc);
 
-    DBG_LOG(LOG_TRACE, "trap: enter S-mode, cause=%u, int=%u, epc=%08x, tval=%08x, pc->%08x\n",
+    DBG_LOG(LOG_TRAP, "trap: enter S-mode, cause=%u, int=%u, epc=%08x, tval=%08x, pc->%08x\n",
         cause, is_interrupt, epc, tval, target_pc);
 }
 
@@ -114,12 +117,18 @@ static void trap_do_mret(trap_t *trap)
     u32 target_pc = *trap->mepc & EPC_ALIGN_MASK;
     trap_send_redirect(trap, target_pc);
 
-    DBG_LOG(LOG_TRACE, "trap: mret, pc->%08x, priv->%u\n", target_pc, prev_priv);
+    DBG_LOG(LOG_TRAP, "trap: mret, pc->%08x, priv->%u\n", target_pc, prev_priv);
 }
 
 static void trap_do_sret(trap_t *trap)
 {
     u32 prev_priv = trap->mstatus->reg.spp;
+    if (*trap->sepc < 0x80000000u) {
+        DBG_LOG(LOG_TRAP, "sret enter sepc=%08x priv=%u mstatus=%08x sstatus=%08x spp=%u spie=%u sie=%u\n",
+            *trap->sepc, (u32)*trap->priv, trap->mstatus->raw,
+            trap->sstatus->raw, trap->mstatus->reg.spp,
+            trap->mstatus->reg.spie, trap->mstatus->reg.sie);
+    }
     trap->mstatus->reg.sie = trap->mstatus->reg.spie;
     trap->mstatus->reg.spie = 1;
     trap->mstatus->reg.spp = 0;
@@ -134,8 +143,13 @@ static void trap_do_sret(trap_t *trap)
 
     u32 target_pc = *trap->sepc & EPC_ALIGN_MASK;
     trap_send_redirect(trap, target_pc);
+    if (*trap->sepc < 0x80000000u) {
+        DBG_LOG(LOG_TRAP, "sret exit pc=%08x priv=%u mstatus=%08x sstatus=%08x\n",
+            target_pc, (u32)*trap->priv, trap->mstatus->raw,
+            trap->sstatus->raw);
+    }
 
-    DBG_LOG(LOG_TRACE, "trap: sret, pc->%08x, priv->%u\n", target_pc, prev_priv);
+    DBG_LOG(LOG_TRAP, "trap: sret, pc->%08x, priv->%u\n", target_pc, prev_priv);
 }
 
 static void trap_proc_exception(trap_t *trap)
@@ -215,16 +229,38 @@ static int trap_pending_irq(trap_t *trap)
     return -1;
 }
 
+static bool trap_has_wfi_wakeup(const trap_t *trap)
+{
+    return (trap->mip->raw & trap->mie->raw) != 0;
+}
+
 static void trap_proc_interrupt(trap_t *trap)
 {
+    if (trap->irq_defer && *trap->irq_defer) {
+        return;
+    }
+
     int irq = trap_pending_irq(trap);
     if (irq < 0) {
+        if (*trap->exu_wfi && trap_has_wfi_wakeup(trap)) {
+            u32 epc = *trap->exu_wfi_resume_pc;
+            *trap->exu_wfi = false;
+            DBG_LOG(LOG_TRAP, "wfi resume epc=%08x priv=%u mip=%08x mie=%08x mstatus=%08x\n",
+                epc, (u32)*trap->priv, trap->mip->raw, trap->mie->raw,
+                trap->mstatus->raw);
+            trap_send_redirect(trap, epc);
+        }
         return;
     }
 
     bool from_wfi = *trap->exu_wfi;
-    u32 epc = from_wfi ? *trap->exu_wfi_resume_pc : *trap->ifu_pc;
+    u32 epc = from_wfi ? *trap->exu_wfi_resume_pc : *trap->irq_epc;
     *trap->exu_wfi = false;
+    if (from_wfi) {
+        DBG_LOG(LOG_TRAP, "wfi wake irq=%d epc=%08x priv=%u mip=%08x mie=%08x mideleg=%08x mstatus=%08x\n",
+            irq, epc, (u32)*trap->priv, trap->mip->raw, trap->mie->raw,
+            trap->mideleg->raw, trap->mstatus->raw);
+    }
     trap_take(trap, (u32)irq, true, epc, 0);
 
     (void)from_wfi;
@@ -245,6 +281,20 @@ void trap_reset(trap_t *trap)
 void trap_clock(trap_t *trap)
 {
     trap->mip->reg.meip = trap->ext_irq_i->irq ? 1u : 0u;
+    trap->mip->reg.seip = trap->ext_irq_i->irq ? 1u : 0u;
+
+    if (*trap->exu_wfi) {
+        static u32 wfi_wait_cnt;
+        wfi_wait_cnt++;
+        if (wfi_wait_cnt == 1u || (wfi_wait_cnt % 1000000u) == 0u) {
+            DBG_LOG(LOG_TRAP,
+                "wfi wait cnt=%u priv=%u mip=%08x mie=%08x sip=%08x sie=%08x mideleg=%08x mstatus=%08x m_irq{timer=%u,sw=%u} ext=%u\n",
+                wfi_wait_cnt, (u32)*trap->priv, trap->mip->raw, trap->mie->raw,
+                trap->sip->raw, trap->sie->raw, trap->mideleg->raw,
+                trap->mstatus->raw, trap->core_m_irq_i->mtimer,
+                trap->core_m_irq_i->msw, trap->ext_irq_i->irq);
+        }
+    }
 
     if (!itf_fifo_empty(trap->hart_expt_slv)) {
         trap_proc_exception(trap);

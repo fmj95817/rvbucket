@@ -16,7 +16,7 @@
 
         "ex_req": {
             "type": "vld-rdy",
-            "include": ["spec/isa.h"],
+            "include": ["spec/core/isa.h"],
             "payloads": [
                 { "name": "inst", "ext_type": "rv32g_inst_t", "raw": "raw", "width": 32 },
                 { "name": "pc", "width": 32 },

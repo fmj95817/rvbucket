@@ -36,7 +36,7 @@ DECL_LDST_EX_REQ_HANDLER(lb)
 
 DECL_LDST_BIU_RSP_HANDLER(lb)
 {
-    set_gpr(exu, exu->ld_rd, sign_ext(ldst_rsp->data & 0xff, 8));
+    set_gpr(exu, exu->ld_rd, rv32g_sign_ext(ldst_rsp->data & 0xff, 8));
 }
 
 DECL_LDST_EX_REQ_HANDLER(lh)
@@ -54,7 +54,7 @@ DECL_LDST_EX_REQ_HANDLER(lh)
 
 DECL_LDST_BIU_RSP_HANDLER(lh)
 {
-    set_gpr(exu, exu->ld_rd, sign_ext(ldst_rsp->data & 0xffff, 16));
+    set_gpr(exu, exu->ld_rd, rv32g_sign_ext(ldst_rsp->data & 0xffff, 16));
 }
 
 DECL_LDST_EX_REQ_HANDLER(lw)
@@ -230,6 +230,7 @@ void ldst_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
     itf_write(exu->ldst_req_mst, &ldst_req);
     exu->cur_opcode = ex_req->inst.base.opcode;
     exu->ldst_req_pend = true;
+    exu->irq_defer = true;
 
     if (ex_req->inst.base.opcode == OPCODE_LOAD) {
         exu->ld_rd = ex_req->inst.i.rd;
@@ -243,4 +244,6 @@ void ldst_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
         CALL_LDST_BIU_RSP_HANDLER(load_group, exu, ldst_rsp);
     }
     exu->ldst_req_pend = false;
+    exu->irq_defer = false;
+    exu->irq_epc = exu->cur_pc + 4;
 }

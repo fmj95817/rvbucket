@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include "base/types.h"
 #include "dbg/vcd.h"
-#include "spec/isa.h"
+#include "spec/core/isa.h"
 
 #define EX_REQ_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
     itf_conf_t conf = { \

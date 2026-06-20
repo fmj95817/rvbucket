@@ -7,7 +7,9 @@
 typedef enum log_module {
     LOG_PRINT = 0,
     LOG_TRACE = 1,
-    LOG_MOD_COUNT = LOG_TRACE + 1
+    LOG_TRAP = 2,
+    LOG_INFO = 3,
+    LOG_MOD_COUNT = LOG_INFO + 1
 } log_module_t;
 
 extern FILE *dbg_get_log_module_fp(log_module_t mod);

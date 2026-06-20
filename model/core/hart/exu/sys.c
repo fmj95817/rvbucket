@@ -1,6 +1,6 @@
 #include "exu.h"
 #include "utils.h"
-#include "spec/csr.h"
+#include "spec/core/csr.h"
 #include "dbg/chk.h"
 #include "dbg/log.h"
 
@@ -47,6 +47,7 @@ DECL_SYS_HANDLER(mret)
 DECL_SYS_HANDLER(wfi)
 {
     DBG_LOG(LOG_TRACE, "wfi\n");
+    DBG_LOG(LOG_TRAP, "wfi enter pc=%08x priv=%u\n", req->pc, (u32)exu->priv);
     exu->wfi = true;
     exu->wfi_resume_pc = req->pc + 4;
 }

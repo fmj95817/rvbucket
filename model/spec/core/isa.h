@@ -181,4 +181,54 @@ typedef union rv32g_inst {
 } rv32g_inst_t;
 #pragma pack()
 
+static inline u32 rv32g_sign_ext(u32 data, u32 width)
+{
+    if (data & (1u << (width - 1))) {
+        data |= ((~0u) << width);
+    }
+    return data;
+}
+
+static inline u32 u_imm_decode(const rv32g_inst_t *i)
+{
+    return i->u.imm_31_12 << 12;
+}
+
+static inline i32 j_imm_decode(const rv32g_inst_t *i)
+{
+    u32 src = (i->j.imm_10_1 << 1) |
+              (i->j.imm_11 << 11) |
+              (i->j.imm_19_12 << 12) |
+              (i->j.imm_20 << 20);
+
+    i32 dst = { .u = rv32g_sign_ext(src, 21) };
+    return dst;
+}
+
+static inline i32 i_imm_decode(const rv32g_inst_t *i)
+{
+    i32 dst = { .u = rv32g_sign_ext(i->i.imm_11_0, 12) };
+    return dst;
+}
+
+static inline i32 b_imm_decode(const rv32g_inst_t *i)
+{
+    u32 src = (i->b.imm_4_1 << 1) |
+              (i->b.imm_10_5 << 5) |
+              (i->b.imm_11 << 11) |
+              (i->b.imm_12 << 12);
+
+    i32 dst = { .u = rv32g_sign_ext(src, 13) };
+    return dst;
+}
+
+static inline i32 s_imm_decode(const rv32g_inst_t *i)
+{
+    u32 src = (i->s.imm_4_0) |
+              (i->s.imm_11_5 << 5);
+
+    i32 dst = { .u = rv32g_sign_ext(src, 12) };
+    return dst;
+}
+
 #endif

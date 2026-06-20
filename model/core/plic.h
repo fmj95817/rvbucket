@@ -6,7 +6,7 @@
 #include "itf/apb_req_if.h"
 #include "itf/apb_rsp_if.h"
 #include "itf/ext_irq_if.h"
-#include "spec/core.h"
+#include "spec/core/core.h"
 
 typedef struct plic_conf {
 } plic_conf_t;

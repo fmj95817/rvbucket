@@ -3,7 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "spec/csr.h"
+#include "spec/core/csr.h"
 #include "itf/core_timer_if.h"
 #include "itf/core_m_irq_if.h"
 #include "itf/core_s_irq_if.h"

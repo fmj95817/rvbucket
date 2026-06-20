@@ -6,7 +6,7 @@
 #include "itf/bti_req_if.h"
 #include "itf/bti_rsp_if.h"
 #include "itf/hart_expt_if.h"
-#include "spec/csr.h"
+#include "spec/core/csr.h"
 
 typedef struct mmu_conf {
 } mmu_conf_t;
@@ -32,6 +32,9 @@ typedef struct mmu {
     bool busy;
     bool is_inst;
     bti_req_if_t req;
+    rv32g_priv_t req_priv;
+    bool req_sum;
+    bool req_mxr;
     u32 fault_pc;
     u32 root_base;
     u32 va;

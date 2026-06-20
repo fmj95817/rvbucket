@@ -9,7 +9,7 @@
 #include "itf/fch_rsp_if.h"
 #include "itf/fl_req_if.h"
 #include "itf/trap_send_if.h"
-#include "spec/hart.h"
+#include "spec/core/hart.h"
 
 typedef struct ifu {
     itf_t *fch_req_mst;

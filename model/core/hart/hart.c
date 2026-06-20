@@ -104,7 +104,8 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->trap.stvec = &s->csr.regs.stvec;
     s->trap.sepc = &s->csr.regs.sepc;
     s->trap.stval = &s->csr.regs.stval;
-    s->trap.ifu_pc = &s->ifu.fch.pc;
+    s->trap.irq_epc = &s->exu.irq_epc;
+    s->trap.irq_defer = &s->exu.irq_defer;
     s->trap.exu_wfi = &s->exu.wfi;
     s->trap.exu_wfi_resume_pc = &s->exu.wfi_resume_pc;
     trap_construct(&s->trap, "u_trap");

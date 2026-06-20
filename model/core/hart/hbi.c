@@ -1,7 +1,7 @@
 #include "hbi.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
-#include "spec/hart.h"
+#include "spec/core/hart.h"
 
 void hbi_construct(hbi_t *hbi, const char *name)
 {

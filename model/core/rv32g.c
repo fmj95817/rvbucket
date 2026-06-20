@@ -114,11 +114,11 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
         .mtimer_size = conf->aclint_mtimer_size,
         .mtimecmp_base = conf->aclint_mtimecmp_base,
         .mtimecmp_size = conf->aclint_mtimecmp_size,
+        .mtimer_tick_cycles = conf->aclint_mtimer_tick_cycles,
         .mswi_base = conf->aclint_mswi_base,
         .mswi_size = conf->aclint_mswi_size,
         .sswi_base = conf->aclint_sswi_base,
-        .sswi_size = conf->aclint_sswi_size,
-        .mtimer_tick_cycles = 0x1000
+        .sswi_size = conf->aclint_sswi_size
     };
     aclint_construct(&s->aclint, "u_aclint", &aclint_conf);
 

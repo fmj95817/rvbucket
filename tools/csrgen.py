@@ -145,10 +145,10 @@ csr_desc_fp = open(sys.argv[1], "r")
 csr_desc = json.load(csr_desc_fp)
 csr_desc_fp.close()
 
-c_header_fp = open("model/spec/csr.h", "w")
+c_header_fp = open("model/spec/core/csr.h", "w")
 gen_c_header(csr_desc, c_header_fp)
 c_header_fp.close()
 
-c_src_fp = open("model/spec/csr.c", "w")
+c_src_fp = open("model/spec/core/csr.c", "w")
 gen_c_src(csr_desc, c_src_fp)
 c_src_fp.close()

@@ -13,7 +13,7 @@
 #include "itf/csr_exu_read_rsp_if.h"
 #include "itf/exu_csr_write_req_if.h"
 #include "itf/csr_exu_write_rsp_if.h"
-#include "spec/isa.h"
+#include "spec/core/isa.h"
 
 typedef enum amo_stage {
     AMO_STAGE_IDLE = 0,
@@ -40,6 +40,8 @@ typedef struct exu {
 
     rv32g_priv_t priv;
     u32 cur_pc;
+    u32 irq_epc;
+    bool irq_defer;
 
     u32 cur_opcode;
 

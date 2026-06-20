@@ -29,6 +29,7 @@ typedef struct rv32g_conf {
     u32 aclint_mtimer_size;
     u32 aclint_mtimecmp_base;
     u32 aclint_mtimecmp_size;
+    u32 aclint_mtimer_tick_cycles;
     u32 aclint_mswi_base;
     u32 aclint_mswi_size;
     u32 aclint_sswi_base;

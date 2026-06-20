@@ -8,7 +8,7 @@
 #include "itf/core_s_irq_if.h"
 #include "itf/ext_irq_if.h"
 #include "itf/trap_send_if.h"
-#include "spec/csr.h"
+#include "spec/core/csr.h"
 
 typedef struct trap {
     itf_t *hart_expt_slv;
@@ -40,7 +40,8 @@ typedef struct trap {
     const core_m_irq_if_t *core_m_irq_i;
     const ext_irq_if_t *ext_irq_i;
 
-    u32 *ifu_pc;
+    u32 *irq_epc;
+    const bool *irq_defer;
     bool *exu_wfi;
     u32 *exu_wfi_resume_pc;
 } trap_t;

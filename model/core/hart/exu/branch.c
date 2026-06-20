@@ -17,6 +17,7 @@ DECL_BRANCH_HANDLER(jal)
     set_gpr(exu, rd, req->pc + 4);
     rsp->taken = true;
     rsp->target_pc = req->pc + imm.u;
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "jal %s, %d # 0x%08x\n",
         gpr_name(rd), imm.s, req->pc + imm.u);
@@ -27,10 +28,12 @@ DECL_BRANCH_HANDLER(jalr)
     u32 rd = req->inst.i.rd;
     u32 rs1 = req->inst.i.rs1;
     i32 imm = i_imm_decode(&req->inst);
+    u32 target_pc = (get_gpr(exu, rs1) + imm.u) & ~1u;
 
     set_gpr(exu, rd, req->pc + 4);
     rsp->taken = true;
-    rsp->target_pc = get_gpr(exu, rs1) + imm.u;
+    rsp->target_pc = target_pc;
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "jalr %s, %s, %d # 0x%08x\n",
         gpr_name(rd), gpr_name(rs1), imm.s, rsp->target_pc);
@@ -49,6 +52,7 @@ DECL_BRANCH_HANDLER(beq)
         rsp->taken = false;
         rsp->target_pc = req->pc + 4;
     }
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "beq %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, req->pc + imm.u);
@@ -67,6 +71,7 @@ DECL_BRANCH_HANDLER(bne)
         rsp->taken = false;
         rsp->target_pc = req->pc + 4;
     }
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "bne %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, req->pc + imm.u);
@@ -89,6 +94,7 @@ DECL_BRANCH_HANDLER(blt)
         rsp->taken = false;
         rsp->target_pc = req->pc + 4;
     }
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "blt %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, req->pc + imm.u);
@@ -111,6 +117,7 @@ DECL_BRANCH_HANDLER(bge)
         rsp->taken = false;
         rsp->target_pc = req->pc + 4;
     }
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "bge %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, req->pc + imm.u);
@@ -129,6 +136,7 @@ DECL_BRANCH_HANDLER(bltu)
         rsp->taken = false;
         rsp->target_pc = req->pc + 4;
     }
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "bltu %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, req->pc + imm.u);
@@ -147,6 +155,7 @@ DECL_BRANCH_HANDLER(bgeu)
         rsp->taken = false;
         rsp->target_pc = req->pc + 4;
     }
+    exu->irq_epc = rsp->target_pc;
 
     DBG_LOG(LOG_TRACE, "bgeu %s, %s, %d # 0x%08x\n",
         gpr_name(rs1), gpr_name(rs2), imm.s, req->pc + imm.u);

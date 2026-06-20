@@ -1,6 +1,6 @@
 #include "soc.h"
 #include "base/def.h"
-#include "spec/core.h"
+#include "spec/core/core.h"
 #include "spec/soc.h"
 #include "itf/ext_irq_if.h"
 #include "dbg/vcd.h"
@@ -51,6 +51,7 @@ void soc_construct(soc_t *soc, const char *name)
         .aclint_mtimer_size = ACLINT_MTIMER_SIZE,
         .aclint_mtimecmp_base = ACLINT_MTIMECMP_BASE,
         .aclint_mtimecmp_size = ACLINT_MTIMECMP_SIZE,
+        .aclint_mtimer_tick_cycles = ACLINT_MTIMER_TICK_CYCLES,
         .aclint_mswi_base = ACLINT_MSWI_BASE,
         .aclint_mswi_size = ACLINT_MSWI_SIZE,
         .aclint_sswi_base = ACLINT_SSWI_BASE,

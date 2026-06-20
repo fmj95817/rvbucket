@@ -11,7 +11,9 @@ typedef struct log_module_attr {
 
 static log_module_attr_t g_log_mod_attrs[LOG_MOD_COUNT] = {
     [LOG_PRINT] = { NULL, NULL, NULL, true },
-    [LOG_TRACE] = { "trace.txt", "GEN_TRACE", NULL, true }
+    [LOG_TRACE] = { "trace.txt", "GEN_TRACE", NULL, true },
+    [LOG_TRAP] = { "trap.txt", "TRAP_TRACE", NULL, true },
+    [LOG_INFO] = { "info.txt", "INFO_LOG", NULL, true }
 };
 
 __attribute__((constructor)) void dbg_log_constructor()

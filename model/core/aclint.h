@@ -9,7 +9,7 @@
 #include "itf/core_m_irq_if.h"
 #include "itf/core_s_irq_if.h"
 #include "itf/core_swi_pend_if.h"
-#include "spec/core.h"
+#include "spec/core/core.h"
 
 typedef struct aclint_conf {
     u32 mtimer_base;

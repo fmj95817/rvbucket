@@ -3,6 +3,24 @@
 #include "dbg/log.h"
 #include "dbg/vcd.h"
 
+#define EXU_HEARTBEAT_PERIOD 50000000u
+
+static u32 exu_heartbeat_cnt;
+
+static void exu_heartbeat(u32 pc, u32 inst, const exu_t *exu)
+{
+    if (pc < 0x40000000u) {
+        return;
+    }
+
+    exu_heartbeat_cnt++;
+    if ((exu_heartbeat_cnt % EXU_HEARTBEAT_PERIOD) == 0) {
+        DBG_LOG(LOG_INFO, "pc heartbeat inst=%u pc=%08x raw=%08x priv=%u ra=%08x sp=%08x a0=%08x a1=%08x\n",
+            exu_heartbeat_cnt, pc, inst, (u32)exu->priv, exu->gpr[1],
+            exu->gpr[2], exu->gpr[10], exu->gpr[11]);
+    }
+}
+
 static inline void print_split_line(bool newline)
 {
     DBG_LOG(LOG_TRACE, newline ?
@@ -55,6 +73,7 @@ static void exu_proc_ex_req(exu_t *exu)
 
     ex_req_if_t ex_req;
     itf_read(exu->ex_req_slv, &ex_req);
+    exu_heartbeat(ex_req.pc, ex_req.inst.raw, exu);
 
     if (!itf_fifo_empty(exu->fl_req_slv)) {
         fl_req_if_t fl_req;
@@ -87,6 +106,7 @@ static void exu_proc_ex_req(exu_t *exu)
         print_split_line(false);
         exu_dump(exu, ex_req.pc);
         exu->cur_pc = ex_req.pc;
+        exu->irq_epc = ex_req.pc + 4;
         proc(exu, &ex_req);
         print_split_line(true);
     } else {
@@ -145,9 +165,11 @@ void exu_reset(exu_t *exu)
     }
     exu->ldst_req_pend = false;
     exu->amo_stage = AMO_STAGE_IDLE;
+    exu->irq_defer = false;
     exu->wfi = false;
     exu->priv = RV32G_PRIV_MACHINE;
     exu->cur_pc = 0;
+    exu->irq_epc = 0;
 }
 
 void exu_free(exu_t *exu) {}

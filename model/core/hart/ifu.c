@@ -1,5 +1,5 @@
 #include "ifu.h"
-#include "spec/isa.h"
+#include "spec/core/isa.h"
 #include "base/def.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
@@ -101,24 +101,6 @@ static void ifu_proc_fch_rsp(ifu_t *ifu)
     ifu->fch.vld = true;
 }
 
-static s32 decode_b_imm(rv32g_inst_t inst)
-{
-    u32 imm = (inst.b.imm_12 << 12) | (inst.b.imm_11 << 11) |
-              (inst.b.imm_10_5 << 5) | (inst.b.imm_4_1 << 1);
-    if (imm & (1u << 12))
-        imm |= 0xFFFFE000u;
-    return (s32)imm;
-}
-
-static u32 decode_jal_imm(rv32g_inst_t inst)
-{
-    u32 imm = (inst.j.imm_20 << 20) | (inst.j.imm_19_12 << 12) |
-              (inst.j.imm_11 << 11) | (inst.j.imm_10_1 << 1);
-    if (imm & (1u << 20))
-        imm |= 0xFFE00000u;
-    return imm;
-}
-
 static void ifu_bpu_pred(ifu_t *ifu, u32 pc, bool is_branch)
 {
     ifu->issue.pred_taken = false;
@@ -136,7 +118,7 @@ static void ifu_bpu_pred(ifu_t *ifu, u32 pc, bool is_branch)
 
     if (inst.base.opcode == OPCODE_JAL) {
         ifu->issue.pred_taken = true;
-        ifu->issue.pred_target_pc = pc + decode_jal_imm(inst);
+        ifu->issue.pred_target_pc = pc + j_imm_decode(&inst).u;
         return;
     }
 
@@ -155,10 +137,10 @@ static void ifu_bpu_pred(ifu_t *ifu, u32 pc, bool is_branch)
     }
 
     if (inst.base.opcode == OPCODE_BRANCH) {
-        s32 offset = decode_b_imm(inst);
-        if (offset < 0) {
+        i32 offset = b_imm_decode(&inst);
+        if (offset.s < 0) {
             ifu->issue.pred_taken = true;
-            ifu->issue.pred_target_pc = pc + (u32)offset;
+            ifu->issue.pred_target_pc = pc + offset.u;
         }
     }
 }
@@ -341,6 +323,11 @@ static void ifu_proc_trap_send(ifu_t *ifu)
 
     trap_send_if_t trap_send;
     itf_read(ifu->trap_send_slv, &trap_send);
+
+    while (!itf_fifo_empty(ifu->ex_rsp_slv)) {
+        ex_rsp_if_t dummy;
+        itf_read(ifu->ex_rsp_slv, &dummy);
+    }
 
     bool dropped_rsp = false;
     while (!itf_fifo_empty(ifu->fch_rsp_slv)) {
