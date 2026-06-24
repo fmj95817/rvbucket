@@ -261,7 +261,7 @@ static void fifo_itf_write(itf_t *itf, const void *pkt)
         if (itf->ctx.fifo.dump_mst_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->ctx.fifo.dump_mst_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fprintf(itf->ctx.fifo.dump_mst_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
             fflush(itf->ctx.fifo.dump_mst_fp);
         }
     }
@@ -305,7 +305,7 @@ static void fifo_itf_read(itf_t *itf, void *pkt)
         if (itf->ctx.fifo.dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->ctx.fifo.dump_slv_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fprintf(itf->ctx.fifo.dump_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
             fflush(itf->ctx.fifo.dump_slv_fp);
         }
     }
@@ -333,7 +333,7 @@ static void signal_itf_dbg_clock(itf_t *itf)
         if (memcmp(cur, old, itf->pkt_size) != 0) {
             char pkt_str[1024];
             itf->pkt2str(cur, pkt_str);
-            fprintf(itf->ctx.signal.dump_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fprintf(itf->ctx.signal.dump_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
             fflush(itf->ctx.signal.dump_fp);
             memcpy(old, cur, itf->pkt_size);
         }
@@ -433,7 +433,7 @@ void itf_fifo_pop_front(itf_t *itf)
         if (itf->ctx.fifo.dump_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), pkt_str);
-            fprintf(itf->ctx.fifo.dump_slv_fp, U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fprintf(itf->ctx.fifo.dump_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
             fflush(itf->ctx.fifo.dump_slv_fp);
         }
     }

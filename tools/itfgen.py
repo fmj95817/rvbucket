@@ -12,6 +12,7 @@ def gen_c_itf(itf_name, desc):
 
     f.write("#include <stdio.h>\n")
     f.write("#include \"base/types.h\"\n")
+    f.write("#include \"base/def.h\"\n")
     f.write("#include \"dbg/vcd.h\"\n")
     if "include" in desc and len(desc["include"]) > 0:
         for inc in desc["include"]:
@@ -101,7 +102,7 @@ def gen_c_itf(itf_name, desc):
         bw = enums_bw[p["type"]] if "type" in p else p["width"]
         hex_w = math.ceil(bw / 4)
         if bw > 32:
-            f.write("%0{}llx".format(hex_w))
+            f.write("%0{}\"U64_HEX_FMT\"".format(hex_w))
         else:
             f.write("%0{}x".format(hex_w))
         if payload_idx < (payload_num - 1):

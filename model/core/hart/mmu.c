@@ -175,14 +175,6 @@ static void mmu_recv_tlb_flush(mmu_t *mmu)
     mmu_invalidate_tlb(mmu);
 }
 
-static void mmu_drop_i_va_reqs(mmu_t *mmu)
-{
-    while (!itf_fifo_empty(mmu->va_i_bti_req_slv)) {
-        bti_req_if_t req;
-        itf_read(mmu->va_i_bti_req_slv, &req);
-    }
-}
-
 static void mmu_drop_canceled_rsp(mmu_t *mmu)
 {
     if (mmu->drop_ptw_rsp && !itf_fifo_empty(mmu->ptw_bti_rsp_slv)) {

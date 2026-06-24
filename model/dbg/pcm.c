@@ -41,7 +41,7 @@ static void dump_to_csv()
 
     fprintf(csv_fp, "name, value\n");
     for (u32 i = 0; i < g_pcm.nxt_entry_idx; i++) {
-        fprintf(csv_fp, "%s, "U64_FMT"\n", g_pcm.perf_cnts[i].name, g_pcm.perf_cnts[i].val);
+        fprintf(csv_fp, "%s, %"U64_FMT"\n", g_pcm.perf_cnts[i].name, g_pcm.perf_cnts[i].val);
     }
 
     fclose(csv_fp);
@@ -50,7 +50,7 @@ static void dump_to_csv()
 static void dump_to_stdout()
 {
     for (u32 i = 0; i < g_pcm.nxt_entry_idx; i++) {
-        printf("%s = "U64_FMT"\n", g_pcm.perf_cnts[i].name, g_pcm.perf_cnts[i].val);
+        printf("%s = %"U64_FMT"\n", g_pcm.perf_cnts[i].name, g_pcm.perf_cnts[i].val);
     }
 }
 

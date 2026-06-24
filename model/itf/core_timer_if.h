@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "base/types.h"
+#include "base/def.h"
 #include "dbg/vcd.h"
 
 #define CORE_TIMER_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
@@ -38,7 +39,7 @@ typedef struct core_timer_if {
 static inline void core_timer_if_to_str(const void *pkt, char *str)
 {
     const core_timer_if_t *core_timer = (const core_timer_if_t *)pkt;
-    sprintf(str, "%016llx\n", core_timer->time);
+    sprintf(str, "%016"U64_HEX_FMT"\n", core_timer->time);
 }
 
 static inline void core_timer_if_reg_vcd(const void *pkt, dbg_sig_type_t type)

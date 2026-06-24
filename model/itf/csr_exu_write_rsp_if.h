@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "base/types.h"
+#include "base/def.h"
 #include "dbg/vcd.h"
 
 #define CSR_EXU_WRITE_RSP_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \

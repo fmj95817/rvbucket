@@ -11,11 +11,13 @@
 #define U32_FMT "%u"
 
 #if defined(__linux__)
-#define U64_FMT "%lu"
-#define U64_HEX_LZ_FMT "%016lx"
+#define U64_FMT "lu"
+#define U64_HEX_FMT "lx"
+#define U64_HEX_LZ_FMT "016lx"
 #elif defined(__APPLE__)
-#define U64_FMT "%llu"
-#define U64_HEX_LZ_FMT "%016llx"
+#define U64_FMT "llu"
+#define U64_HEX_FMT "llx"
+#define U64_HEX_LZ_FMT "016llx"
 #endif
 
 #define ADDR_IN(addr, base, size) (((addr) >= (base)) && ((addr) < ((base) + (size))))

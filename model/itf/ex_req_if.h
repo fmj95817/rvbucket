@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "base/types.h"
+#include "base/def.h"
 #include "dbg/vcd.h"
 #include "spec/core/isa.h"
 
