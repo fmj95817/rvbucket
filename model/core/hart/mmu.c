@@ -44,6 +44,9 @@ void mmu_reset(mmu_t *mmu)
     mmu->pte_req_pending = false;
     mmu->final_req_pending = false;
     mmu->final_rsp_pending = false;
+    mmu->drop_ptw_rsp = false;
+    mmu->drop_i_rsp = false;
+    mmu->bare_i_rsp_pending = false;
     mmu->itlb_replace_idx = 0;
     mmu->dtlb_replace_idx = 0;
     for (u32 i = 0; i < MMU_ITLB_SIZE; i++) {
@@ -80,6 +83,7 @@ static void mmu_send_expt(mmu_t *mmu, hart_expt_cause_t cause, u32 pc, u32 tval)
     hart_expt_if_t pkt;
     pkt.type = HART_EXPT_TYPE_EXCEPTION;
     pkt.cause = cause;
+    pkt.priv = mmu->req_priv;
     pkt.pc = pc;
     pkt.tval = tval;
     itf_write(mmu->hart_expt_mst, &pkt);
@@ -113,15 +117,16 @@ static void mmu_raise_fault(mmu_t *mmu)
     mmu->final_rsp_pending = false;
 }
 
-static void mmu_forward_rsp(mmu_t *mmu, itf_t *pa_rsp_slv, itf_t *va_rsp_mst)
+static bool mmu_forward_rsp(mmu_t *mmu, itf_t *pa_rsp_slv, itf_t *va_rsp_mst)
 {
     if (itf_fifo_empty(pa_rsp_slv) || itf_fifo_full(va_rsp_mst)) {
-        return;
+        return false;
     }
 
     bti_rsp_if_t rsp;
     itf_read(pa_rsp_slv, &rsp);
     itf_write(va_rsp_mst, &rsp);
+    return true;
 }
 
 static void mmu_send_pa_req(mmu_t *mmu, itf_t *pa_req_mst, const bti_req_if_t *req)
@@ -141,7 +146,7 @@ static void mmu_start_req(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
     mmu->req_priv = mmu_effective_priv(mmu, access);
     mmu->req_sum = mmu->mstatus->reg.sum;
     mmu->req_mxr = mmu->mstatus->reg.mxr;
-    mmu->fault_pc = is_inst ? *mmu->ifu_pc : *mmu->exu_pc;
+    mmu->fault_pc = is_inst ? req->addr : *mmu->exu_pc;
     mmu->va = req->addr;
     mmu->root_base = mmu->satp->reg.ppn << MMU_PGSHIFT;
     mmu->level = 1;
@@ -168,6 +173,30 @@ static void mmu_recv_tlb_flush(mmu_t *mmu)
     tlb_flush_if_t pkt;
     itf_read(mmu->tlb_flush_slv, &pkt);
     mmu_invalidate_tlb(mmu);
+}
+
+static void mmu_drop_i_va_reqs(mmu_t *mmu)
+{
+    while (!itf_fifo_empty(mmu->va_i_bti_req_slv)) {
+        bti_req_if_t req;
+        itf_read(mmu->va_i_bti_req_slv, &req);
+    }
+}
+
+static void mmu_drop_canceled_rsp(mmu_t *mmu)
+{
+    if (mmu->drop_ptw_rsp && !itf_fifo_empty(mmu->ptw_bti_rsp_slv)) {
+        bti_rsp_if_t rsp;
+        itf_read(mmu->ptw_bti_rsp_slv, &rsp);
+        DBG_CHECK(rsp.trans_id == MMU_PTE_TRANS_ID);
+        mmu->drop_ptw_rsp = false;
+    }
+
+    if (mmu->drop_i_rsp && !itf_fifo_empty(mmu->pa_i_bti_rsp_slv)) {
+        bti_rsp_if_t rsp;
+        itf_read(mmu->pa_i_bti_rsp_slv, &rsp);
+        mmu->drop_i_rsp = false;
+    }
 }
 
 static u32 mmu_tlb_tag(u32 va, int level)
@@ -221,7 +250,7 @@ static bool mmu_tlb_lookup(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
         mmu->req_priv = req_priv;
         mmu->req_sum = req_sum;
         mmu->req_mxr = req_mxr;
-        mmu->fault_pc = is_inst ? *mmu->ifu_pc : *mmu->exu_pc;
+        mmu->fault_pc = is_inst ? req->addr : *mmu->exu_pc;
         mmu->va = req->addr;
         mmu->pte = entry->pte;
         if (!mmu_pte_permits(mmu, entry->pte) || !mmu_pte_ad_ok(mmu, entry->pte)) {
@@ -276,6 +305,10 @@ static void mmu_accept_new_req(mmu_t *mmu)
         return;
     }
 
+    if (mmu->drop_ptw_rsp || mmu->drop_i_rsp) {
+        return;
+    }
+
     if (!itf_fifo_empty(mmu->va_d_bti_req_slv)) {
         if (!mmu_translation_enabled(mmu, MMU_ACCESS_LOAD) &&
             itf_fifo_full(mmu->pa_d_bti_req_mst)) {
@@ -315,6 +348,7 @@ static void mmu_accept_new_req(mmu_t *mmu)
                 return;
             }
             mmu_send_pa_req(mmu, mmu->pa_i_bti_req_mst, &req);
+            mmu->bare_i_rsp_pending = true;
             return;
         }
 
@@ -545,13 +579,16 @@ static void mmu_proc_walk(mmu_t *mmu)
 void mmu_clock(mmu_t *mmu)
 {
     mmu_recv_tlb_flush(mmu);
+    mmu_drop_canceled_rsp(mmu);
 
     if (!mmu->busy) {
-        mmu_forward_rsp(mmu, mmu->pa_i_bti_rsp_slv, mmu->va_i_bti_rsp_mst);
+        if (mmu_forward_rsp(mmu, mmu->pa_i_bti_rsp_slv, mmu->va_i_bti_rsp_mst)) {
+            mmu->bare_i_rsp_pending = false;
+        }
     }
 
     if (!mmu->busy) {
-        mmu_forward_rsp(mmu, mmu->pa_d_bti_rsp_slv, mmu->va_d_bti_rsp_mst);
+        (void)mmu_forward_rsp(mmu, mmu->pa_d_bti_rsp_slv, mmu->va_d_bti_rsp_mst);
     }
 
     mmu_proc_walk(mmu);

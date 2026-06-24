@@ -15,6 +15,7 @@ static void exu_send_expt(exu_t *exu, hart_expt_type_t type, hart_expt_cause_t c
     hart_expt_if_t pkt;
     pkt.type = type;
     pkt.cause = cause;
+    pkt.priv = exu->priv;
     pkt.pc = pc;
     pkt.tval = tval;
     itf_write(exu->hart_expt_mst, &pkt);

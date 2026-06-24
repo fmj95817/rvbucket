@@ -1,5 +1,4 @@
 #include "trap.h"
-#include "itf/fl_req_if.h"
 #include "dbg/log.h"
 #include "dbg/chk.h"
 
@@ -12,11 +11,6 @@ static void trap_send_redirect(trap_t *trap, u32 target_pc)
     itf_write(trap->trap_send_mst, &pkt);
     if (trap->irq_epc) {
         *trap->irq_epc = target_pc;
-    }
-
-    if (!itf_fifo_full(trap->fl_req_mst)) {
-        fl_req_if_t fl_req = {};
-        itf_write(trap->fl_req_mst, &fl_req);
     }
 }
 
@@ -38,19 +32,20 @@ static u32 trap_compute_stvec_pc(const rv32g_csr_stvec_t *stvec, bool is_interru
     return base;
 }
 
-static bool trap_is_delegated_to_s(trap_t *trap, bool is_interrupt, u32 cause)
+static bool trap_is_delegated_to_s(trap_t *trap, rv32g_priv_t src_priv, bool is_interrupt, u32 cause)
 {
-    if (*trap->priv == RV32G_PRIV_MACHINE) {
+    if (src_priv == RV32G_PRIV_MACHINE) {
         return false;
     }
     u32 deleg = is_interrupt ? trap->mideleg->raw : trap->medeleg->raw;
     return (deleg >> cause) & 1;
 }
 
-static void trap_enter_m_mode(trap_t *trap, u32 cause, bool is_interrupt, u32 epc, u32 tval)
+static void trap_enter_m_mode(trap_t *trap, rv32g_priv_t src_priv, u32 cause,
+    bool is_interrupt, u32 epc, u32 tval)
 {
     trap->mstatus->reg.mpie = trap->mstatus->reg.mie;
-    trap->mstatus->reg.mpp = *trap->priv;
+    trap->mstatus->reg.mpp = src_priv;
     trap->mstatus->reg.mie = 0;
 
     trap->mcause->reg.code = cause;
@@ -67,10 +62,11 @@ static void trap_enter_m_mode(trap_t *trap, u32 cause, bool is_interrupt, u32 ep
         cause, is_interrupt, epc, tval, target_pc);
 }
 
-static void trap_enter_s_mode(trap_t *trap, u32 cause, bool is_interrupt, u32 epc, u32 tval)
+static void trap_enter_s_mode(trap_t *trap, rv32g_priv_t src_priv, u32 cause,
+    bool is_interrupt, u32 epc, u32 tval)
 {
     trap->mstatus->reg.spie = trap->mstatus->reg.sie;
-    trap->mstatus->reg.spp = (*trap->priv == RV32G_PRIV_SUPERVISOR) ? 1 : 0;
+    trap->mstatus->reg.spp = (src_priv == RV32G_PRIV_SUPERVISOR) ? 1 : 0;
     trap->mstatus->reg.sie = 0;
 
     trap->sstatus->reg.spie = trap->mstatus->reg.spie;
@@ -91,12 +87,13 @@ static void trap_enter_s_mode(trap_t *trap, u32 cause, bool is_interrupt, u32 ep
         cause, is_interrupt, epc, tval, target_pc);
 }
 
-static void trap_take(trap_t *trap, u32 cause, bool is_interrupt, u32 epc, u32 tval)
+static void trap_take(trap_t *trap, rv32g_priv_t src_priv, u32 cause,
+    bool is_interrupt, u32 epc, u32 tval)
 {
-    if (trap_is_delegated_to_s(trap, is_interrupt, cause)) {
-        trap_enter_s_mode(trap, cause, is_interrupt, epc, tval);
+    if (trap_is_delegated_to_s(trap, src_priv, is_interrupt, cause)) {
+        trap_enter_s_mode(trap, src_priv, cause, is_interrupt, epc, tval);
     } else {
-        trap_enter_m_mode(trap, cause, is_interrupt, epc, tval);
+        trap_enter_m_mode(trap, src_priv, cause, is_interrupt, epc, tval);
     }
     *trap->exu_wfi = false;
 }
@@ -186,7 +183,7 @@ static void trap_proc_exception(trap_t *trap)
                 break;
             }
         }
-        trap_take(trap, cause, false, expt.pc, expt.tval);
+        trap_take(trap, (rv32g_priv_t)expt.priv, cause, false, expt.pc, expt.tval);
         break;
     }
     default:
@@ -261,7 +258,7 @@ static void trap_proc_interrupt(trap_t *trap)
             irq, epc, (u32)*trap->priv, trap->mip->raw, trap->mie->raw,
             trap->mideleg->raw, trap->mstatus->raw);
     }
-    trap_take(trap, (u32)irq, true, epc, 0);
+    trap_take(trap, *trap->priv, (u32)irq, true, epc, 0);
 
     (void)from_wfi;
 }

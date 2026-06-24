@@ -263,6 +263,7 @@
             "payloads": [
                 { "name": "type", "type": "type" },
                 { "name": "cause", "type": "cause" },
+                { "name": "priv", "width": 2 },
                 { "name": "pc", "width": 32 },
                 { "name": "tval", "width": 32 }
             ]

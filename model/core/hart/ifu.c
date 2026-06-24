@@ -20,19 +20,17 @@ void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base
     ifu->perf.pred_true = dbg_pcm_reg_perf_cnt("ifu_pred_true");
 
     dbg_vcd_add_sig("fch_pc", DBG_SIG_TYPE_REG, 32, &ifu->fch.pc);
-    dbg_vcd_add_sig("fch_pend", DBG_SIG_TYPE_REG, 1, &ifu->fch.pend);
-    dbg_vcd_add_sig("fch_vld", DBG_SIG_TYPE_REG, 1, &ifu->fch.vld);
+    dbg_vcd_add_sig("fch_state", DBG_SIG_TYPE_REG, 2, &ifu->fch.state);
     dbg_vcd_add_sig("issue_vld", DBG_SIG_TYPE_REG, 1, &ifu->issue.vld);
     dbg_vcd_add_sig("issue_pc", DBG_SIG_TYPE_REG, 32, &ifu->issue.pc);
-    dbg_vcd_add_sig("resume_vld", DBG_SIG_TYPE_REG, 1, &ifu->resume.vld);
-    dbg_vcd_add_sig("resume_pc", DBG_SIG_TYPE_REG, 32, &ifu->resume.pc);
+    dbg_vcd_add_sig("redirect_state", DBG_SIG_TYPE_REG, 2, &ifu->redirect.state);
+    dbg_vcd_add_sig("redirect_pc", DBG_SIG_TYPE_REG, 32, &ifu->redirect.pc);
+    dbg_vcd_add_sig("ctrlq_count", DBG_SIG_TYPE_REG, 32, &ifu->ctrlq.count);
 }
 
 void ifu_reset(ifu_t *ifu)
 {
-    ifu->fch.pend = false;
-    ifu->fch.vld = false;
-    ifu->fch.drop_rsp = false;
+    ifu->fch.state = IFU_FCH_STATE_REQ;
     ifu->fch.pc = ifu->reset_pc;
     ifu->fch.ir = 0;
 
@@ -40,10 +38,19 @@ void ifu_reset(ifu_t *ifu)
     ifu->issue.pc = ifu->reset_pc;
     ifu->issue.ir = 0;
     ifu->issue.pred_taken = false;
-    ifu->issue.pred_target_pc = ifu->reset_pc;
+    ifu->issue.pred_target_pc = ifu->reset_pc + 4;
+    ifu->issue.is_ctrl = false;
 
-    ifu->resume.vld = false;
-    ifu->resume.pc = ifu->reset_pc;
+    ifu->redirect.state = IFU_REDIRECT_STATE_IDLE;
+    ifu->redirect.pc = ifu->reset_pc;
+
+    ifu->ctrlq.head = 0;
+    ifu->ctrlq.tail = 0;
+    ifu->ctrlq.count = 0;
+    for (u32 i = 0; i < IFU_CTRLQ_SIZE; i++) {
+        ifu->ctrlq.entry[i].vld = false;
+        ifu->ctrlq.entry[i].pc = 0;
+    }
 
     ifu->bpu.access_seq = 0;
     for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
@@ -58,11 +65,102 @@ void ifu_reset(ifu_t *ifu)
     *ifu->perf.pred_true = 0;
 }
 
-void ifu_free(ifu_t *ifu) {}
+void ifu_free(ifu_t *ifu)
+{
+    (void)ifu;
+}
+
+static void ifu_request_redirect(ifu_t *ifu, u32 pc, ifu_redirect_state_t state)
+{
+    DBG_CHECK(state == IFU_REDIRECT_STATE_BRANCH || state == IFU_REDIRECT_STATE_TRAP);
+
+    ifu->redirect.pc = pc;
+    ifu->redirect.state = state;
+}
+
+static void ifu_ctrlq_push(ifu_t *ifu, u32 pc)
+{
+    DBG_CHECK(ifu->ctrlq.count < IFU_CTRLQ_SIZE);
+
+    ifu->ctrlq.entry[ifu->ctrlq.tail].vld = true;
+    ifu->ctrlq.entry[ifu->ctrlq.tail].pc = pc;
+    ifu->ctrlq.tail = (ifu->ctrlq.tail + 1) % IFU_CTRLQ_SIZE;
+    ifu->ctrlq.count++;
+}
+
+static bool ifu_ctrlq_pop_valid(ifu_t *ifu, u32 pc)
+{
+    if (ifu->ctrlq.count == 0) {
+        return false;
+    }
+
+    bool vld = ifu->ctrlq.entry[ifu->ctrlq.head].vld;
+    u32 entry_pc = ifu->ctrlq.entry[ifu->ctrlq.head].pc;
+
+    if (!vld) {
+        ifu->ctrlq.head = (ifu->ctrlq.head + 1) % IFU_CTRLQ_SIZE;
+        ifu->ctrlq.count--;
+        return false;
+    }
+
+    if (entry_pc != pc) {
+        return false;
+    }
+
+    ifu->ctrlq.entry[ifu->ctrlq.head].vld = false;
+    ifu->ctrlq.head = (ifu->ctrlq.head + 1) % IFU_CTRLQ_SIZE;
+    ifu->ctrlq.count--;
+
+    return true;
+}
+
+static void ifu_ctrlq_flush(ifu_t *ifu)
+{
+    ifu->ctrlq.head = 0;
+    ifu->ctrlq.tail = 0;
+    ifu->ctrlq.count = 0;
+    for (u32 i = 0; i < IFU_CTRLQ_SIZE; i++) {
+        ifu->ctrlq.entry[i].vld = false;
+        ifu->ctrlq.entry[i].pc = 0;
+    }
+}
+
+static bool ifu_proc_redirect(ifu_t *ifu)
+{
+    if (ifu->redirect.state == IFU_REDIRECT_STATE_IDLE) {
+        return false;
+    }
+
+    if (ifu->redirect.state == IFU_REDIRECT_STATE_REDIRECT) {
+        return true;
+    }
+
+    ifu->issue.vld = false;
+    ifu->issue.is_ctrl = false;
+    ifu->fch.ir = 0;
+
+    if (ifu->fch.state == IFU_FCH_STATE_PEND) {
+        ifu->redirect.state = IFU_REDIRECT_STATE_REDIRECT;
+        return true;
+    }
+
+    ifu->fch.pc = ifu->redirect.pc;
+    ifu->fch.state = IFU_FCH_STATE_REQ;
+    ifu->redirect.state = IFU_REDIRECT_STATE_IDLE;
+    return true;
+}
 
 static void ifu_send_fch(ifu_t *ifu)
 {
-    if (ifu->fch.pend) {
+    if (ifu->fch.state != IFU_FCH_STATE_REQ) {
+        return;
+    }
+
+    if (ifu->redirect.state != IFU_REDIRECT_STATE_IDLE) {
+        return;
+    }
+
+    if (ifu->issue.vld) {
         return;
     }
 
@@ -70,40 +168,46 @@ static void ifu_send_fch(ifu_t *ifu)
         return;
     }
 
-    fch_req_if_t fch_req;
+    fch_req_if_t fch_req = {};
     fch_req.pc = ifu->fch.pc;
     itf_write(ifu->fch_req_mst, &fch_req);
-    ifu->fch.pend = true;
+    ifu->fch.state = IFU_FCH_STATE_PEND;
 }
 
 static void ifu_proc_fch_rsp(ifu_t *ifu)
 {
+    if (ifu->fch.state != IFU_FCH_STATE_PEND) {
+        return;
+    }
+
     if (itf_fifo_empty(ifu->fch_rsp_slv)) {
         return;
     }
 
     fch_rsp_if_t fch_rsp;
     itf_read(ifu->fch_rsp_slv, &fch_rsp);
-    if (ifu->fch.drop_rsp) {
-        ifu->fch.drop_rsp = false;
-        ifu->fch.pend = false;
-        ifu->fch.vld = false;
+
+    if (ifu->redirect.state == IFU_REDIRECT_STATE_REDIRECT) {
+        ifu->fch.ir = 0;
+        ifu->fch.pc = ifu->redirect.pc;
+        ifu->fch.state = IFU_FCH_STATE_REQ;
+        ifu->redirect.state = IFU_REDIRECT_STATE_IDLE;
         return;
     }
 
     if (!fch_rsp.ok) {
-        ifu->fch.pend = false;
-        ifu->fch.vld = false;
+        ifu->fch.state = IFU_FCH_STATE_REQ;
         return;
     }
 
     ifu->fch.ir = fch_rsp.ir;
-    ifu->fch.vld = true;
+    ifu->fch.state = IFU_FCH_STATE_RSP;
 }
 
 static void ifu_bpu_pred(ifu_t *ifu, u32 pc, bool is_branch)
 {
     ifu->issue.pred_taken = false;
+    ifu->issue.pred_target_pc = pc + 4;
 
     if (!ifu->bpu.enable) {
         return;
@@ -147,7 +251,11 @@ static void ifu_bpu_pred(ifu_t *ifu, u32 pc, bool is_branch)
 
 static void ifu_prepare_issue(ifu_t *ifu)
 {
-    if (!ifu->fch.vld) {
+    if (ifu->redirect.state != IFU_REDIRECT_STATE_IDLE) {
+        return;
+    }
+
+    if (ifu->fch.state != IFU_FCH_STATE_RSP) {
         return;
     }
 
@@ -165,23 +273,17 @@ static void ifu_prepare_issue(ifu_t *ifu)
         i.base.opcode == OPCODE_JAL ||
         i.base.opcode == OPCODE_JALR ||
         i.base.opcode == OPCODE_BRANCH;
+
+    ifu->issue.is_ctrl = is_branch;
     ifu_bpu_pred(ifu, ifu->issue.pc, is_branch);
 
-    u32 pc_nxt;
     if (is_branch && ifu->issue.pred_taken) {
-        pc_nxt = ifu->issue.pred_target_pc;
+        ifu->fch.pc = ifu->issue.pred_target_pc;
     } else {
-        pc_nxt = ifu->fch.pc + 4;
+        ifu->fch.pc = ifu->issue.pc + 4;
     }
 
-    if (ifu->resume.vld) {
-        pc_nxt = ifu->resume.pc;
-        ifu->resume.vld = false;
-    }
-
-    ifu->fch.pc = pc_nxt;
-    ifu->fch.vld = false;
-    ifu->fch.pend = false;
+    ifu->fch.state = IFU_FCH_STATE_REQ;
 }
 
 static void ifu_send_ex_req(ifu_t *ifu)
@@ -190,11 +292,15 @@ static void ifu_send_ex_req(ifu_t *ifu)
         return;
     }
 
+    if (ifu->redirect.state != IFU_REDIRECT_STATE_IDLE) {
+        return;
+    }
+
     if (itf_fifo_full(ifu->ex_req_mst)) {
         return;
     }
 
-    ex_req_if_t ex_req;
+    ex_req_if_t ex_req = {};
     ex_req.inst.raw = ifu->issue.ir;
     ex_req.pc = ifu->issue.pc;
     ex_req.pred_pc = ifu->issue.pred_target_pc;
@@ -202,15 +308,25 @@ static void ifu_send_ex_req(ifu_t *ifu)
     ex_req.is_boot_code = ADDR_IN(ifu->issue.pc,
         ifu->boot_rom_info.base, ifu->boot_rom_info.size);
     itf_write(ifu->ex_req_mst, &ex_req);
+
+    if (ifu->issue.is_ctrl) {
+        ifu_ctrlq_push(ifu, ifu->issue.pc);
+    }
+
     ifu->issue.vld = false;
+    ifu->issue.is_ctrl = false;
 }
 
 static inline void sat_counter_update(u8 *cnt, bool taken)
 {
     if (taken) {
-        if (*cnt < 3) (*cnt)++;
+        if (*cnt < 3) {
+            (*cnt)++;
+        }
     } else {
-        if (*cnt > 0) (*cnt)--;
+        if (*cnt > 0) {
+            (*cnt)--;
+        }
     }
 }
 
@@ -251,6 +367,7 @@ static void ifu_update_bpu_bht(ifu_t *ifu, const ex_rsp_if_t *ex_rsp)
         }
     }
 
+    ifu->bpu.bht[lru_idx].vld = true;
     ifu->bpu.bht[lru_idx].pc = ex_rsp->pc;
     ifu->bpu.bht[lru_idx].counter = ex_rsp->taken ? 2 : 1;
     ifu->bpu.bht[lru_idx].target_pc = ex_rsp->target_pc;
@@ -259,16 +376,20 @@ static void ifu_update_bpu_bht(ifu_t *ifu, const ex_rsp_if_t *ex_rsp)
 
 static void ifu_proc_ex_rsp(ifu_t *ifu)
 {
-    if (itf_fifo_empty(ifu->ex_rsp_slv)) {
+    if (ifu->redirect.state != IFU_REDIRECT_STATE_IDLE) {
         return;
     }
 
-    if (ifu->resume.vld) {
+    if (itf_fifo_empty(ifu->ex_rsp_slv)) {
         return;
     }
 
     ex_rsp_if_t ex_rsp;
     itf_read(ifu->ex_rsp_slv, &ex_rsp);
+
+    if (!ifu_ctrlq_pop_valid(ifu, ex_rsp.pc)) {
+        return;
+    }
 
     bool is_boot = ADDR_IN(ex_rsp.pc,
         ifu->boot_rom_info.base, ifu->boot_rom_info.size);
@@ -277,6 +398,8 @@ static void ifu_proc_ex_rsp(ifu_t *ifu)
         (*ifu->perf.branch)++;
     }
 
+    ifu_update_bpu_bht(ifu, &ex_rsp);
+
     if (ex_rsp.pred_true) {
         if (!is_boot) {
             (*ifu->perf.pred_true)++;
@@ -284,39 +407,28 @@ static void ifu_proc_ex_rsp(ifu_t *ifu)
         return;
     }
 
-    if (itf_fifo_full(ifu->fl_req_mst)) {
-        return;
-    }
-
+    DBG_CHECK(itf_fifo_empty(ifu->fl_req_mst));
     fl_req_if_t fl_req = {};
     itf_write(ifu->fl_req_mst, &fl_req);
 
-    ifu_update_bpu_bht(ifu, &ex_rsp);
-
-    bool dropped_rsp = false;
-    while (!itf_fifo_empty(ifu->fch_rsp_slv)) {
-        fch_rsp_if_t dummy;
-        itf_read(ifu->fch_rsp_slv, &dummy);
-        dropped_rsp = true;
-    }
-
-    bool dropped_req = false;
-    while (!itf_fifo_empty(ifu->fch_req_mst)) {
-        fch_req_if_t dummy;
-        itf_read(ifu->fch_req_mst, &dummy);
-        dropped_req = true;
-    }
-
-    ifu->fch.drop_rsp = ifu->fch.pend && !ifu->fch.vld && !dropped_rsp && !dropped_req;
-    ifu->fch.vld = false;
-    ifu->fch.pend = ifu->fch.drop_rsp;
-    ifu->issue.vld = false;
-    ifu->fch.pc = ex_rsp.target_pc;
-    ifu->resume.vld = false;
+    ifu_ctrlq_flush(ifu);
+    ifu_request_redirect(ifu, ex_rsp.target_pc, IFU_REDIRECT_STATE_BRANCH);
 }
 
 static void ifu_proc_trap_send(ifu_t *ifu)
 {
+    if (ifu->redirect.state != IFU_REDIRECT_STATE_IDLE) {
+        return;
+    }
+
+    if (!itf_fifo_empty(ifu->ex_rsp_slv)) {
+        return;
+    }
+
+    if (ifu->ctrlq.count != 0) {
+        return;
+    }
+
     if (itf_fifo_empty(ifu->trap_send_slv)) {
         return;
     }
@@ -324,38 +436,32 @@ static void ifu_proc_trap_send(ifu_t *ifu)
     trap_send_if_t trap_send;
     itf_read(ifu->trap_send_slv, &trap_send);
 
-    while (!itf_fifo_empty(ifu->ex_rsp_slv)) {
-        ex_rsp_if_t dummy;
-        itf_read(ifu->ex_rsp_slv, &dummy);
-    }
+    DBG_CHECK(itf_fifo_empty(ifu->fl_req_mst));
+    fl_req_if_t fl_req = {};
+    itf_write(ifu->fl_req_mst, &fl_req);
 
-    bool dropped_rsp = false;
-    while (!itf_fifo_empty(ifu->fch_rsp_slv)) {
-        fch_rsp_if_t dummy;
-        itf_read(ifu->fch_rsp_slv, &dummy);
-        dropped_rsp = true;
-    }
-
-    bool dropped_req = false;
-    while (!itf_fifo_empty(ifu->fch_req_mst)) {
-        fch_req_if_t dummy;
-        itf_read(ifu->fch_req_mst, &dummy);
-        dropped_req = true;
-    }
-
-    ifu->fch.drop_rsp = ifu->fch.pend && !ifu->fch.vld && !dropped_rsp && !dropped_req;
-    ifu->fch.vld = false;
-    ifu->fch.pend = ifu->fch.drop_rsp;
-    ifu->issue.vld = false;
-    ifu->fch.pc = trap_send.target_pc;
+    ifu_ctrlq_flush(ifu);
+    ifu_request_redirect(ifu, trap_send.target_pc, IFU_REDIRECT_STATE_TRAP);
 }
 
 void ifu_clock(ifu_t *ifu)
 {
+    ifu_proc_ex_rsp(ifu);
     ifu_proc_trap_send(ifu);
-    ifu_send_fch(ifu);
+
+    if (ifu->redirect.state == IFU_REDIRECT_STATE_BRANCH ||
+        ifu->redirect.state == IFU_REDIRECT_STATE_TRAP) {
+        ifu_proc_redirect(ifu);
+        return;
+    }
+
+    if (ifu->redirect.state == IFU_REDIRECT_STATE_REDIRECT) {
+        ifu_proc_fch_rsp(ifu);
+        return;
+    }
+
     ifu_proc_fch_rsp(ifu);
     ifu_prepare_issue(ifu);
     ifu_send_ex_req(ifu);
-    ifu_proc_ex_rsp(ifu);
+    ifu_send_fch(ifu);
 }

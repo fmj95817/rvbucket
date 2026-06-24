@@ -89,7 +89,6 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
 
     s->trap.hart_expt_slv = &s->hart_expt_itf;
     s->trap.trap_send_mst = &s->trap_send_itf;
-    s->trap.fl_req_mst = &s->fl_req_itf;
     s->trap.core_m_irq_in = s->core_m_irq_in;
     s->trap.ext_irq_in = s->ext_irq_in;
     s->trap.priv = &s->exu.priv;

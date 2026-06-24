@@ -11,6 +11,23 @@
 #include "itf/trap_send_if.h"
 #include "spec/core/hart.h"
 
+#ifndef IFU_CTRLQ_SIZE
+#define IFU_CTRLQ_SIZE 16
+#endif
+
+typedef enum ifu_fch_state {
+    IFU_FCH_STATE_REQ = 0,
+    IFU_FCH_STATE_PEND,
+    IFU_FCH_STATE_RSP
+} ifu_fch_state_t;
+
+typedef enum ifu_redirect_state {
+    IFU_REDIRECT_STATE_IDLE = 0,
+    IFU_REDIRECT_STATE_BRANCH,
+    IFU_REDIRECT_STATE_TRAP,
+    IFU_REDIRECT_STATE_REDIRECT
+} ifu_redirect_state_t;
+
 typedef struct ifu {
     itf_t *fch_req_mst;
     itf_t *fch_rsp_slv;
@@ -22,9 +39,7 @@ typedef struct ifu {
     u32 reset_pc;
 
     struct {
-        bool pend;
-        bool vld;
-        bool drop_rsp;
+        ifu_fch_state_t state;
         u32 pc;
         u32 ir;
     } fch;
@@ -34,13 +49,24 @@ typedef struct ifu {
         u32 pc;
         u32 ir;
         u32 pred_target_pc;
-        u32 pred_taken;
+        bool pred_taken;
+        bool is_ctrl;
     } issue;
 
     struct {
-        bool vld;
+        ifu_redirect_state_t state;
         u32 pc;
-    } resume;
+    } redirect;
+
+    struct {
+        u32 head;
+        u32 tail;
+        u32 count;
+        struct {
+            bool vld;
+            u32 pc;
+        } entry[IFU_CTRLQ_SIZE];
+    } ctrlq;
 
     struct {
         bool enable;

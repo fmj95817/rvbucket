@@ -62,6 +62,9 @@ typedef struct mmu {
     bool pte_req_pending;
     bool final_req_pending;
     bool final_rsp_pending;
+    bool drop_ptw_rsp;
+    bool drop_i_rsp;
+    bool bare_i_rsp_pending;
     u32 itlb_replace_idx;
     u32 dtlb_replace_idx;
     mmu_tlb_entry_t itlb[MMU_ITLB_SIZE];

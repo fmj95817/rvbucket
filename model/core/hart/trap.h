@@ -13,7 +13,6 @@
 typedef struct trap {
     itf_t *hart_expt_slv;
     itf_t *trap_send_mst;
-    itf_t *fl_req_mst;
     itf_t *core_m_irq_in;
     itf_t *ext_irq_in;
 
