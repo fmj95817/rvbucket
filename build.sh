@@ -168,6 +168,7 @@ function build_model {
     ${HOST_CC} \
         -Wall \
         -O3 \
+        -pthread \
         -I./model \
         -o build/hw/model/sim_top \
         $(find model -name *.c) \

@@ -4,6 +4,7 @@
 #include "base/types.h"
 
 typedef struct sim_ui {
+    void (*reset)(void *ui);
     void (*uart_out)(void *ui, u8 ch);
     bool (*uart_in)(void *ui, u8 *ch);
     void (*gpio_change)(void *ui, u32 val);

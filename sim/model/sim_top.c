@@ -24,6 +24,7 @@
 #define SIM_END_CHAR 0x10
 #define BIN_TYPE_LINUX 1u
 #define LINUX_BIN_HEADER_SIZE 40u
+#define UART_IN_POLL_INTERVAL 256u
 
 typedef struct program {
     u32 size;
@@ -179,6 +180,9 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
 static void sim_top_reset(sim_top_t *sim_top)
 {
     sim_top->end_sim = false;
+    if (sim_top->ui && sim_top->ui->reset) {
+        sim_top->ui->reset(sim_top->ui);
+    }
     soc_reset(&sim_top->soc);
     dbg_vcd_reset();
 }
@@ -186,9 +190,10 @@ static void sim_top_reset(sim_top_t *sim_top)
 static void sim_top_clock(sim_top_t *sim_top)
 {
     /* poll UART input */
-    u8 ch;
-    while (sim_top->ui->uart_in(sim_top->ui, &ch)) {
-        if (!itf_fifo_full(&sim_top->uart_tx_itf)) {
+    if (((*sim_top->cycle) % UART_IN_POLL_INTERVAL) == 0u) {
+        u8 ch;
+        while (!itf_fifo_full(&sim_top->uart_tx_itf) &&
+               sim_top->ui->uart_in(sim_top->ui, &ch)) {
             uart_if_t pkt;
             pkt.data = ch;
             itf_write(&sim_top->uart_tx_itf, &pkt);

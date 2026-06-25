@@ -18,6 +18,13 @@ typedef struct {
     int rlen;         // valid data length in rbuf
 } ui_web_t;
 
+static void reset(void *ctx)
+{
+    ui_web_t *uw = (ui_web_t *)ctx;
+    uw->rpos = 0;
+    uw->rlen = 0;
+}
+
 static void uart_out(void *ctx, u8 ch)
 {
     ui_web_t *uw = (ui_web_t *)ctx;
@@ -120,6 +127,7 @@ sim_ui_t *ui_web_create(void)
     ui_web_t *uw = calloc(1, sizeof(ui_web_t));
     uw->fd = sv[0];
     uw->pid = pid;
+    uw->ui.reset = reset;
     uw->ui.uart_out = uart_out;
     uw->ui.uart_in = uart_in;
     uw->ui.gpio_change = gpio_change;
