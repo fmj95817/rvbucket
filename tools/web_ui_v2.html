@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RVBucket Dashboard</title>
+
+<!-- xterm.js 5.3 — full VT terminal emulator -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
+
+<style>
+/* ── reset & base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Courier New', monospace;
+    background: #0f0f1a;
+    color: #c0c0c0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── header ───────────────────────────────────────────────────────────── */
+.header {
+    background: #1a1a2e;
+    padding: 10px 24px;
+    border-bottom: 1px solid #2a2a4a;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+.header h1 { color: #00d4ff; font-size: 16px; font-weight: normal; }
+.header .port { color: #888; font-size: 12px; }
+
+/* ── main area ────────────────────────────────────────────────────────── */
+.main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+/* ── terminal pane ────────────────────────────────────────────────────── */
+.term-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #2a2a4a;
+    min-width: 300px;
+    background: #0a0a14;
+}
+.term-title {
+    background: #1a1a2e;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: #00d4ff;
+    border-bottom: 1px solid #2a2a4a;
+    flex-shrink: 0;
+}
+#term-container { flex: 1; overflow: hidden; }
+
+/* xterm overrides — blend into our dark theme */
+#term-container .xterm { height: 100%; padding: 6px; }
+#term-container .xterm-viewport::-webkit-scrollbar { width: 6px; }
+#term-container .xterm-viewport::-webkit-scrollbar-track { background: #0a0a14; }
+#term-container .xterm-viewport::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 3px; }
+
+/* ── side panel ───────────────────────────────────────────────────────── */
+.panel { width: 340px; display: flex; flex-direction: column; background: #111128; flex-shrink: 0; }
+
+.gpio { padding: 20px; flex: 1; }
+.gpio h2 { color: #00d4ff; font-size: 14px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #2a2a4a; }
+.gpio-val {
+    font-size: 28px;
+    color: #00ff88;
+    margin-bottom: 24px;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 0 12px rgba(0,255,136,0.3);
+}
+.led-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.led-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.led-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    transition: all 0.15s;
+}
+.led-dot.on  { background: #00ff88; box-shadow: 0 0 16px #00ff88, 0 0 32px rgba(0,255,136,0.4); }
+.led-dot.off { background: #1a1a3a; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
+.led-label { font-size: 10px; color: #666; }
+
+.status { padding: 16px 20px; border-top: 1px solid #2a2a4a; font-size: 11px; color: #555; display: flex; align-items: center; }
+.status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
+.status .dot.on  { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+.status .dot.off { background: #f44; box-shadow: 0 0 6px rgba(255,68,68,0.5); }
+#status-text { transition: color 0.3s; }
+
+/* ── footer ───────────────────────────────────────────────────────────── */
+.footer {
+    background: #1a1a2e;
+    padding: 5px 24px;
+    border-top: 1px solid #2a2a4a;
+    font-size: 11px;
+    color: #555;
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- header                                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="header">
+    <h1>RVBucket Dashboard</h1>
+    <span class="port">GPIO: <span id="gpio-hex">0x0000</span></span>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- main: terminal + side panel                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="main">
+    <div class="term-pane">
+        <div class="term-title">UART Console — click to focus, type to send</div>
+        <div id="term-container"></div>
+    </div>
+
+    <div class="panel">
+        <div class="gpio">
+            <h2>GPIO LEDs [15:0]</h2>
+            <div class="gpio-val" id="gpio-val">0x0000</div>
+            <div class="led-grid" id="led-grid"></div>
+        </div>
+        <div class="status">
+            <span class="dot off" id="status-dot"></span>
+            <span id="status-text">disconnected</span>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- footer                                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="footer">
+    <span>Click terminal to type &bull; full keyboard + paste supported</span>
+    <span>RVBucket C-Model</span>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+/* ── build LED grid (same layout as v1: bit 15 … 0, row-major) ────────── */
+(function buildLedGrid() {
+    var grid = document.getElementById('led-grid');
+    for (var i = 15; i >= 0; i--) {
+        var cell = document.createElement('div');
+        cell.className = 'led-cell';
+        cell.innerHTML =
+            '<div class="led-dot off" data-bit="' + i + '"></div>' +
+            '<div class="led-label">' + i + '</div>';
+        grid.appendChild(cell);
+    }
+})();
+
+/* ── GPIO helpers ──────────────────────────────────────────────────────── */
+function updateGpio(hexStr) {
+    var val = parseInt(hexStr, 16);
+    if (isNaN(val)) return;
+    var padded = val.toString(16).toUpperCase().padStart(4, '0');
+    document.getElementById('gpio-hex').textContent = '0x' + padded;
+    document.getElementById('gpio-val').textContent = '0x' + padded;
+    var dots = document.querySelectorAll('.led-dot[data-bit]');
+    dots.forEach(function(dot) {
+        var bit = parseInt(dot.getAttribute('data-bit'));
+        var on = (val >> bit) & 1;
+        dot.className = 'led-dot ' + (on ? 'on' : 'off');
+    });
+}
+
+/* ── WebSocket helpers ─────────────────────────────────────────────────── */
+var ws = null;
+// fast backoff: 200 → 500 → 1s → 2s → 3s → 5s → 5s …  (cap 5 s)
+var wsReconnectDelays = [200, 500, 1000, 2000, 3000, 5000];
+var wsReconnectIdx = 0;
+var wsReconnectTimer = null;
+var wsReconnectCountdown = null;
+var wsManualClose = false;
+var wsFirstOpen = true;          // true until first successful connect
+
+function setStatus(connected, extra) {
+    var dot = document.getElementById('status-dot');
+    var txt = document.getElementById('status-text');
+    if (connected) {
+        dot.className = 'dot on';
+        txt.textContent = 'connected';
+        txt.style.color = '#00ff88';
+    } else {
+        dot.className = 'dot off';
+        txt.textContent = extra || 'disconnected';
+        txt.style.color = '#f44';
+    }
+}
+
+function wsConnect() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+
+    // clear any running countdown
+    if (wsReconnectCountdown) { clearInterval(wsReconnectCountdown); wsReconnectCountdown = null; }
+
+    ws = new WebSocket('ws://' + location.host + '/ws');
+
+    ws.onopen = function() {
+        // on reconnect, clear terminal before replaying history
+        // so old output from the previous session isn't duplicated
+        if (!wsFirstOpen) {
+            term.clear();
+        }
+        wsFirstOpen = false;
+        wsReconnectIdx = 0;            // reset backoff
+        setStatus(true);
+    };
+
+    ws.onmessage = function(e) {
+        try {
+            var msg = JSON.parse(e.data);
+        } catch (_) { return; }
+
+        if (msg.type === 'uart') {
+            // hex string → bytes → terminal
+            var hex = msg.data;
+            var bytes = new Uint8Array(hex.length / 2);
+            for (var i = 0; i < hex.length; i += 2) {
+                bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+            }
+            term.write(bytes);
+        } else if (msg.type === 'gpio') {
+            updateGpio(msg.data);
+        }
+    };
+
+    ws.onclose = function() {
+        if (!wsManualClose) {
+            scheduleReconnect();
+        } else {
+            setStatus(false);
+        }
+    };
+
+    ws.onerror = function() {
+        // onclose fires after onerror, reconnect handled there
+    };
+}
+
+function scheduleReconnect() {
+    if (wsReconnectTimer) return;
+
+    // pick delay from the backoff schedule; stay at the last (largest) once reached
+    var delay = wsReconnectDelays[Math.min(wsReconnectIdx, wsReconnectDelays.length - 1)];
+    wsReconnectIdx++;
+
+    // show countdown in status bar
+    var remaining = Math.ceil(delay / 1000);
+    setStatus(false, 'reconnecting in ' + remaining + 's…');
+    wsReconnectCountdown = setInterval(function() {
+        remaining--;
+        if (remaining > 0) {
+            setStatus(false, 'reconnecting in ' + remaining + 's…');
+        }
+    }, 1000);
+
+    wsReconnectTimer = setTimeout(function() {
+        wsReconnectTimer = null;
+        if (wsReconnectCountdown) { clearInterval(wsReconnectCountdown); wsReconnectCountdown = null; }
+        setStatus(false, 'reconnecting…');
+        wsConnect();
+    }, delay);
+}
+
+/* ── xterm.js terminal ────────────────────────────────────────────────── */
+var term = new Terminal({
+    cols: 80,
+    rows: 24,
+    cursorBlink: true,
+    cursorStyle: 'bar',
+    fontFamily: "'Courier New', monospace",
+    fontSize: 13,
+    lineHeight: 1.2,
+    theme: {
+        background: '#0a0a14',
+        foreground: '#c0c0c0',
+        cursor: '#00d4ff',
+        cursorAccent: '#0a0a14',
+        selection: 'rgba(0,212,255,0.3)',
+        black:   '#1a1a3a',
+        red:     '#f55',
+        green:   '#5f5',
+        yellow:  '#ff5',
+        blue:    '#55f',
+        magenta: '#f5f',
+        cyan:    '#5ff',
+        white:   '#c0c0c0',
+        brightBlack:   '#555',
+        brightRed:     '#f88',
+        brightGreen:   '#8f8',
+        brightYellow:  '#ff8',
+        brightBlue:    '#88f',
+        brightMagenta: '#f8f',
+        brightCyan:    '#8ff',
+        brightWhite:   '#fff',
+    },
+    allowProposedApi: true,   // needed for web-links addon
+});
+
+term.open(document.getElementById('term-container'));
+
+/* ── addons ──────────────────────────────────────────────────────────── */
+var fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
+
+var webLinksAddon = new WebLinksAddon.WebLinksAddon();
+term.loadAddon(webLinksAddon);
+
+/* auto-resize on window resize + initial fit */
+function fitTerminal() { fitAddon.fit(); }
+window.addEventListener('resize', fitTerminal);
+// fit after a short delay so the layout has settled
+setTimeout(fitTerminal, 100);
+
+/* ── keyboard → WebSocket ─────────────────────────────────────────────── */
+term.onData(function(data) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    // encode as UTF-8 hex string (handles paste, multi-byte, etc.)
+    var bytes = new TextEncoder().encode(data);
+    var hex = '';
+    for (var i = 0; i < bytes.length; i++) {
+        hex += ('0' + bytes[i].toString(16)).slice(-2);
+    }
+    ws.send(JSON.stringify({type: 'uart_in', data: hex}));
+});
+
+/* ── start ────────────────────────────────────────────────────────────── */
+wsConnect();
+
+/* clean shutdown on page unload */
+window.addEventListener('beforeunload', function() {
+    wsManualClose = true;
+    if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+    if (ws) ws.close();
+});
+</script>
+</body>
+</html>

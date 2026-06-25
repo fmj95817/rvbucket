@@ -50,11 +50,11 @@ static void axi2bti_proc_idle(axi2bti_t *br)
         axi4_ar_if_t ar;
         itf_fifo_get_front(br->axi4_ar_slv, &ar);
 
-        if (ar.burst > 1) {
+        if (ar.burst == AXI4_AR_BURST_WRAP) {
             itf_fifo_pop_front(br->axi4_ar_slv);
             if (!itf_fifo_full(br->axi4_r_mst)) {
                 axi4_r_if_t r = {
-                    .id = ar.id, .data = 0, .resp = 2, .last = true
+                    .id = ar.id, .data = 0, .resp = AXI4_R_RESP_SLVERR, .last = true
                 };
                 itf_write(br->axi4_r_mst, &r);
             }
@@ -88,10 +88,10 @@ static void axi2bti_proc_idle(axi2bti_t *br)
         axi4_aw_if_t aw;
         itf_fifo_get_front(br->axi4_aw_slv, &aw);
 
-        if (aw.burst > 1) {
+        if (aw.burst == AXI4_AW_BURST_WRAP) {
             itf_fifo_pop_front(br->axi4_aw_slv);
             if (!itf_fifo_full(br->axi4_b_mst)) {
-                axi4_b_if_t b = { .id = aw.id, .resp = 2 };
+                axi4_b_if_t b = { .id = aw.id, .resp = AXI4_B_RESP_SLVERR };
                 itf_write(br->axi4_b_mst, &b);
             }
             return;

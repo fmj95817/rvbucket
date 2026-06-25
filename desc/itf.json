@@ -145,12 +145,29 @@
 
         "axi4_ar": {
             "type": "vld-rdy",
+            "enums": {
+                "burst": {
+                    "fixed": 0,
+                    "incr": 1,
+                    "wrap": 2
+                },
+                "size": {
+                    "b1": 0,
+                    "b2": 1,
+                    "b4": 2,
+                    "b8": 3,
+                    "b16": 4,
+                    "b32": 5,
+                    "b64": 6,
+                    "b128": 7
+                }
+            },
             "payloads": [
                 { "name": "id", "width": 8 },
                 { "name": "addr", "width": 32 },
                 { "name": "len", "width": 8 },
-                { "name": "size", "width": 3 },
-                { "name": "burst", "width": 2 },
+                { "name": "size", "type": "size" },
+                { "name": "burst", "type": "burst" },
                 { "name": "lock", "width": 1 },
                 { "name": "cache", "width": 4 },
                 { "name": "prot", "width": 3 },
@@ -160,21 +177,46 @@
         },
         "axi4_r": {
             "type": "vld-rdy",
+            "enums": {
+                "resp": {
+                    "okay": 0,
+                    "exokay": 1,
+                    "slverr": 2,
+                    "decerr": 3
+                }
+            },
             "payloads": [
                 { "name": "id", "width": 8 },
                 { "name": "data", "width": 32 },
-                { "name": "resp", "width": 2 },
+                { "name": "resp", "type": "resp" },
                 { "name": "last", "width": 1 }
             ]
         },
         "axi4_aw": {
             "type": "vld-rdy",
+            "enums": {
+                "burst": {
+                    "fixed": 0,
+                    "incr": 1,
+                    "wrap": 2
+                },
+                "size": {
+                    "b1": 0,
+                    "b2": 1,
+                    "b4": 2,
+                    "b8": 3,
+                    "b16": 4,
+                    "b32": 5,
+                    "b64": 6,
+                    "b128": 7
+                }
+            },
             "payloads": [
                 { "name": "id", "width": 8 },
                 { "name": "addr", "width": 32 },
                 { "name": "len", "width": 8 },
-                { "name": "size", "width": 3 },
-                { "name": "burst", "width": 2 },
+                { "name": "size", "type": "size" },
+                { "name": "burst", "type": "burst" },
                 { "name": "lock", "width": 1 },
                 { "name": "cache", "width": 4 },
                 { "name": "prot", "width": 3 },
@@ -192,9 +234,17 @@
         },
         "axi4_b": {
              "type": "vld-rdy",
+             "enums": {
+                 "resp": {
+                     "okay": 0,
+                     "exokay": 1,
+                     "slverr": 2,
+                     "decerr": 3
+                 }
+             },
              "payloads": [
                 { "name": "id", "width": 8 },
-                { "name": "resp", "width": 2 }
+                { "name": "resp", "type": "resp" }
              ]
         },
 

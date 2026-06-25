@@ -96,17 +96,17 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     s->boot_rom.bti_rsp_mst = &s->boot_rom_bti_rsp_itf;
     extern u32 g_boot_code_size;
     extern u8 g_boot_code[];
-    rom_construct(&s->boot_rom, "u_boot_rom", conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base);
+    rom_construct(&s->boot_rom, "u_boot_rom", ROM_MODE_BTI, conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base);
 
     s->itcm.bti_req_slv[0] = &s->itcm_i_bti_req_itf;
     s->itcm.bti_rsp_mst[0] = &s->itcm_i_bti_rsp_itf;
     s->itcm.bti_req_slv[1] = &s->itcm_d_bti_req_itf;
     s->itcm.bti_rsp_mst[1] = &s->itcm_d_bti_rsp_itf;
-    ram_construct(&s->itcm, "u_itcm", 2, conf->itcm_size, conf->itcm_base);
+    ram_construct(&s->itcm, "u_itcm", 2, RAM_MODE_BTI, conf->itcm_size, conf->itcm_base);
 
     s->dtcm.bti_req_slv[0] = &s->dtcm_bti_req_itf;
     s->dtcm.bti_rsp_mst[0] = &s->dtcm_bti_rsp_itf;
-    ram_construct(&s->dtcm, "u_dtcm", 1, conf->dtcm_size, conf->dtcm_base);
+    ram_construct(&s->dtcm, "u_dtcm", 1, RAM_MODE_BTI, conf->dtcm_size, conf->dtcm_base);
 
     s->aclint.cycle= s->cycle;
     s->aclint.cfg_apb_req_slv = &s->aclint_cfg_apb_req_itf;

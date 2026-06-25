@@ -37,6 +37,7 @@ typedef enum hart_expt_type {
     HART_EXPT_TYPE_MRET = 1,
     HART_EXPT_TYPE_SRET = 2,
 } hart_expt_type_t;
+
 typedef enum hart_expt_cause {
     HART_EXPT_CAUSE_INST_ADDR_MISALIGNED = 0,
     HART_EXPT_CAUSE_INST_ACCESS_FAULT = 1,

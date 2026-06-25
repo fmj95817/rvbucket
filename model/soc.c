@@ -63,7 +63,7 @@ void soc_construct(soc_t *soc, const char *name)
 
     soc->flash.bti_req_slv = &soc->flash_bti_req_itf;
     soc->flash.bti_rsp_mst = &soc->flash_bti_rsp_itf;
-    rom_construct(&soc->flash, "u_flash", FLASH_SIZE, NULL, 0, FLASH_BASE);
+    rom_construct(&soc->flash, "u_flash", ROM_MODE_BTI, FLASH_SIZE, NULL, 0, FLASH_BASE);
 
     soc->peri.cycle = soc->cycle;
     soc->peri.apb_req_slv = &soc->peri_apb_req_itf;

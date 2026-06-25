@@ -32,17 +32,24 @@
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)
 
+typedef enum axi4_r_resp {
+    AXI4_R_RESP_OKAY = 0,
+    AXI4_R_RESP_EXOKAY = 1,
+    AXI4_R_RESP_SLVERR = 2,
+    AXI4_R_RESP_DECERR = 3,
+} axi4_r_resp_t;
+
 typedef struct axi4_r_if {
     u8 id;
     u32 data;
-    u8 resp; // 2-bit
+    axi4_r_resp_t resp;
     bool last;
 } axi4_r_if_t;
 
 static inline void axi4_r_if_to_str(const void *pkt, char *str)
 {
     const axi4_r_if_t *axi4_r = (const axi4_r_if_t *)pkt;
-    sprintf(str, "%02x %08x %01x %01x\n", axi4_r->id, axi4_r->data, axi4_r->resp, axi4_r->last);
+    sprintf(str, "%02x %08x %01x %01x\n", axi4_r->id, axi4_r->data, (u32)axi4_r->resp, axi4_r->last);
 }
 
 static inline void axi4_r_if_reg_vcd(const void *pkt, dbg_sig_type_t type)

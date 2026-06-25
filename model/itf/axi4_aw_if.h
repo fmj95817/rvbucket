@@ -32,12 +32,29 @@
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)
 
+typedef enum axi4_aw_burst {
+    AXI4_AW_BURST_FIXED = 0,
+    AXI4_AW_BURST_INCR = 1,
+    AXI4_AW_BURST_WRAP = 2,
+} axi4_aw_burst_t;
+
+typedef enum axi4_aw_size {
+    AXI4_AW_SIZE_B1 = 0,
+    AXI4_AW_SIZE_B2 = 1,
+    AXI4_AW_SIZE_B4 = 2,
+    AXI4_AW_SIZE_B8 = 3,
+    AXI4_AW_SIZE_B16 = 4,
+    AXI4_AW_SIZE_B32 = 5,
+    AXI4_AW_SIZE_B64 = 6,
+    AXI4_AW_SIZE_B128 = 7,
+} axi4_aw_size_t;
+
 typedef struct axi4_aw_if {
     u8 id;
     u32 addr;
     u8 len;
-    u8 size; // 3-bit
-    u8 burst; // 2-bit
+    axi4_aw_size_t size;
+    axi4_aw_burst_t burst;
     bool lock;
     u8 cache; // 4-bit
     u8 prot; // 3-bit
@@ -48,7 +65,7 @@ typedef struct axi4_aw_if {
 static inline void axi4_aw_if_to_str(const void *pkt, char *str)
 {
     const axi4_aw_if_t *axi4_aw = (const axi4_aw_if_t *)pkt;
-    sprintf(str, "%02x %08x %02x %01x %01x %01x %01x %01x %01x %08x\n", axi4_aw->id, axi4_aw->addr, axi4_aw->len, axi4_aw->size, axi4_aw->burst, axi4_aw->lock, axi4_aw->cache, axi4_aw->prot, axi4_aw->qos, axi4_aw->user);
+    sprintf(str, "%02x %08x %02x %01x %01x %01x %01x %01x %01x %08x\n", axi4_aw->id, axi4_aw->addr, axi4_aw->len, (u32)axi4_aw->size, (u32)axi4_aw->burst, axi4_aw->lock, axi4_aw->cache, axi4_aw->prot, axi4_aw->qos, axi4_aw->user);
 }
 
 static inline void axi4_aw_if_reg_vcd(const void *pkt, dbg_sig_type_t type)

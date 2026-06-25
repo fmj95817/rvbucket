@@ -54,9 +54,8 @@ def gen_c_itf(itf_name, desc):
             for item_name, item_val in enum_list.items():
                 f.write("    {}_{} = {},\n".format(enum_full_name.upper(), item_name.upper(), item_val))
                 max_bw = max(math.ceil(math.log2(item_val + 1)), max_bw)
-            f.write("}} {}_t;\n".format(enum_full_name))
+            f.write("}} {}_t;\n\n".format(enum_full_name))
             enums_bw[enum_name] = max_bw
-        f.write("\n")
 
     payload_num = len(desc["payloads"])
     f.write("typedef struct {}_if {{\n".format(itf_name))
