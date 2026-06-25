@@ -17,18 +17,18 @@ void soc_construct(soc_t *soc, const char *name)
     BTI_RSP_IF_CONSTRUCT(soc, ddr_d_bti_rsp_itf, 1);
     BTI_REQ_IF_CONSTRUCT(soc, flash_bti_req_itf, 1);
     BTI_RSP_IF_CONSTRUCT(soc, flash_bti_rsp_itf, 1);
-    APB_REQ_IF_CONSTRUCT(soc, uart_apb_req_itf, 1);
-    APB_RSP_IF_CONSTRUCT(soc, uart_apb_rsp_itf, 1);
-    EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, uart_irq_sig_itf, false, false);
+    APB_REQ_IF_CONSTRUCT(soc, peri_apb_req_itf, 1);
+    APB_RSP_IF_CONSTRUCT(soc, peri_apb_rsp_itf, 1);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_irq_sig_itf, false, false);
 
     soc->cpu.cycle = soc->cycle;
     soc->cpu.mm_i_bti_req_mst = &soc->mm_i_bti_req_itf;
     soc->cpu.mm_i_bti_rsp_slv = &soc->mm_i_bti_rsp_itf;
     soc->cpu.mm_d_bti_req_mst = &soc->mm_d_bti_req_itf;
     soc->cpu.mm_d_bti_rsp_slv = &soc->mm_d_bti_rsp_itf;
-    soc->cpu.peri_apb_req_mst = &soc->uart_apb_req_itf;
-    soc->cpu.peri_apb_rsp_slv = &soc->uart_apb_rsp_itf;
-    soc->cpu.ext_irq_ins[0] = &soc->uart_irq_sig_itf;
+    soc->cpu.peri_apb_req_mst = &soc->peri_apb_req_itf;
+    soc->cpu.peri_apb_rsp_slv = &soc->peri_apb_rsp_itf;
+    soc->cpu.ext_irq_ins[0] = &soc->peri_irq_sig_itf;
     for (u32 i = 1; i < PLIC_MAX_IRQ_NUM; i++) {
         soc->cpu.ext_irq_ins[i] = soc->ext_irq_ins[i];
     }
@@ -65,12 +65,14 @@ void soc_construct(soc_t *soc, const char *name)
     soc->flash.bti_rsp_mst = &soc->flash_bti_rsp_itf;
     rom_construct(&soc->flash, "u_flash", FLASH_SIZE, NULL, 0, FLASH_BASE);
 
-    soc->uart.apb_req_slv = &soc->uart_apb_req_itf;
-    soc->uart.apb_rsp_mst = &soc->uart_apb_rsp_itf;
-    soc->uart.uart_tx_mst = soc->uart_tx_mst;
-    soc->uart.uart_rx_slv = soc->uart_rx_slv;
-    soc->uart.irq_out = &soc->uart_irq_sig_itf;
-    uart_construct(&soc->uart, "u_uart", UART_BASE, UART_SIZE);
+    soc->peri.cycle = soc->cycle;
+    soc->peri.apb_req_slv = &soc->peri_apb_req_itf;
+    soc->peri.apb_rsp_mst = &soc->peri_apb_rsp_itf;
+    soc->peri.uart_tx_mst = soc->uart_tx_mst;
+    soc->peri.uart_rx_slv = soc->uart_rx_slv;
+    soc->peri.irq_out = &soc->peri_irq_sig_itf;
+    soc->peri.gpio_out = soc->gpio_out;
+    peri_construct(&soc->peri, "u_peri", PERI_BASE, PERI_SIZE);
 
     soc->mm_d_bti_demux.host_bti_req_slv = &soc->mm_d_bti_req_itf;
     soc->mm_d_bti_demux.host_bti_rsp_mst = &soc->mm_d_bti_rsp_itf;
@@ -95,7 +97,7 @@ void soc_reset(soc_t *soc)
 {
     rv32g_reset(&soc->cpu);
     rom_reset(&soc->flash);
-    uart_reset(&soc->uart);
+    peri_reset(&soc->peri);
     bti_demux_reset(&soc->mm_d_bti_demux);
     bti_mux_reset(&soc->ddr_bti_mux);
 }
@@ -104,7 +106,7 @@ void soc_clock(soc_t *soc)
 {
     rv32g_clock(&soc->cpu);
     rom_clock(&soc->flash);
-    uart_clock(&soc->uart);
+    peri_clock(&soc->peri);
     bti_demux_clock(&soc->mm_d_bti_demux);
     bti_mux_clock(&soc->ddr_bti_mux);
 
@@ -116,16 +118,16 @@ void soc_clock(soc_t *soc)
     itf_dbg_clock(&soc->ddr_d_bti_rsp_itf);
     itf_dbg_clock(&soc->flash_bti_req_itf);
     itf_dbg_clock(&soc->flash_bti_rsp_itf);
-    itf_dbg_clock(&soc->uart_apb_req_itf);
-    itf_dbg_clock(&soc->uart_apb_rsp_itf);
-    itf_dbg_clock(&soc->uart_irq_sig_itf);
+    itf_dbg_clock(&soc->peri_apb_req_itf);
+    itf_dbg_clock(&soc->peri_apb_rsp_itf);
+    itf_dbg_clock(&soc->peri_irq_sig_itf);
 }
 
 void soc_free(soc_t *soc)
 {
     rv32g_free(&soc->cpu);
     rom_free(&soc->flash);
-    uart_free(&soc->uart);
+    peri_free(&soc->peri);
     bti_demux_free(&soc->mm_d_bti_demux);
     bti_mux_free(&soc->ddr_bti_mux);
 
@@ -137,7 +139,6 @@ void soc_free(soc_t *soc)
     itf_free(&soc->ddr_d_bti_rsp_itf);
     itf_free(&soc->flash_bti_req_itf);
     itf_free(&soc->flash_bti_rsp_itf);
-    itf_free(&soc->uart_apb_req_itf);
-    itf_free(&soc->uart_apb_rsp_itf);
-    itf_free(&soc->uart_irq_sig_itf);
+    itf_free(&soc->peri_apb_req_itf);
+    itf_free(&soc->peri_apb_rsp_itf);
 }

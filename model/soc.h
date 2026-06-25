@@ -5,7 +5,7 @@
 #include "core/rv32g.h"
 #include "mem/ram.h"
 #include "mem/rom.h"
-#include "io/uart.h"
+#include "peri/peri.h"
 #include "bus/mux.h"
 #include "bus/demux.h"
 
@@ -15,11 +15,12 @@ typedef struct soc {
     itf_t *ddr_bti_rsp_slv;
     itf_t *uart_tx_mst;
     itf_t *uart_rx_slv;
+    itf_t *gpio_out;
     itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
 
     rv32g_t cpu;
     rom_t flash;
-    uart_t uart;
+    peri_t peri;
     bti_demux_t mm_d_bti_demux;
     bti_mux_t ddr_bti_mux;
 
@@ -31,9 +32,9 @@ typedef struct soc {
     itf_t ddr_d_bti_rsp_itf;
     itf_t flash_bti_req_itf;
     itf_t flash_bti_rsp_itf;
-    itf_t uart_apb_req_itf;
-    itf_t uart_apb_rsp_itf;
-    itf_t uart_irq_sig_itf;
+    itf_t peri_apb_req_itf;
+    itf_t peri_apb_rsp_itf;
+    itf_t peri_irq_sig_itf;
 } soc_t;
 
 extern void soc_construct(soc_t *soc, const char *name);

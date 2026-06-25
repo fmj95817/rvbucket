@@ -9,7 +9,9 @@
 #include "itf/bti_req_if.h"
 #include "itf/bti_rsp_if.h"
 #include "itf/uart_if.h"
+#include "itf/gpio_if.h"
 #include "dbg/chk.h"
+#include "dbg/log.h"
 #include "dbg/pcm.h"
 #include "dbg/vcd.h"
 #include "spec/soc.h"
@@ -31,6 +33,9 @@ typedef struct sim_top {
     itf_t uart_tx_itf;
     itf_t ddr_bti_req_itf;
     itf_t ddr_bti_rsp_itf;
+    itf_t gpio_sig_itf;
+    gpio_if_t *gpio_o;
+    u32 gpio_last_val;
     ram_t ddr;
     soc_t soc;
     bool end_sim;
@@ -41,6 +46,12 @@ typedef struct sim_top {
     u32 stdin_rd;
     u32 stdin_wr;
 } sim_top_t;
+
+static void sim_top_gpio_cb(void *args)
+{
+    gpio_if_t *gpio = (gpio_if_t *)args;
+    DBG_LOG(LOG_INFO, "gpio: output = 0x%08x\n", gpio->val);
+}
 
 static program_t read_program(const char *path)
 {
@@ -167,12 +178,18 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
     UART_IF_CONSTRUCT(sim_top, uart_tx_itf, 1);
     BTI_REQ_IF_CONSTRUCT(sim_top, ddr_bti_req_itf, 1);
     BTI_RSP_IF_CONSTRUCT(sim_top, ddr_bti_rsp_itf, 1);
+    GPIO_SIGNAL_IF_CONSTRUCT(sim_top, gpio_sig_itf, false, false);
+
+    sim_top->gpio_o = itf_signal_get_src_and_chk(&sim_top->gpio_sig_itf);
+    sim_top->gpio_last_val = 0;
+    itf_signal_set_wcb(&sim_top->gpio_sig_itf, &sim_top_gpio_cb, sim_top->gpio_o);
 
     sim_top->soc.cycle = sim_top->cycle;
     sim_top->soc.ddr_bti_req_mst = &sim_top->ddr_bti_req_itf;
     sim_top->soc.ddr_bti_rsp_slv = &sim_top->ddr_bti_rsp_itf;
     sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
     sim_top->soc.uart_rx_slv = &sim_top->uart_tx_itf;
+    sim_top->soc.gpio_out = &sim_top->gpio_sig_itf;
     for (u32 i = 0; i < PLIC_MAX_IRQ_NUM; i++) {
         sim_top->soc.ext_irq_ins[i] = NULL;
     }
@@ -232,6 +249,7 @@ static void sim_top_clock(sim_top_t *sim_top)
     itf_dbg_clock(&sim_top->uart_tx_itf);
     itf_dbg_clock(&sim_top->ddr_bti_req_itf);
     itf_dbg_clock(&sim_top->ddr_bti_rsp_itf);
+    itf_dbg_clock(&sim_top->gpio_sig_itf);
 
     (*sim_top->cycle)++;
     dbg_vcd_clock();
@@ -262,6 +280,7 @@ static void sim_top_free(sim_top_t *sim_top)
     itf_free(&sim_top->uart_tx_itf);
     itf_free(&sim_top->ddr_bti_req_itf);
     itf_free(&sim_top->ddr_bti_rsp_itf);
+    itf_free(&sim_top->gpio_sig_itf);
 }
 
 int main(int argc, char *argv[])

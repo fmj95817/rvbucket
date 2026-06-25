@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "io/uart.h"
+#include "peri/uart.h"
 #include "itf/ext_irq_if.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"

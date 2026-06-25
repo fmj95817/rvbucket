@@ -1,0 +1,42 @@
+#ifndef PERI_H
+#define PERI_H
+
+#include "base/types.h"
+#include "base/itf.h"
+#include "itf/apb_req_if.h"
+#include "itf/apb_rsp_if.h"
+#include "itf/uart_if.h"
+#include "itf/ext_irq_if.h"
+#include "itf/gpio_if.h"
+#include "bus/demux.h"
+#include "peri/uart.h"
+#include "peri/gpio.h"
+
+typedef struct peri {
+    const u64 *cycle;
+    itf_t *apb_req_slv;
+    itf_t *apb_rsp_mst;
+    itf_t *uart_tx_mst;
+    itf_t *uart_rx_slv;
+    itf_t *irq_out;
+    itf_t *gpio_out;
+
+    u32 base;
+    u32 size;
+
+    uart_t uart;
+    gpio_t gpio;
+    apb_demux_t apb_demux;
+
+    itf_t uart_apb_req_itf;
+    itf_t uart_apb_rsp_itf;
+    itf_t gpio_apb_req_itf;
+    itf_t gpio_apb_rsp_itf;
+} peri_t;
+
+extern void peri_construct(peri_t *peri, const char *name, u32 base, u32 size);
+extern void peri_reset(peri_t *peri);
+extern void peri_clock(peri_t *peri);
+extern void peri_free(peri_t *peri);
+
+#endif
