@@ -151,6 +151,35 @@ void exu_construct(exu_t *exu, const char *name)
 {
     DBG_VCD_MODULE_SCOPE(name);
 
+    dbg_vcd_add_sig("priv", DBG_SIG_TYPE_REG, 2, &exu->priv);
+    dbg_vcd_add_sig("cur_pc", DBG_SIG_TYPE_REG, 32, &exu->cur_pc);
+    dbg_vcd_add_sig("irq_epc", DBG_SIG_TYPE_REG, 32, &exu->irq_epc);
+    dbg_vcd_add_sig("irq_defer", DBG_SIG_TYPE_REG, 1, &exu->irq_defer);
+    dbg_vcd_add_sig("cur_opcode", DBG_SIG_TYPE_REG, 7, &exu->cur_opcode);
+    dbg_vcd_add_sig("ldst_req_pend", DBG_SIG_TYPE_REG, 1, &exu->ldst_req_pend);
+    dbg_vcd_add_sig("ld_rd", DBG_SIG_TYPE_REG, 5, &exu->ld_rd);
+    dbg_vcd_add_sig("ld_funct3", DBG_SIG_TYPE_REG, 3, &exu->ld_funct3);
+    dbg_vcd_add_sig("amo_stage", DBG_SIG_TYPE_REG, 2, &exu->amo_stage);
+    dbg_vcd_add_sig("amo_rd", DBG_SIG_TYPE_REG, 5, &exu->amo_rd);
+    dbg_vcd_add_sig("amo_addr", DBG_SIG_TYPE_REG, 32, &exu->amo_addr);
+    dbg_vcd_add_sig("amo_lr_set", DBG_SIG_TYPE_REG, 1, &exu->amo_lr_set);
+    dbg_vcd_add_sig("amo_rsvd_addr", DBG_SIG_TYPE_REG, 32, &exu->amo_rsvd_addr);
+    dbg_vcd_add_sig("wfi", DBG_SIG_TYPE_REG, 1, &exu->wfi);
+    dbg_vcd_add_sig("wfi_resume_pc", DBG_SIG_TYPE_REG, 32, &exu->wfi_resume_pc);
+
+    dbg_vcd_add_sig("gpr_ra", DBG_SIG_TYPE_REG, 32, &exu->gpr[1]);
+    dbg_vcd_add_sig("gpr_sp", DBG_SIG_TYPE_REG, 32, &exu->gpr[2]);
+    dbg_vcd_add_sig("gpr_s0", DBG_SIG_TYPE_REG, 32, &exu->gpr[8]);
+    dbg_vcd_add_sig("gpr_a0", DBG_SIG_TYPE_REG, 32, &exu->gpr[10]);
+    dbg_vcd_add_sig("gpr_a1", DBG_SIG_TYPE_REG, 32, &exu->gpr[11]);
+    dbg_vcd_add_sig("gpr_a2", DBG_SIG_TYPE_REG, 32, &exu->gpr[12]);
+    dbg_vcd_add_sig("gpr_a3", DBG_SIG_TYPE_REG, 32, &exu->gpr[13]);
+    dbg_vcd_add_sig("gpr_a4", DBG_SIG_TYPE_REG, 32, &exu->gpr[14]);
+    dbg_vcd_add_sig("gpr_a5", DBG_SIG_TYPE_REG, 32, &exu->gpr[15]);
+    dbg_vcd_add_sig("gpr_t0", DBG_SIG_TYPE_REG, 32, &exu->gpr[5]);
+    dbg_vcd_add_sig("gpr_t1", DBG_SIG_TYPE_REG, 32, &exu->gpr[6]);
+    dbg_vcd_add_sig("gpr_t2", DBG_SIG_TYPE_REG, 32, &exu->gpr[7]);
+
     exu->csr_read_req_o = itf_signal_get_src_and_chk(exu->exu_csr_read_req_out);
     exu->csr_read_rsp_i = itf_signal_get_src_and_chk(exu->csr_exu_read_rsp_in);
     exu->csr_write_req_o = itf_signal_get_src_and_chk(exu->exu_csr_write_req_out);

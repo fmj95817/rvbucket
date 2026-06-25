@@ -442,6 +442,15 @@ void itf_fifo_pop_front(itf_t *itf)
     itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
 }
 
+void itf_fifo_pop_all(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+
+    while (itf->ctx.fifo.pkt_num > 0) {
+        itf_fifo_pop_front(itf);
+    }
+}
+
 bool itf_fifo_empty(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);

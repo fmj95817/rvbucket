@@ -32,6 +32,25 @@ void mmu_construct(mmu_t *mmu, const char *name, const mmu_conf_t *conf)
 {
     (void)conf;
     DBG_VCD_MODULE_SCOPE(name);
+
+    dbg_vcd_add_sig("busy", DBG_SIG_TYPE_REG, 1, &mmu->busy);
+    dbg_vcd_add_sig("is_inst", DBG_SIG_TYPE_REG, 1, &mmu->is_inst);
+    dbg_vcd_add_sig("req_addr", DBG_SIG_TYPE_REG, 32, &mmu->req.addr);
+    dbg_vcd_add_sig("req_cmd", DBG_SIG_TYPE_REG, 1, &mmu->req.cmd);
+    dbg_vcd_add_sig("req_priv", DBG_SIG_TYPE_REG, 2, &mmu->req_priv);
+    dbg_vcd_add_sig("req_sum", DBG_SIG_TYPE_REG, 1, &mmu->req_sum);
+    dbg_vcd_add_sig("req_mxr", DBG_SIG_TYPE_REG, 1, &mmu->req_mxr);
+    dbg_vcd_add_sig("fault_pc", DBG_SIG_TYPE_REG, 32, &mmu->fault_pc);
+    dbg_vcd_add_sig("va", DBG_SIG_TYPE_REG, 32, &mmu->va);
+    dbg_vcd_add_sig("pte", DBG_SIG_TYPE_REG, 32, &mmu->pte);
+    dbg_vcd_add_sig("leaf_pa_base", DBG_SIG_TYPE_REG, 32, &mmu->leaf_pa_base);
+    dbg_vcd_add_sig("level", DBG_SIG_TYPE_REG, 1, &mmu->level);
+    dbg_vcd_add_sig("pte_req_pending", DBG_SIG_TYPE_REG, 1, &mmu->pte_req_pending);
+    dbg_vcd_add_sig("final_req_pending", DBG_SIG_TYPE_REG, 1, &mmu->final_req_pending);
+    dbg_vcd_add_sig("final_rsp_pending", DBG_SIG_TYPE_REG, 1, &mmu->final_rsp_pending);
+    dbg_vcd_add_sig("itlb_replace_idx", DBG_SIG_TYPE_REG, 4, &mmu->itlb_replace_idx);
+    dbg_vcd_add_sig("dtlb_replace_idx", DBG_SIG_TYPE_REG, 4, &mmu->dtlb_replace_idx);
+
     mmu->perf_itlb_hit = dbg_pcm_reg_perf_cnt("mmu_itlb_hit");
     mmu->perf_itlb_miss = dbg_pcm_reg_perf_cnt("mmu_itlb_miss");
     mmu->perf_dtlb_hit = dbg_pcm_reg_perf_cnt("mmu_dtlb_hit");

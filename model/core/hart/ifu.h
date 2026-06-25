@@ -3,6 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
+#include "base/fifo.h"
 #include "itf/ex_req_if.h"
 #include "itf/ex_rsp_if.h"
 #include "itf/fch_req_if.h"
@@ -14,6 +15,11 @@
 #ifndef IFU_CTRLQ_SIZE
 #define IFU_CTRLQ_SIZE 16
 #endif
+
+typedef struct ifu_ctrlq_entry {
+    bool vld;
+    u32 pc;
+} ifu_ctrlq_entry_t;
 
 typedef enum ifu_fch_state {
     IFU_FCH_STATE_REQ = 0,
@@ -58,15 +64,7 @@ typedef struct ifu {
         u32 pc;
     } redirect;
 
-    struct {
-        u32 head;
-        u32 tail;
-        u32 count;
-        struct {
-            bool vld;
-            u32 pc;
-        } entry[IFU_CTRLQ_SIZE];
-    } ctrlq;
+    fifo_t ctrlq;
 
     struct {
         bool enable;

@@ -115,6 +115,23 @@ void csr_construct(csr_t *csr, const char *name)
 {
     DBG_VCD_MODULE_SCOPE(name);
 
+    dbg_vcd_add_sig("mstatus", DBG_SIG_TYPE_REG, 32, &csr->regs.mstatus.raw);
+    dbg_vcd_add_sig("mtvec", DBG_SIG_TYPE_REG, 32, &csr->regs.mtvec.raw);
+    dbg_vcd_add_sig("mepc", DBG_SIG_TYPE_REG, 32, &csr->regs.mepc);
+    dbg_vcd_add_sig("mcause", DBG_SIG_TYPE_REG, 32, &csr->regs.mcause.raw);
+    dbg_vcd_add_sig("mtval", DBG_SIG_TYPE_REG, 32, &csr->regs.mtval);
+    dbg_vcd_add_sig("mie", DBG_SIG_TYPE_REG, 32, &csr->regs.mie.raw);
+    dbg_vcd_add_sig("mip", DBG_SIG_TYPE_REG, 32, &csr->regs.mip.raw);
+    dbg_vcd_add_sig("medeleg", DBG_SIG_TYPE_REG, 32, &csr->regs.medeleg.raw);
+    dbg_vcd_add_sig("mideleg", DBG_SIG_TYPE_REG, 32, &csr->regs.mideleg.raw);
+    dbg_vcd_add_sig("satp", DBG_SIG_TYPE_REG, 32, &csr->regs.satp.raw);
+    dbg_vcd_add_sig("stvec", DBG_SIG_TYPE_REG, 32, &csr->regs.stvec.raw);
+    dbg_vcd_add_sig("sepc", DBG_SIG_TYPE_REG, 32, &csr->regs.sepc);
+    dbg_vcd_add_sig("scause", DBG_SIG_TYPE_REG, 32, &csr->regs.scause.raw);
+    dbg_vcd_add_sig("stval", DBG_SIG_TYPE_REG, 32, &csr->regs.stval);
+    dbg_vcd_add_sig("sie", DBG_SIG_TYPE_REG, 32, &csr->regs.sie.raw);
+    dbg_vcd_add_sig("sip", DBG_SIG_TYPE_REG, 32, &csr->regs.sip.raw);
+
     csr->core_timer_i = itf_signal_get_src_and_chk(csr->core_timer_in);
     csr->core_m_irq_i = itf_signal_get_src_and_chk(csr->core_m_irq_in);
     csr->core_swi_pend_o = itf_signal_get_src_and_chk(csr->core_swi_pend_out);

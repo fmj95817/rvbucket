@@ -265,7 +265,12 @@ static void trap_proc_interrupt(trap_t *trap)
 
 void trap_construct(trap_t *trap, const char *name)
 {
-    (void)name;
+    DBG_VCD_MODULE_SCOPE(name);
+
+    dbg_vcd_add_sig("priv", DBG_SIG_TYPE_REG, 2, trap->priv);
+    dbg_vcd_add_sig("irq_epc", DBG_SIG_TYPE_REG, 32, trap->irq_epc);
+    dbg_vcd_add_sig("wfi", DBG_SIG_TYPE_REG, 1, trap->exu_wfi);
+
     trap->core_m_irq_i = itf_signal_get_src_and_chk(trap->core_m_irq_in);
     trap->ext_irq_i = itf_signal_get_src_and_chk(trap->ext_irq_in);
 }

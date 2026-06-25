@@ -174,6 +174,35 @@ function build_model {
         $(find sim/model -name *.c)
 }
 
+function build_ut {
+    local model_srcs=($(find model -name *.c ! -path "*/sim/*"))
+    local ut_srcs=($(find ut/model -name *.c ! -name utils.c))
+
+    if [ ${#ut_srcs[@]} -eq 0 ]; then
+        echo "build_ut: no UT sources found under ut/model/"
+        return
+    fi
+
+    for ut_src in ${ut_srcs[@]}; do
+        local rel_path="${ut_src#ut/model/}"
+        local ut_name="${rel_path%.c}"
+        local ut_dir="build/hw/model/ut/$(dirname ${ut_name})"
+        local ut_bin="build/hw/model/ut/${ut_name}_ut"
+        mkdir -p "${ut_dir}"
+        echo "  compiling ut/${ut_name} ..."
+        ${HOST_CC} \
+            -Wall \
+            -O0 -g \
+            -I./model \
+            -I./ut/model \
+            -o "${ut_bin}" \
+            "${ut_src}" \
+            ut/model/utils.c \
+            "${model_srcs[@]}"
+    done
+    echo "build_ut: ${#ut_srcs[@]} UT(s) built."
+}
+
 function build_rtl {
     local simulator="${1}"
     local wd="$(pwd)"
@@ -250,6 +279,9 @@ function build_hw {
     build_sw_case boot "${1}"
     if [ "${1}" = "model" ]; then
         build_model
+        if [ "${2}" = "ut" ]; then
+            build_ut
+        fi
     elif [ "${1}" = "rtl" ]; then
         build_rtl "${2}"
     elif [ "${1}" = "fpga" ]; then

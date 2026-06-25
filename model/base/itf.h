@@ -87,6 +87,7 @@ extern void itf_signal_write_notify(itf_t *itf);
 
 extern void itf_fifo_get_front(itf_t *itf, void *pkt);
 extern void itf_fifo_pop_front(itf_t *itf);
+extern void itf_fifo_pop_all(itf_t *itf);
 extern bool itf_fifo_empty(itf_t *itf);
 extern bool itf_fifo_full(itf_t *itf);
 

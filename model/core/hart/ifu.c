@@ -14,6 +14,8 @@ void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base
     ifu->boot_rom_info.base = boot_rom_base;
     ifu->boot_rom_info.size = boot_rom_size;
 
+    fifo_construct(&ifu->ctrlq, sizeof(ifu_ctrlq_entry_t), IFU_CTRLQ_SIZE);
+
     ifu->bpu.enable = !dbg_get_bool_env("BP_OFF");
 
     ifu->perf.branch = dbg_pcm_reg_perf_cnt("ifu_branch");
@@ -25,7 +27,7 @@ void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base
     dbg_vcd_add_sig("issue_pc", DBG_SIG_TYPE_REG, 32, &ifu->issue.pc);
     dbg_vcd_add_sig("redirect_state", DBG_SIG_TYPE_REG, 2, &ifu->redirect.state);
     dbg_vcd_add_sig("redirect_pc", DBG_SIG_TYPE_REG, 32, &ifu->redirect.pc);
-    dbg_vcd_add_sig("ctrlq_count", DBG_SIG_TYPE_REG, 32, &ifu->ctrlq.count);
+    dbg_vcd_add_sig("ctrlq_count", DBG_SIG_TYPE_REG, 32, &ifu->ctrlq.num);
 }
 
 void ifu_reset(ifu_t *ifu)
@@ -44,13 +46,7 @@ void ifu_reset(ifu_t *ifu)
     ifu->redirect.state = IFU_REDIRECT_STATE_IDLE;
     ifu->redirect.pc = ifu->reset_pc;
 
-    ifu->ctrlq.head = 0;
-    ifu->ctrlq.tail = 0;
-    ifu->ctrlq.count = 0;
-    for (u32 i = 0; i < IFU_CTRLQ_SIZE; i++) {
-        ifu->ctrlq.entry[i].vld = false;
-        ifu->ctrlq.entry[i].pc = 0;
-    }
+    fifo_reset(&ifu->ctrlq);
 
     ifu->bpu.access_seq = 0;
     for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
@@ -67,7 +63,7 @@ void ifu_reset(ifu_t *ifu)
 
 void ifu_free(ifu_t *ifu)
 {
-    (void)ifu;
+    fifo_free(&ifu->ctrlq);
 }
 
 static void ifu_request_redirect(ifu_t *ifu, u32 pc, ifu_redirect_state_t state)
@@ -80,49 +76,36 @@ static void ifu_request_redirect(ifu_t *ifu, u32 pc, ifu_redirect_state_t state)
 
 static void ifu_ctrlq_push(ifu_t *ifu, u32 pc)
 {
-    DBG_CHECK(ifu->ctrlq.count < IFU_CTRLQ_SIZE);
-
-    ifu->ctrlq.entry[ifu->ctrlq.tail].vld = true;
-    ifu->ctrlq.entry[ifu->ctrlq.tail].pc = pc;
-    ifu->ctrlq.tail = (ifu->ctrlq.tail + 1) % IFU_CTRLQ_SIZE;
-    ifu->ctrlq.count++;
+    ifu_ctrlq_entry_t entry = { .vld = true, .pc = pc };
+    fifo_push(&ifu->ctrlq, &entry);
 }
 
 static bool ifu_ctrlq_pop_valid(ifu_t *ifu, u32 pc)
 {
-    if (ifu->ctrlq.count == 0) {
+    if (fifo_empty(&ifu->ctrlq)) {
         return false;
     }
 
-    bool vld = ifu->ctrlq.entry[ifu->ctrlq.head].vld;
-    u32 entry_pc = ifu->ctrlq.entry[ifu->ctrlq.head].pc;
+    ifu_ctrlq_entry_t entry;
+    fifo_get_front(&ifu->ctrlq, &entry);
 
-    if (!vld) {
-        ifu->ctrlq.head = (ifu->ctrlq.head + 1) % IFU_CTRLQ_SIZE;
-        ifu->ctrlq.count--;
+    if (!entry.vld) {
+        fifo_pop(&ifu->ctrlq, &entry);
         return false;
     }
 
-    if (entry_pc != pc) {
+    if (entry.pc != pc) {
         return false;
     }
 
-    ifu->ctrlq.entry[ifu->ctrlq.head].vld = false;
-    ifu->ctrlq.head = (ifu->ctrlq.head + 1) % IFU_CTRLQ_SIZE;
-    ifu->ctrlq.count--;
+    fifo_pop(&ifu->ctrlq, &entry);
 
     return true;
 }
 
 static void ifu_ctrlq_flush(ifu_t *ifu)
 {
-    ifu->ctrlq.head = 0;
-    ifu->ctrlq.tail = 0;
-    ifu->ctrlq.count = 0;
-    for (u32 i = 0; i < IFU_CTRLQ_SIZE; i++) {
-        ifu->ctrlq.entry[i].vld = false;
-        ifu->ctrlq.entry[i].pc = 0;
-    }
+    fifo_clear(&ifu->ctrlq);
 }
 
 static bool ifu_proc_redirect(ifu_t *ifu)
@@ -425,7 +408,7 @@ static void ifu_proc_trap_send(ifu_t *ifu)
         return;
     }
 
-    if (ifu->ctrlq.count != 0) {
+    if (!fifo_empty(&ifu->ctrlq)) {
         return;
     }
 

@@ -1,4 +1,4 @@
-#include "mux.h"
+#include "bti_mux.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
