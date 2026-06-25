@@ -14,6 +14,7 @@
 #include "itf/exu_csr_write_req_if.h"
 #include "itf/csr_exu_write_rsp_if.h"
 #include "itf/tlb_flush_if.h"
+#include "itf/l1_flush_if.h"
 #include "spec/core/isa.h"
 
 typedef enum amo_stage {
@@ -34,6 +35,7 @@ typedef struct exu {
     itf_t *exu_csr_write_req_out;
     itf_t *csr_exu_write_rsp_in;
     itf_t *tlb_flush_mst;
+    itf_t *l1i_flush_mst;
 
     exu_csr_read_req_if_t *csr_read_req_o;
     const csr_exu_read_rsp_if_t *csr_read_rsp_i;

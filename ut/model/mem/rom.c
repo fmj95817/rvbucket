@@ -158,30 +158,9 @@ static void tb_axi_write_ar(rom_tb_t *tb, u8 id, u32 addr, u8 len,
     itf_write(&tb->axi4_ar_itf, &ar);
 }
 
-static void tb_axi_write_aw(rom_tb_t *tb, u8 id, u32 addr, u8 len,
-                             axi4_aw_size_t size, axi4_aw_burst_t burst)
-{
-    axi4_aw_if_t aw = {
-        .id = id, .addr = addr, .len = len, .size = size, .burst = burst,
-        .lock = false, .cache = 0, .prot = 0, .qos = 0, .user = 0
-    };
-    itf_write(&tb->axi4_aw_itf, &aw);
-}
-
-static void tb_axi_write_w(rom_tb_t *tb, u32 data, u8 strb, bool last)
-{
-    axi4_w_if_t w = { .data = data, .strb = strb, .last = last };
-    itf_write(&tb->axi4_w_itf, &w);
-}
-
 static bool tb_cond_axi_r_ready(rom_tb_t *tb)
 {
     return !itf_fifo_empty(&tb->axi4_r_itf);
-}
-
-static bool tb_cond_axi_b_ready(rom_tb_t *tb)
-{
-    return !itf_fifo_empty(&tb->axi4_b_itf);
 }
 
 static bool tb_axi_check_and_pop_r(rom_tb_t *tb, u8 expected_id, u32 expected_data,
@@ -192,15 +171,6 @@ static bool tb_axi_check_and_pop_r(rom_tb_t *tb, u8 expected_id, u32 expected_da
     itf_read(&tb->axi4_r_itf, &r);
     return (r.id == expected_id) && (r.data == expected_data) &&
            (r.resp == expected_resp) && (r.last == expected_last);
-}
-
-static bool tb_axi_check_and_pop_b(rom_tb_t *tb, u8 expected_id,
-                                    axi4_b_resp_t expected_resp)
-{
-    if (itf_fifo_empty(&tb->axi4_b_itf)) return false;
-    axi4_b_if_t b;
-    itf_read(&tb->axi4_b_itf, &b);
-    return (b.id == expected_id) && (b.resp == expected_resp);
 }
 
 TEST_CASE(rom_tb_t, bti_read)

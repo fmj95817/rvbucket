@@ -17,12 +17,16 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     APB_RSP_IF_CONSTRUCT(s, aclint_cfg_apb_rsp_itf, 1);
     APB_REQ_IF_CONSTRUCT(s, plic_cfg_apb_req_itf, 1);
     APB_RSP_IF_CONSTRUCT(s, plic_cfg_apb_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, hart_i_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, hart_i_bti_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, hart_d_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, hart_d_bti_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, hart_ptw_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, hart_ptw_bti_rsp_itf, 1);
+    AXI4_AW_IF_CONSTRUCT(s, hart_i_axi4_aw_itf, 1);
+    AXI4_W_IF_CONSTRUCT(s, hart_i_axi4_w_itf, 8);
+    AXI4_B_IF_CONSTRUCT(s, hart_i_axi4_b_itf, 1);
+    AXI4_AR_IF_CONSTRUCT(s, hart_i_axi4_ar_itf, 1);
+    AXI4_R_IF_CONSTRUCT(s, hart_i_axi4_r_itf, 8);
+    AXI4_AW_IF_CONSTRUCT(s, hart_d_axi4_aw_itf, 1);
+    AXI4_W_IF_CONSTRUCT(s, hart_d_axi4_w_itf, 8);
+    AXI4_B_IF_CONSTRUCT(s, hart_d_axi4_b_itf, 1);
+    AXI4_AR_IF_CONSTRUCT(s, hart_d_axi4_ar_itf, 1);
+    AXI4_R_IF_CONSTRUCT(s, hart_d_axi4_r_itf, 8);
     CORE_TIMER_SIGNAL_IF_CONSTRUCT(s, core_timer_sig_itf, false, false);
     CORE_M_IRQ_SIGNAL_IF_CONSTRUCT(s, core_m_irq_sig_itf, false, false);
     CORE_SWI_PEND_SIGNAL_IF_CONSTRUCT(s, core_swi_pend_sig_itf, false, false);
@@ -30,12 +34,16 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(s, conv_ext_irq_sig_itf, false, false);
 
     s->hart.cycle = s->cycle;
-    s->hart.i_bti_req_mst = &s->hart_i_bti_req_itf;
-    s->hart.i_bti_rsp_slv = &s->hart_i_bti_rsp_itf;
-    s->hart.d_bti_req_mst = &s->hart_d_bti_req_itf;
-    s->hart.d_bti_rsp_slv = &s->hart_d_bti_rsp_itf;
-    s->hart.ptw_bti_req_mst = &s->hart_ptw_bti_req_itf;
-    s->hart.ptw_bti_rsp_slv = &s->hart_ptw_bti_rsp_itf;
+    s->hart.i_axi4_aw_mst = &s->hart_i_axi4_aw_itf;
+    s->hart.i_axi4_w_mst = &s->hart_i_axi4_w_itf;
+    s->hart.i_axi4_b_slv = &s->hart_i_axi4_b_itf;
+    s->hart.i_axi4_ar_mst = &s->hart_i_axi4_ar_itf;
+    s->hart.i_axi4_r_slv = &s->hart_i_axi4_r_itf;
+    s->hart.d_axi4_aw_mst = &s->hart_d_axi4_aw_itf;
+    s->hart.d_axi4_w_mst = &s->hart_d_axi4_w_itf;
+    s->hart.d_axi4_b_slv = &s->hart_d_axi4_b_itf;
+    s->hart.d_axi4_ar_mst = &s->hart_d_axi4_ar_itf;
+    s->hart.d_axi4_r_slv = &s->hart_d_axi4_r_itf;
     s->hart.core_timer_in = &s->core_timer_sig_itf;
     s->hart.core_m_irq_in = &s->core_m_irq_sig_itf;
     s->hart.core_s_irq_slv = &s->core_s_irq_itf;
@@ -43,15 +51,27 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     s->hart.core_swi_pend_out = &s->core_swi_pend_sig_itf;
     hart_conf_t hart_conf = {
         .boot_rom_base = conf->boot_rom_base,
-        .boot_rom_size = conf->boot_rom_size
+        .boot_rom_size = conf->boot_rom_size,
+        .itcm_base = conf->itcm_base,
+        .itcm_size = conf->itcm_size,
+        .dtcm_base = conf->dtcm_base,
+        .dtcm_size = conf->dtcm_size,
+        .cfg_base = conf->cfg_base,
+        .cfg_size = conf->cfg_size
     };
     hart_construct(&s->hart, "u_hart", &hart_conf);
 
     s->cbi.cycle = s->cycle;
-    s->cbi.mm_i_bti_req_mst = s->mm_i_bti_req_mst;
-    s->cbi.mm_i_bti_rsp_slv = s->mm_i_bti_rsp_slv;
-    s->cbi.mm_d_bti_req_mst = s->mm_d_bti_req_mst;
-    s->cbi.mm_d_bti_rsp_slv = s->mm_d_bti_rsp_slv;
+    s->cbi.mm_i_axi4_aw_mst = s->mm_i_axi4_aw_mst;
+    s->cbi.mm_i_axi4_w_mst = s->mm_i_axi4_w_mst;
+    s->cbi.mm_i_axi4_b_slv = s->mm_i_axi4_b_slv;
+    s->cbi.mm_i_axi4_ar_mst = s->mm_i_axi4_ar_mst;
+    s->cbi.mm_i_axi4_r_slv = s->mm_i_axi4_r_slv;
+    s->cbi.mm_d_axi4_aw_mst = s->mm_d_axi4_aw_mst;
+    s->cbi.mm_d_axi4_w_mst = s->mm_d_axi4_w_mst;
+    s->cbi.mm_d_axi4_b_slv = s->mm_d_axi4_b_slv;
+    s->cbi.mm_d_axi4_ar_mst = s->mm_d_axi4_ar_mst;
+    s->cbi.mm_d_axi4_r_slv = s->mm_d_axi4_r_slv;
     s->cbi.peri_apb_req_mst = s->peri_apb_req_mst;
     s->cbi.peri_apb_rsp_slv = s->peri_apb_rsp_slv;
     s->cbi.boot_rom_bti_req_mst = &s->boot_rom_bti_req_itf;
@@ -66,12 +86,16 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     s->cbi.aclint_cfg_apb_rsp_slv = &s->aclint_cfg_apb_rsp_itf;
     s->cbi.plic_cfg_apb_req_mst = &s->plic_cfg_apb_req_itf;
     s->cbi.plic_cfg_apb_rsp_slv = &s->plic_cfg_apb_rsp_itf;
-    s->cbi.hart_i_bti_req_slv = &s->hart_i_bti_req_itf;
-    s->cbi.hart_i_bti_rsp_mst = &s->hart_i_bti_rsp_itf;
-    s->cbi.hart_d_bti_req_slv = &s->hart_d_bti_req_itf;
-    s->cbi.hart_d_bti_rsp_mst = &s->hart_d_bti_rsp_itf;
-    s->cbi.hart_ptw_bti_req_slv = &s->hart_ptw_bti_req_itf;
-    s->cbi.hart_ptw_bti_rsp_mst = &s->hart_ptw_bti_rsp_itf;
+    s->cbi.hart_i_axi4_aw_slv = &s->hart_i_axi4_aw_itf;
+    s->cbi.hart_i_axi4_w_slv = &s->hart_i_axi4_w_itf;
+    s->cbi.hart_i_axi4_b_mst = &s->hart_i_axi4_b_itf;
+    s->cbi.hart_i_axi4_ar_slv = &s->hart_i_axi4_ar_itf;
+    s->cbi.hart_i_axi4_r_mst = &s->hart_i_axi4_r_itf;
+    s->cbi.hart_d_axi4_aw_slv = &s->hart_d_axi4_aw_itf;
+    s->cbi.hart_d_axi4_w_slv = &s->hart_d_axi4_w_itf;
+    s->cbi.hart_d_axi4_b_mst = &s->hart_d_axi4_b_itf;
+    s->cbi.hart_d_axi4_ar_slv = &s->hart_d_axi4_ar_itf;
+    s->cbi.hart_d_axi4_r_mst = &s->hart_d_axi4_r_itf;
     cbi_conf_t cbi_conf = {
         .boot_rom_base = conf->boot_rom_base,
         .boot_rom_size = conf->boot_rom_size,
@@ -171,12 +195,16 @@ void rv32g_free(rv32g_t *s)
     itf_free(&s->aclint_cfg_apb_rsp_itf);
     itf_free(&s->plic_cfg_apb_req_itf);
     itf_free(&s->plic_cfg_apb_rsp_itf);
-    itf_free(&s->hart_i_bti_req_itf);
-    itf_free(&s->hart_i_bti_rsp_itf);
-    itf_free(&s->hart_d_bti_req_itf);
-    itf_free(&s->hart_d_bti_rsp_itf);
-    itf_free(&s->hart_ptw_bti_req_itf);
-    itf_free(&s->hart_ptw_bti_rsp_itf);
+    itf_free(&s->hart_i_axi4_aw_itf);
+    itf_free(&s->hart_i_axi4_w_itf);
+    itf_free(&s->hart_i_axi4_b_itf);
+    itf_free(&s->hart_i_axi4_ar_itf);
+    itf_free(&s->hart_i_axi4_r_itf);
+    itf_free(&s->hart_d_axi4_aw_itf);
+    itf_free(&s->hart_d_axi4_w_itf);
+    itf_free(&s->hart_d_axi4_b_itf);
+    itf_free(&s->hart_d_axi4_ar_itf);
+    itf_free(&s->hart_d_axi4_r_itf);
     itf_free(&s->core_timer_sig_itf);
     itf_free(&s->core_m_irq_sig_itf);
     itf_free(&s->core_s_irq_itf);
@@ -206,12 +234,16 @@ void rv32g_clock(rv32g_t *s)
     itf_dbg_clock(&s->aclint_cfg_apb_rsp_itf);
     itf_dbg_clock(&s->plic_cfg_apb_req_itf);
     itf_dbg_clock(&s->plic_cfg_apb_rsp_itf);
-    itf_dbg_clock(&s->hart_i_bti_req_itf);
-    itf_dbg_clock(&s->hart_i_bti_rsp_itf);
-    itf_dbg_clock(&s->hart_d_bti_req_itf);
-    itf_dbg_clock(&s->hart_d_bti_rsp_itf);
-    itf_dbg_clock(&s->hart_ptw_bti_req_itf);
-    itf_dbg_clock(&s->hart_ptw_bti_rsp_itf);
+    itf_dbg_clock(&s->hart_i_axi4_aw_itf);
+    itf_dbg_clock(&s->hart_i_axi4_w_itf);
+    itf_dbg_clock(&s->hart_i_axi4_b_itf);
+    itf_dbg_clock(&s->hart_i_axi4_ar_itf);
+    itf_dbg_clock(&s->hart_i_axi4_r_itf);
+    itf_dbg_clock(&s->hart_d_axi4_aw_itf);
+    itf_dbg_clock(&s->hart_d_axi4_w_itf);
+    itf_dbg_clock(&s->hart_d_axi4_b_itf);
+    itf_dbg_clock(&s->hart_d_axi4_ar_itf);
+    itf_dbg_clock(&s->hart_d_axi4_r_itf);
     itf_dbg_clock(&s->core_timer_sig_itf);
     itf_dbg_clock(&s->core_m_irq_sig_itf);
     itf_dbg_clock(&s->core_s_irq_itf);

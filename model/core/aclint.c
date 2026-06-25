@@ -29,7 +29,11 @@ void aclint_reset(aclint_t *aclint)
     aclint->mtime.raw = 0ull;
     aclint->mtime_cycle_cnt = 0u;
     for (u32 i = 0; i < HART_NUM; i++) {
+        aclint->mtimecmp[i].raw = 0xffffffffffffffffull;
         aclint->mtime_exceed_old[i] = false;
+        aclint->core_m_irq_o[i]->msw = false;
+        aclint->core_m_irq_o[i]->mtimer = false;
+        itf_signal_write_notify(aclint->core_m_irq_outs[i]);
     }
 }
 

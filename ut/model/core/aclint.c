@@ -162,6 +162,13 @@ TEST_CASE(aclint_tb_t, write_mtimecmp)
 TEST_CASE(aclint_tb_t, timer_irq)
 {
     TEST_BEGIN("Timer IRQ");
+    tb_apb_write(tb, 0x02004004, 0, 0xf);
+    RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
+    {
+        apb_rsp_if_t rsp;
+        itf_read(&tb->apb_rsp_itf, &rsp);
+    }
+
     tb_apb_write(tb, 0x02004000, 2, 0xf);
     RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
     {

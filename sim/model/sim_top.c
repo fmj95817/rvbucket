@@ -6,6 +6,11 @@
 #include "mem/ram.h"
 #include "itf/bti_req_if.h"
 #include "itf/bti_rsp_if.h"
+#include "itf/axi4_aw_if.h"
+#include "itf/axi4_w_if.h"
+#include "itf/axi4_b_if.h"
+#include "itf/axi4_ar_if.h"
+#include "itf/axi4_r_if.h"
 #include "itf/uart_if.h"
 #include "itf/gpio_if.h"
 #include "dbg/chk.h"
@@ -29,8 +34,11 @@ typedef struct sim_top {
     u64 *cycle;
     itf_t uart_rx_itf;
     itf_t uart_tx_itf;
-    itf_t ddr_bti_req_itf;
-    itf_t ddr_bti_rsp_itf;
+    itf_t ddr_axi4_aw_itf;
+    itf_t ddr_axi4_w_itf;
+    itf_t ddr_axi4_b_itf;
+    itf_t ddr_axi4_ar_itf;
+    itf_t ddr_axi4_r_itf;
     itf_t gpio_sig_itf;
     gpio_if_t *gpio_o;
     ram_t ddr;
@@ -125,16 +133,22 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
 
     UART_IF_CONSTRUCT(sim_top, uart_rx_itf, 1);
     UART_IF_CONSTRUCT(sim_top, uart_tx_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(sim_top, ddr_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(sim_top, ddr_bti_rsp_itf, 1);
+    AXI4_AW_IF_CONSTRUCT(sim_top, ddr_axi4_aw_itf, 1);
+    AXI4_W_IF_CONSTRUCT(sim_top, ddr_axi4_w_itf, 8);
+    AXI4_B_IF_CONSTRUCT(sim_top, ddr_axi4_b_itf, 1);
+    AXI4_AR_IF_CONSTRUCT(sim_top, ddr_axi4_ar_itf, 1);
+    AXI4_R_IF_CONSTRUCT(sim_top, ddr_axi4_r_itf, 8);
     GPIO_SIGNAL_IF_CONSTRUCT(sim_top, gpio_sig_itf, false, false);
 
     sim_top->gpio_o = itf_signal_get_src_and_chk(&sim_top->gpio_sig_itf);
     itf_signal_set_wcb(&sim_top->gpio_sig_itf, &sim_top_gpio_cb, sim_top);
 
     sim_top->soc.cycle = sim_top->cycle;
-    sim_top->soc.ddr_bti_req_mst = &sim_top->ddr_bti_req_itf;
-    sim_top->soc.ddr_bti_rsp_slv = &sim_top->ddr_bti_rsp_itf;
+    sim_top->soc.ddr_axi4_aw_mst = &sim_top->ddr_axi4_aw_itf;
+    sim_top->soc.ddr_axi4_w_mst = &sim_top->ddr_axi4_w_itf;
+    sim_top->soc.ddr_axi4_b_slv = &sim_top->ddr_axi4_b_itf;
+    sim_top->soc.ddr_axi4_ar_mst = &sim_top->ddr_axi4_ar_itf;
+    sim_top->soc.ddr_axi4_r_slv = &sim_top->ddr_axi4_r_itf;
     sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
     sim_top->soc.uart_rx_slv = &sim_top->uart_tx_itf;
     sim_top->soc.gpio_out = &sim_top->gpio_sig_itf;
@@ -149,9 +163,12 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
         sim_top->ui = ui_term_create();
     }
 
-    sim_top->ddr.bti_req_slv[0] = &sim_top->ddr_bti_req_itf;
-    sim_top->ddr.bti_rsp_mst[0] = &sim_top->ddr_bti_rsp_itf;
-    ram_construct(&sim_top->ddr, "u_ddr", 1, RAM_MODE_BTI, DDR_SIZE, DDR_BASE);
+    sim_top->ddr.axi4_aw_slv = &sim_top->ddr_axi4_aw_itf;
+    sim_top->ddr.axi4_w_slv = &sim_top->ddr_axi4_w_itf;
+    sim_top->ddr.axi4_b_mst = &sim_top->ddr_axi4_b_itf;
+    sim_top->ddr.axi4_ar_slv = &sim_top->ddr_axi4_ar_itf;
+    sim_top->ddr.axi4_r_mst = &sim_top->ddr_axi4_r_itf;
+    ram_construct(&sim_top->ddr, "u_ddr", 1, RAM_MODE_AXI, DDR_SIZE, DDR_BASE);
 
     dbg_vcd_set_clk(sim_top->cycle);
     dbg_vcd_add_sig("cycle", DBG_SIG_TYPE_REG, 64, sim_top->cycle);
@@ -183,8 +200,11 @@ static void sim_top_clock(sim_top_t *sim_top)
 
     itf_dbg_clock(&sim_top->uart_rx_itf);
     itf_dbg_clock(&sim_top->uart_tx_itf);
-    itf_dbg_clock(&sim_top->ddr_bti_req_itf);
-    itf_dbg_clock(&sim_top->ddr_bti_rsp_itf);
+    itf_dbg_clock(&sim_top->ddr_axi4_aw_itf);
+    itf_dbg_clock(&sim_top->ddr_axi4_w_itf);
+    itf_dbg_clock(&sim_top->ddr_axi4_b_itf);
+    itf_dbg_clock(&sim_top->ddr_axi4_ar_itf);
+    itf_dbg_clock(&sim_top->ddr_axi4_r_itf);
     itf_dbg_clock(&sim_top->gpio_sig_itf);
 
     (*sim_top->cycle)++;
@@ -210,8 +230,11 @@ static void sim_top_free(sim_top_t *sim_top)
     ram_free(&sim_top->ddr);
     itf_free(&sim_top->uart_rx_itf);
     itf_free(&sim_top->uart_tx_itf);
-    itf_free(&sim_top->ddr_bti_req_itf);
-    itf_free(&sim_top->ddr_bti_rsp_itf);
+    itf_free(&sim_top->ddr_axi4_aw_itf);
+    itf_free(&sim_top->ddr_axi4_w_itf);
+    itf_free(&sim_top->ddr_axi4_b_itf);
+    itf_free(&sim_top->ddr_axi4_ar_itf);
+    itf_free(&sim_top->ddr_axi4_r_itf);
     itf_free(&sim_top->gpio_sig_itf);
 }
 

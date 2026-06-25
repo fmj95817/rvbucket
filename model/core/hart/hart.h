@@ -9,20 +9,32 @@
 #include "hbi.h"
 #include "mmu.h"
 #include "trap.h"
+#include "mem/l1.h"
+#include "bus/mux.h"
 
 typedef struct hart_conf {
     u32 boot_rom_base;
     u32 boot_rom_size;
+    u32 itcm_base;
+    u32 itcm_size;
+    u32 dtcm_base;
+    u32 dtcm_size;
+    u32 cfg_base;
+    u32 cfg_size;
 } hart_conf_t;
 
 typedef struct hart {
     const u64 *cycle;
-    itf_t *i_bti_req_mst;
-    itf_t *i_bti_rsp_slv;
-    itf_t *d_bti_req_mst;
-    itf_t *d_bti_rsp_slv;
-    itf_t *ptw_bti_req_mst;
-    itf_t *ptw_bti_rsp_slv;
+    itf_t *i_axi4_aw_mst;
+    itf_t *i_axi4_w_mst;
+    itf_t *i_axi4_b_slv;
+    itf_t *i_axi4_ar_mst;
+    itf_t *i_axi4_r_slv;
+    itf_t *d_axi4_aw_mst;
+    itf_t *d_axi4_w_mst;
+    itf_t *d_axi4_b_slv;
+    itf_t *d_axi4_ar_mst;
+    itf_t *d_axi4_r_slv;
     itf_t *core_s_irq_slv;
     itf_t *core_timer_in;
     itf_t *core_m_irq_in;
@@ -34,6 +46,9 @@ typedef struct hart {
     csr_t csr;
     hbi_t hbi;
     mmu_t mmu;
+    l1_t l1i;
+    l1_t l1d;
+    bti_mux_t l1d_bti_mux;
     trap_t trap;
 
     itf_t ex_req_itf;
@@ -47,7 +62,16 @@ typedef struct hart {
     itf_t va_i_bti_rsp_itf;
     itf_t va_d_bti_req_itf;
     itf_t va_d_bti_rsp_itf;
+    itf_t pa_i_bti_req_itf;
+    itf_t pa_i_bti_rsp_itf;
+    itf_t pa_d_bti_req_itf;
+    itf_t pa_d_bti_rsp_itf;
+    itf_t pa_ptw_bti_req_itf;
+    itf_t pa_ptw_bti_rsp_itf;
+    itf_t l1d_bti_req_itf;
+    itf_t l1d_bti_rsp_itf;
     itf_t tlb_flush_itf;
+    itf_t l1i_flush_itf;
     itf_t hart_expt_itf;
     itf_t trap_send_itf;
     itf_t exu_csr_read_req_sig_itf;

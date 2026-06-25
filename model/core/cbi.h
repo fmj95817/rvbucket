@@ -36,10 +36,16 @@ typedef struct cbi_conf {
 
 typedef struct cbi {
     const u64 *cycle;
-    itf_t *mm_i_bti_req_mst;
-    itf_t *mm_i_bti_rsp_slv;
-    itf_t *mm_d_bti_req_mst;
-    itf_t *mm_d_bti_rsp_slv;
+    itf_t *mm_i_axi4_aw_mst;
+    itf_t *mm_i_axi4_w_mst;
+    itf_t *mm_i_axi4_b_slv;
+    itf_t *mm_i_axi4_ar_mst;
+    itf_t *mm_i_axi4_r_slv;
+    itf_t *mm_d_axi4_aw_mst;
+    itf_t *mm_d_axi4_w_mst;
+    itf_t *mm_d_axi4_b_slv;
+    itf_t *mm_d_axi4_ar_mst;
+    itf_t *mm_d_axi4_r_slv;
     itf_t *peri_apb_req_mst;
     itf_t *peri_apb_rsp_slv;
 
@@ -56,21 +62,52 @@ typedef struct cbi {
     itf_t *plic_cfg_apb_req_mst;
     itf_t *plic_cfg_apb_rsp_slv;
 
-    itf_t *hart_i_bti_req_slv;
-    itf_t *hart_i_bti_rsp_mst;
-    itf_t *hart_d_bti_req_slv;
-    itf_t *hart_d_bti_rsp_mst;
-    itf_t *hart_ptw_bti_req_slv;
-    itf_t *hart_ptw_bti_rsp_mst;
+    itf_t *hart_i_axi4_aw_slv;
+    itf_t *hart_i_axi4_w_slv;
+    itf_t *hart_i_axi4_b_mst;
+    itf_t *hart_i_axi4_ar_slv;
+    itf_t *hart_i_axi4_r_mst;
+    itf_t *hart_d_axi4_aw_slv;
+    itf_t *hart_d_axi4_w_slv;
+    itf_t *hart_d_axi4_b_mst;
+    itf_t *hart_d_axi4_ar_slv;
+    itf_t *hart_d_axi4_r_mst;
 
-    bti_demux_t i_bti_demux;
-    bti_mux_t d_bti_mux;
-    bti_demux_t d_bti_demux;
+    axi_demux_t i_axi_demux;
+    axi_demux_t d_axi_demux;
+    axi2bti_t boot_rom_axi2bti;
+    axi2bti_t itcm_i_axi2bti;
+    axi2bti_t itcm_d_axi2bti;
+    axi2bti_t dtcm_axi2bti;
+    axi2bti_t cfg_axi2bti;
     bti2apb_t cfg_bti2apb;
     apb_demux_t cfg_apb_demux;
 
-    itf_t d_mux_bti_req_itf;
-    itf_t d_mux_bti_rsp_itf;
+    itf_t boot_rom_axi4_aw_itf;
+    itf_t boot_rom_axi4_w_itf;
+    itf_t boot_rom_axi4_b_itf;
+    itf_t boot_rom_axi4_ar_itf;
+    itf_t boot_rom_axi4_r_itf;
+    itf_t itcm_i_axi4_aw_itf;
+    itf_t itcm_i_axi4_w_itf;
+    itf_t itcm_i_axi4_b_itf;
+    itf_t itcm_i_axi4_ar_itf;
+    itf_t itcm_i_axi4_r_itf;
+    itf_t itcm_d_axi4_aw_itf;
+    itf_t itcm_d_axi4_w_itf;
+    itf_t itcm_d_axi4_b_itf;
+    itf_t itcm_d_axi4_ar_itf;
+    itf_t itcm_d_axi4_r_itf;
+    itf_t dtcm_axi4_aw_itf;
+    itf_t dtcm_axi4_w_itf;
+    itf_t dtcm_axi4_b_itf;
+    itf_t dtcm_axi4_ar_itf;
+    itf_t dtcm_axi4_r_itf;
+    itf_t cfg_axi4_aw_itf;
+    itf_t cfg_axi4_w_itf;
+    itf_t cfg_axi4_b_itf;
+    itf_t cfg_axi4_ar_itf;
+    itf_t cfg_axi4_r_itf;
     itf_t cfg_bti_req_itf;
     itf_t cfg_bti_rsp_itf;
     itf_t cfg_apb_req_itf;

@@ -7,7 +7,7 @@ int main(void)
     printf("gpio_led: start\n");
 
     /* running light: cycle one LED at a time [0..15] */
-    for (int round = 0; round < 1000000; round++) {
+    for (int round = 0; round < 10; round++) {
         for (int i = 0; i < 16; i++) {
             uint32_t val = 1u << i;
             gpio_write(val);

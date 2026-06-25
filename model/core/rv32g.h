@@ -41,10 +41,16 @@ typedef struct rv32g_conf {
 typedef struct rv32g {
     const u64 *cycle;
 
-    itf_t *mm_i_bti_req_mst;
-    itf_t *mm_i_bti_rsp_slv;
-    itf_t *mm_d_bti_req_mst;
-    itf_t *mm_d_bti_rsp_slv;
+    itf_t *mm_i_axi4_aw_mst;
+    itf_t *mm_i_axi4_w_mst;
+    itf_t *mm_i_axi4_b_slv;
+    itf_t *mm_i_axi4_ar_mst;
+    itf_t *mm_i_axi4_r_slv;
+    itf_t *mm_d_axi4_aw_mst;
+    itf_t *mm_d_axi4_w_mst;
+    itf_t *mm_d_axi4_b_slv;
+    itf_t *mm_d_axi4_ar_mst;
+    itf_t *mm_d_axi4_r_slv;
     itf_t *peri_apb_req_mst;
     itf_t *peri_apb_rsp_slv;
     itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
@@ -77,12 +83,16 @@ typedef struct rv32g {
     itf_t core_s_irq_itf;
     itf_t conv_ext_irq_sig_itf;
 
-    itf_t hart_i_bti_req_itf;
-    itf_t hart_i_bti_rsp_itf;
-    itf_t hart_d_bti_req_itf;
-    itf_t hart_d_bti_rsp_itf;
-    itf_t hart_ptw_bti_req_itf;
-    itf_t hart_ptw_bti_rsp_itf;
+    itf_t hart_i_axi4_aw_itf;
+    itf_t hart_i_axi4_w_itf;
+    itf_t hart_i_axi4_b_itf;
+    itf_t hart_i_axi4_ar_itf;
+    itf_t hart_i_axi4_r_itf;
+    itf_t hart_d_axi4_aw_itf;
+    itf_t hart_d_axi4_w_itf;
+    itf_t hart_d_axi4_b_itf;
+    itf_t hart_d_axi4_ar_itf;
+    itf_t hart_d_axi4_r_itf;
 } rv32g_t;
 
 extern void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf);

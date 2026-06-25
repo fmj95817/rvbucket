@@ -39,6 +39,9 @@ DECL_MISC_HANDLER(fence)
 DECL_MISC_HANDLER(fence_i)
 {
     DBG_LOG(LOG_TRACE, "fence.i\n");
+    DBG_CHECK(!itf_fifo_full(exu->l1i_flush_mst));
+    l1_flush_if_t pkt = {};
+    itf_write(exu->l1i_flush_mst, &pkt);
 }
 
 void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
@@ -57,7 +60,6 @@ void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
         } else {
             DBG_CHECK(0);
         }
-        CALL_MISC_HANDLER(fence, exu, ex_req);
     } else {
         DBG_CHECK(0);
     }
