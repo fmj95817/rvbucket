@@ -223,15 +223,15 @@ static void ram_proc_port(ram_t *ram, u32 port_idx)
 {
     DBG_CHECK(port_idx < ram->port_num);
 
-    if (itf_fifo_empty(ram->bti_req_slv[port_idx])) {
+    if (itf_fifo_empty(ram->bti_req_slvs[port_idx])) {
         return;
     }
-    if (itf_fifo_full(ram->bti_rsp_mst[port_idx])) {
+    if (itf_fifo_full(ram->bti_rsp_msts[port_idx])) {
         return;
     }
 
     bti_req_if_t bti_req;
-    itf_read(ram->bti_req_slv[port_idx], &bti_req);
+    itf_read(ram->bti_req_slvs[port_idx], &bti_req);
     DBG_CHECK(bti_req.addr >= ram->base_addr);
 
     bti_rsp_if_t bti_rsp;
@@ -248,7 +248,7 @@ static void ram_proc_port(ram_t *ram, u32 port_idx)
         bti_rsp.ok = false;
     }
 
-    itf_write(ram->bti_rsp_mst[port_idx], &bti_rsp);
+    itf_write(ram->bti_rsp_msts[port_idx], &bti_rsp);
 }
 
 void ram_clock(ram_t *ram)

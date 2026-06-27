@@ -3,6 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
+#include "itf/bti_if.h"
 #include "ifu.h"
 #include "exu/exu.h"
 #include "csr.h"
@@ -25,16 +26,8 @@ typedef struct hart_conf {
 
 typedef struct hart {
     const u64 *cycle;
-    itf_t *i_axi4_aw_mst;
-    itf_t *i_axi4_w_mst;
-    itf_t *i_axi4_b_slv;
-    itf_t *i_axi4_ar_mst;
-    itf_t *i_axi4_r_slv;
-    itf_t *d_axi4_aw_mst;
-    itf_t *d_axi4_w_mst;
-    itf_t *d_axi4_b_slv;
-    itf_t *d_axi4_ar_mst;
-    itf_t *d_axi4_r_slv;
+    AXI4_MST_DECL(i_);
+    AXI4_MST_DECL(d_);
     itf_t *core_s_irq_slv;
     itf_t *core_timer_in;
     itf_t *core_m_irq_in;
@@ -58,18 +51,12 @@ typedef struct hart {
     itf_t fch_rsp_itf;
     itf_t ldst_req_itf;
     itf_t ldst_rsp_itf;
-    itf_t va_i_bti_req_itf;
-    itf_t va_i_bti_rsp_itf;
-    itf_t va_d_bti_req_itf;
-    itf_t va_d_bti_rsp_itf;
-    itf_t pa_i_bti_req_itf;
-    itf_t pa_i_bti_rsp_itf;
-    itf_t pa_d_bti_req_itf;
-    itf_t pa_d_bti_rsp_itf;
-    itf_t pa_ptw_bti_req_itf;
-    itf_t pa_ptw_bti_rsp_itf;
-    itf_t l1d_bti_req_itf;
-    itf_t l1d_bti_rsp_itf;
+    BTI_IF_DECL(va_i_);
+    BTI_IF_DECL(va_d_);
+    BTI_IF_DECL(pa_i_);
+    BTI_IF_DECL(pa_d_);
+    BTI_IF_DECL(pa_ptw_);
+    BTI_IF_DECL(l1d_);
     itf_t tlb_flush_itf;
     itf_t l1i_flush_itf;
     itf_t i_hart_expt_itf;

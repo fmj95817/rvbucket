@@ -3,8 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/bti_req_if.h"
-#include "itf/bti_rsp_if.h"
+#include "itf/bti_if.h"
 
 #define BTI_DEMUX_GST_NUM_MAX 16
 

@@ -48,8 +48,8 @@ static void tb_construct(ram_tb_t *tb, const char *name)
 
 static void tb_construct_bti(ram_tb_t *tb)
 {
-    tb->dut.bti_req_slv[0] = &tb->bti_req_itf;
-    tb->dut.bti_rsp_mst[0] = &tb->bti_rsp_itf;
+    tb->dut.bti_req_slvs[0] = &tb->bti_req_itf;
+    tb->dut.bti_rsp_msts[0] = &tb->bti_rsp_itf;
     ram_construct(&tb->dut, "u_ram", 1, RAM_MODE_BTI, RAM_SIZE, RAM_BASE);
 }
 

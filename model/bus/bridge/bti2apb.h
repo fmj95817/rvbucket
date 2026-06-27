@@ -3,10 +3,8 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/bti_req_if.h"
-#include "itf/bti_rsp_if.h"
-#include "itf/apb_req_if.h"
-#include "itf/apb_rsp_if.h"
+#include "itf/bti_if.h"
+#include "itf/apb_if.h"
 
 typedef struct bti2apb {
     itf_t *bti_req_slv;

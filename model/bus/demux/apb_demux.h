@@ -3,8 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/apb_req_if.h"
-#include "itf/apb_rsp_if.h"
+#include "itf/apb_if.h"
 
 #define APB_DEMUX_GST_NUM_MAX 16
 

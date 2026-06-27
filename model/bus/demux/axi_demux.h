@@ -3,11 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/axi4_aw_if.h"
-#include "itf/axi4_w_if.h"
-#include "itf/axi4_b_if.h"
-#include "itf/axi4_ar_if.h"
-#include "itf/axi4_r_if.h"
+#include "itf/axi4_if.h"
 
 #define AXI_DEMUX_GST_NUM_MAX 16
 

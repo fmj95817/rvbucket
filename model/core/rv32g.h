@@ -40,19 +40,9 @@ typedef struct rv32g_conf {
 
 typedef struct rv32g {
     const u64 *cycle;
-
-    itf_t *mm_i_axi4_aw_mst;
-    itf_t *mm_i_axi4_w_mst;
-    itf_t *mm_i_axi4_b_slv;
-    itf_t *mm_i_axi4_ar_mst;
-    itf_t *mm_i_axi4_r_slv;
-    itf_t *mm_d_axi4_aw_mst;
-    itf_t *mm_d_axi4_w_mst;
-    itf_t *mm_d_axi4_b_slv;
-    itf_t *mm_d_axi4_ar_mst;
-    itf_t *mm_d_axi4_r_slv;
-    itf_t *peri_apb_req_mst;
-    itf_t *peri_apb_rsp_slv;
+    AXI4_MST_DECL(mm_i_);
+    AXI4_MST_DECL(mm_d_);
+    APB_MST_DECL(peri_);
     itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
 
     hart_t hart;
@@ -63,36 +53,19 @@ typedef struct rv32g {
     aclint_t aclint;
     plic_t plic;
 
-    itf_t boot_rom_bti_req_itf;
-    itf_t boot_rom_bti_rsp_itf;
-    itf_t itcm_i_bti_req_itf;
-    itf_t itcm_i_bti_rsp_itf;
-    itf_t itcm_d_bti_req_itf;
-    itf_t itcm_d_bti_rsp_itf;
-    itf_t dtcm_bti_req_itf;
-    itf_t dtcm_bti_rsp_itf;
-
-    itf_t aclint_cfg_apb_req_itf;
-    itf_t aclint_cfg_apb_rsp_itf;
-    itf_t plic_cfg_apb_req_itf;
-    itf_t plic_cfg_apb_rsp_itf;
-
+    BTI_IF_DECL(boot_rom_);
+    BTI_IF_DECL(itcm_i_);
+    BTI_IF_DECL(itcm_d_);
+    BTI_IF_DECL(dtcm_);
+    APB_IF_DECL(aclint_cfg_);
+    APB_IF_DECL(plic_cfg_);
     itf_t core_timer_sig_itf;
     itf_t core_m_irq_sig_itf;
     itf_t core_swi_pend_sig_itf;
     itf_t core_s_irq_itf;
     itf_t conv_ext_irq_sig_itf;
-
-    itf_t hart_i_axi4_aw_itf;
-    itf_t hart_i_axi4_w_itf;
-    itf_t hart_i_axi4_b_itf;
-    itf_t hart_i_axi4_ar_itf;
-    itf_t hart_i_axi4_r_itf;
-    itf_t hart_d_axi4_aw_itf;
-    itf_t hart_d_axi4_w_itf;
-    itf_t hart_d_axi4_b_itf;
-    itf_t hart_d_axi4_ar_itf;
-    itf_t hart_d_axi4_r_itf;
+    AXI4_IF_DECL(hart_i_);
+    AXI4_IF_DECL(hart_d_);
 } rv32g_t;
 
 extern void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf);

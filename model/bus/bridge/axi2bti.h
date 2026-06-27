@@ -3,13 +3,8 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/bti_req_if.h"
-#include "itf/bti_rsp_if.h"
-#include "itf/axi4_aw_if.h"
-#include "itf/axi4_w_if.h"
-#include "itf/axi4_b_if.h"
-#include "itf/axi4_ar_if.h"
-#include "itf/axi4_r_if.h"
+#include "itf/bti_if.h"
+#include "itf/axi4_if.h"
 
 typedef enum axi2bti_state {
     AXI2BTI_STATE_IDLE = 0,

@@ -3,8 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/bti_req_if.h"
-#include "itf/bti_rsp_if.h"
+#include "itf/bti_if.h"
 #include "itf/hart_expt_if.h"
 #include "itf/tlb_flush_if.h"
 #include "spec/core/csr.h"

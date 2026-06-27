@@ -3,8 +3,7 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/apb_req_if.h"
-#include "itf/apb_rsp_if.h"
+#include "itf/apb_if.h"
 #include "itf/uart_if.h"
 #include "itf/ext_irq_if.h"
 #include "itf/gpio_if.h"

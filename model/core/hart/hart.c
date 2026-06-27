@@ -14,18 +14,12 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     FCH_RSP_IF_CONSTRUCT(s, fch_rsp_itf, 1);
     LDST_REQ_IF_CONSTRUCT(s, ldst_req_itf, 1);
     LDST_RSP_IF_CONSTRUCT(s, ldst_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, va_i_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, va_i_bti_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, va_d_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, va_d_bti_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, pa_i_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, pa_i_bti_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, pa_d_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, pa_d_bti_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, pa_ptw_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, pa_ptw_bti_rsp_itf, 1);
-    BTI_REQ_IF_CONSTRUCT(s, l1d_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(s, l1d_bti_rsp_itf, 1);
+    BTI_IF_CONSTRUCT(s, va_i_);
+    BTI_IF_CONSTRUCT(s, va_d_);
+    BTI_IF_CONSTRUCT(s, pa_i_);
+    BTI_IF_CONSTRUCT(s, pa_d_);
+    BTI_IF_CONSTRUCT(s, pa_ptw_);
+    BTI_IF_CONSTRUCT(s, l1d_);
     TLB_FLUSH_IF_CONSTRUCT(s, tlb_flush_itf, 1);
     L1_FLUSH_IF_CONSTRUCT(s, l1i_flush_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, i_hart_expt_itf, 1);
@@ -70,10 +64,8 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->csr.csr_exu_write_rsp_out = &s->csr_exu_write_rsp_sig_itf;
     csr_construct(&s->csr, "u_csr");
 
-    s->hbi.i_bti_req_mst = &s->va_i_bti_req_itf;
-    s->hbi.i_bti_rsp_slv = &s->va_i_bti_rsp_itf;
-    s->hbi.d_bti_req_mst = &s->va_d_bti_req_itf;
-    s->hbi.d_bti_rsp_slv = &s->va_d_bti_rsp_itf;
+    BTI_MST_CONNECT(&s->hbi, i_, s, va_i_);
+    BTI_MST_CONNECT(&s->hbi, d_, s, va_d_);
     s->hbi.fch_req_slv = &s->fch_req_itf;
     s->hbi.fch_rsp_mst = &s->fch_rsp_itf;
     s->hbi.i_hart_expt_slv = &s->i_hart_expt_itf;
@@ -81,18 +73,13 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->hbi.ldst_rsp_mst = &s->ldst_rsp_itf;
     hbi_construct(&s->hbi, "u_hbi");
 
-    s->mmu.va_i_bti_req_slv = &s->va_i_bti_req_itf;
-    s->mmu.va_i_bti_rsp_mst = &s->va_i_bti_rsp_itf;
-    s->mmu.va_d_bti_req_slv = &s->va_d_bti_req_itf;
-    s->mmu.va_d_bti_rsp_mst = &s->va_d_bti_rsp_itf;
+    BTI_SLV_CONNECT(&s->mmu, va_i_, s, va_i_);
+    BTI_SLV_CONNECT(&s->mmu, va_d_, s, va_d_);
     s->mmu.i_hart_expt_mst = &s->i_hart_expt_itf;
     s->mmu.hart_expt_mst = &s->hart_expt_itf;
-    s->mmu.pa_i_bti_req_mst = &s->pa_i_bti_req_itf;
-    s->mmu.pa_i_bti_rsp_slv = &s->pa_i_bti_rsp_itf;
-    s->mmu.pa_d_bti_req_mst = &s->pa_d_bti_req_itf;
-    s->mmu.pa_d_bti_rsp_slv = &s->pa_d_bti_rsp_itf;
-    s->mmu.ptw_bti_req_mst = &s->pa_ptw_bti_req_itf;
-    s->mmu.ptw_bti_rsp_slv = &s->pa_ptw_bti_rsp_itf;
+    BTI_MST_CONNECT(&s->mmu, pa_i_, s, pa_i_);
+    BTI_MST_CONNECT(&s->mmu, pa_d_, s, pa_d_);
+    BTI_MST_CONNECT(&s->mmu, ptw_, s, pa_ptw_);
     s->mmu.tlb_flush_slv = &s->tlb_flush_itf;
     s->mmu.priv = &s->exu.priv;
     s->mmu.satp = &s->csr.regs.satp;
@@ -102,12 +89,9 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     mmu_conf_t mmu_conf = {};
     mmu_construct(&s->mmu, "u_mmu", &mmu_conf);
 
-    s->l1d_bti_mux.host_bti_req_slvs[0] = &s->pa_d_bti_req_itf;
-    s->l1d_bti_mux.host_bti_rsp_msts[0] = &s->pa_d_bti_rsp_itf;
-    s->l1d_bti_mux.host_bti_req_slvs[1] = &s->pa_ptw_bti_req_itf;
-    s->l1d_bti_mux.host_bti_rsp_msts[1] = &s->pa_ptw_bti_rsp_itf;
-    s->l1d_bti_mux.gst_bti_req_mst = &s->l1d_bti_req_itf;
-    s->l1d_bti_mux.gst_bti_rsp_slv = &s->l1d_bti_rsp_itf;
+    BTI_SLV_ARR_CONNECT(&s->l1d_bti_mux, host_, 0, s, pa_d_);
+    BTI_SLV_ARR_CONNECT(&s->l1d_bti_mux, host_, 1, s, pa_ptw_);
+    BTI_MST_CONNECT(&s->l1d_bti_mux, gst_, s, l1d_);
     bti_mux_construct(&s->l1d_bti_mux, "u_l1d_bti_mux", 2);
 
     l1_conf_t l1i_conf = {
@@ -118,13 +102,8 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
         .bypass_sizes = { conf->boot_rom_size, conf->itcm_size }
     };
     s->l1i.cycle = s->cycle;
-    s->l1i.bti_req_slv = &s->pa_i_bti_req_itf;
-    s->l1i.bti_rsp_mst = &s->pa_i_bti_rsp_itf;
-    s->l1i.axi4_aw_mst = s->i_axi4_aw_mst;
-    s->l1i.axi4_w_mst = s->i_axi4_w_mst;
-    s->l1i.axi4_b_slv = s->i_axi4_b_slv;
-    s->l1i.axi4_ar_mst = s->i_axi4_ar_mst;
-    s->l1i.axi4_r_slv = s->i_axi4_r_slv;
+    BTI_SLV_CONNECT(&s->l1i, , s, pa_i_);
+    AXI4_MST_IMPORT(&s->l1i, , s, i_);
     s->l1i.flush_slv = &s->l1i_flush_itf;
     l1_construct(&s->l1i, "u_l1i", &l1i_conf);
 
@@ -136,13 +115,8 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
         .bypass_sizes = { conf->boot_rom_size, conf->itcm_size, conf->dtcm_size, conf->cfg_size }
     };
     s->l1d.cycle = s->cycle;
-    s->l1d.bti_req_slv = &s->l1d_bti_req_itf;
-    s->l1d.bti_rsp_mst = &s->l1d_bti_rsp_itf;
-    s->l1d.axi4_aw_mst = s->d_axi4_aw_mst;
-    s->l1d.axi4_w_mst = s->d_axi4_w_mst;
-    s->l1d.axi4_b_slv = s->d_axi4_b_slv;
-    s->l1d.axi4_ar_mst = s->d_axi4_ar_mst;
-    s->l1d.axi4_r_slv = s->d_axi4_r_slv;
+    BTI_SLV_CONNECT(&s->l1d, , s, l1d_);
+    AXI4_MST_IMPORT(&s->l1d, , s, d_);
     s->l1d.flush_slv = NULL;
     l1_construct(&s->l1d, "u_l1d", &l1d_conf);
 
@@ -206,18 +180,12 @@ void hart_free(hart_t *s)
     itf_free(&s->fch_rsp_itf);
     itf_free(&s->ldst_req_itf);
     itf_free(&s->ldst_rsp_itf);
-    itf_free(&s->va_i_bti_req_itf);
-    itf_free(&s->va_i_bti_rsp_itf);
-    itf_free(&s->va_d_bti_req_itf);
-    itf_free(&s->va_d_bti_rsp_itf);
-    itf_free(&s->pa_i_bti_req_itf);
-    itf_free(&s->pa_i_bti_rsp_itf);
-    itf_free(&s->pa_d_bti_req_itf);
-    itf_free(&s->pa_d_bti_rsp_itf);
-    itf_free(&s->pa_ptw_bti_req_itf);
-    itf_free(&s->pa_ptw_bti_rsp_itf);
-    itf_free(&s->l1d_bti_req_itf);
-    itf_free(&s->l1d_bti_rsp_itf);
+    BTI_IF_FREE(s, va_i_);
+    BTI_IF_FREE(s, va_d_);
+    BTI_IF_FREE(s, pa_i_);
+    BTI_IF_FREE(s, pa_d_);
+    BTI_IF_FREE(s, pa_ptw_);
+    BTI_IF_FREE(s, l1d_);
     itf_free(&s->tlb_flush_itf);
     itf_free(&s->l1i_flush_itf);
     itf_free(&s->i_hart_expt_itf);
@@ -248,18 +216,12 @@ void hart_clock(hart_t *s)
     itf_dbg_clock(&s->fch_rsp_itf);
     itf_dbg_clock(&s->ldst_req_itf);
     itf_dbg_clock(&s->ldst_rsp_itf);
-    itf_dbg_clock(&s->va_i_bti_req_itf);
-    itf_dbg_clock(&s->va_i_bti_rsp_itf);
-    itf_dbg_clock(&s->va_d_bti_req_itf);
-    itf_dbg_clock(&s->va_d_bti_rsp_itf);
-    itf_dbg_clock(&s->pa_i_bti_req_itf);
-    itf_dbg_clock(&s->pa_i_bti_rsp_itf);
-    itf_dbg_clock(&s->pa_d_bti_req_itf);
-    itf_dbg_clock(&s->pa_d_bti_rsp_itf);
-    itf_dbg_clock(&s->pa_ptw_bti_req_itf);
-    itf_dbg_clock(&s->pa_ptw_bti_rsp_itf);
-    itf_dbg_clock(&s->l1d_bti_req_itf);
-    itf_dbg_clock(&s->l1d_bti_rsp_itf);
+    BTI_IF_DBG_CLOCK(s, va_i_);
+    BTI_IF_DBG_CLOCK(s, va_d_);
+    BTI_IF_DBG_CLOCK(s, pa_i_);
+    BTI_IF_DBG_CLOCK(s, pa_d_);
+    BTI_IF_DBG_CLOCK(s, pa_ptw_);
+    BTI_IF_DBG_CLOCK(s, l1d_);
     itf_dbg_clock(&s->tlb_flush_itf);
     itf_dbg_clock(&s->l1i_flush_itf);
     itf_dbg_clock(&s->i_hart_expt_itf);

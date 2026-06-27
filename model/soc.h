@@ -11,11 +11,7 @@
 
 typedef struct soc {
     const u64 *cycle;
-    itf_t *ddr_axi4_aw_mst;
-    itf_t *ddr_axi4_w_mst;
-    itf_t *ddr_axi4_b_slv;
-    itf_t *ddr_axi4_ar_mst;
-    itf_t *ddr_axi4_r_slv;
+    AXI4_MST_DECL(ddr_);
     itf_t *uart_tx_mst;
     itf_t *uart_rx_slv;
     itf_t *gpio_out;
@@ -29,43 +25,14 @@ typedef struct soc {
     axi_mux_t ddr_axi_mux;
     axi_mux_t flash_axi_mux;
 
-    itf_t mm_i_axi4_aw_itf;
-    itf_t mm_i_axi4_w_itf;
-    itf_t mm_i_axi4_b_itf;
-    itf_t mm_i_axi4_ar_itf;
-    itf_t mm_i_axi4_r_itf;
-    itf_t mm_d_axi4_aw_itf;
-    itf_t mm_d_axi4_w_itf;
-    itf_t mm_d_axi4_b_itf;
-    itf_t mm_d_axi4_ar_itf;
-    itf_t mm_d_axi4_r_itf;
-    itf_t ddr_i_axi4_aw_itf;
-    itf_t ddr_i_axi4_w_itf;
-    itf_t ddr_i_axi4_b_itf;
-    itf_t ddr_i_axi4_ar_itf;
-    itf_t ddr_i_axi4_r_itf;
-    itf_t ddr_d_axi4_aw_itf;
-    itf_t ddr_d_axi4_w_itf;
-    itf_t ddr_d_axi4_b_itf;
-    itf_t ddr_d_axi4_ar_itf;
-    itf_t ddr_d_axi4_r_itf;
-    itf_t flash_i_axi4_aw_itf;
-    itf_t flash_i_axi4_w_itf;
-    itf_t flash_i_axi4_b_itf;
-    itf_t flash_i_axi4_ar_itf;
-    itf_t flash_i_axi4_r_itf;
-    itf_t flash_d_axi4_aw_itf;
-    itf_t flash_d_axi4_w_itf;
-    itf_t flash_d_axi4_b_itf;
-    itf_t flash_d_axi4_ar_itf;
-    itf_t flash_d_axi4_r_itf;
-    itf_t flash_axi4_aw_itf;
-    itf_t flash_axi4_w_itf;
-    itf_t flash_axi4_b_itf;
-    itf_t flash_axi4_ar_itf;
-    itf_t flash_axi4_r_itf;
-    itf_t peri_apb_req_itf;
-    itf_t peri_apb_rsp_itf;
+    AXI4_IF_DECL(mm_i_);
+    AXI4_IF_DECL(mm_d_);
+    AXI4_IF_DECL(ddr_i_);
+    AXI4_IF_DECL(ddr_d_);
+    AXI4_IF_DECL(flash_i_);
+    AXI4_IF_DECL(flash_d_);
+    AXI4_IF_DECL(flash_);
+    APB_IF_DECL(peri_);
     itf_t peri_irq_sig_itf;
 } soc_t;
 

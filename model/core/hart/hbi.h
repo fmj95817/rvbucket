@@ -7,8 +7,7 @@
 #include "itf/fch_rsp_if.h"
 #include "itf/ldst_req_if.h"
 #include "itf/ldst_rsp_if.h"
-#include "itf/bti_req_if.h"
-#include "itf/bti_rsp_if.h"
+#include "itf/bti_if.h"
 #include "itf/hart_expt_if.h"
 
 typedef struct hbi {

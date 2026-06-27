@@ -3,13 +3,8 @@
 
 #include "base/types.h"
 #include "base/itf.h"
-#include "itf/bti_req_if.h"
-#include "itf/bti_rsp_if.h"
-#include "itf/axi4_aw_if.h"
-#include "itf/axi4_w_if.h"
-#include "itf/axi4_b_if.h"
-#include "itf/axi4_ar_if.h"
-#include "itf/axi4_r_if.h"
+#include "itf/bti_if.h"
+#include "itf/axi4_if.h"
 
 #define RAM_MAX_PORT_NUM 2
 
@@ -19,8 +14,8 @@ typedef enum ram_mode {
 } ram_mode_t;
 
 typedef struct ram {
-    itf_t *bti_req_slv[RAM_MAX_PORT_NUM];
-    itf_t *bti_rsp_mst[RAM_MAX_PORT_NUM];
+    itf_t *bti_req_slvs[RAM_MAX_PORT_NUM];
+    itf_t *bti_rsp_msts[RAM_MAX_PORT_NUM];
 
     itf_t *axi4_aw_slv;
     itf_t *axi4_w_slv;
