@@ -105,7 +105,7 @@ static void mmu_send_expt(mmu_t *mmu, hart_expt_cause_t cause, u32 pc, u32 tval)
     pkt.priv = mmu->req_priv;
     pkt.pc = pc;
     pkt.tval = tval;
-    itf_write(mmu->hart_expt_mst, &pkt);
+    itf_write(mmu->is_inst ? mmu->i_hart_expt_mst : mmu->hart_expt_mst, &pkt);
 }
 
 static void mmu_send_fault_rsp(mmu_t *mmu)
@@ -129,7 +129,9 @@ static void mmu_raise_fault(mmu_t *mmu)
     }
 
     mmu_send_expt(mmu, cause, mmu->fault_pc, mmu->va);
-    mmu_send_fault_rsp(mmu);
+    if (!mmu->is_inst) {
+        mmu_send_fault_rsp(mmu);
+    }
     mmu->busy = false;
     mmu->pte_req_pending = false;
     mmu->final_req_pending = false;

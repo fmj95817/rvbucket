@@ -77,9 +77,33 @@ static void hbi_proc_i_rsp(hbi_t *hbi)
     itf_read(hbi->i_bti_rsp_slv, &bti_rsp);
     DBG_CHECK(bti_rsp.trans_id == FCH_TRANS_ID);
 
-    fch_rsp_if_t fch_rsp;
+    fch_rsp_if_t fch_rsp = {};
     fch_rsp.ir = bti_rsp.data;
     fch_rsp.ok = bti_rsp.ok;
+    fch_rsp.expt = false;
+    fch_rsp.cause = 0;
+    fch_rsp.priv = 0;
+    fch_rsp.tval = 0;
+    itf_write(hbi->fch_rsp_mst, &fch_rsp);
+}
+
+static void hbi_proc_i_expt(hbi_t *hbi)
+{
+    if (itf_fifo_empty(hbi->i_hart_expt_slv) ||
+        itf_fifo_full(hbi->fch_rsp_mst)) {
+        return;
+    }
+
+    hart_expt_if_t expt;
+    itf_read(hbi->i_hart_expt_slv, &expt);
+    DBG_CHECK(expt.type == HART_EXPT_TYPE_EXCEPTION);
+
+    fch_rsp_if_t fch_rsp = {};
+    fch_rsp.ok = false;
+    fch_rsp.expt = true;
+    fch_rsp.cause = (u32)expt.cause;
+    fch_rsp.priv = expt.priv;
+    fch_rsp.tval = expt.tval;
     itf_write(hbi->fch_rsp_mst, &fch_rsp);
 }
 
@@ -110,6 +134,7 @@ void hbi_clock(hbi_t *hbi)
 {
     hbi_proc_i_req(hbi);
     hbi_proc_d_req(hbi);
+    hbi_proc_i_expt(hbi);
     hbi_proc_i_rsp(hbi);
     hbi_proc_d_rsp(hbi);
 }

@@ -10,7 +10,11 @@
             "type": "vld-rdy",
             "payloads": [
                 { "name": "ir", "width": 32 },
-                { "name": "ok", "width": 1 }
+                { "name": "ok", "width": 1 },
+                { "name": "expt", "width": 1 },
+                { "name": "cause", "width": 32 },
+                { "name": "priv", "width": 2 },
+                { "name": "tval", "width": 32 }
             ]
         },
 

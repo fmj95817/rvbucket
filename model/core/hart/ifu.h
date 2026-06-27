@@ -9,13 +9,11 @@
 #include "itf/fch_req_if.h"
 #include "itf/fch_rsp_if.h"
 #include "itf/fl_req_if.h"
+#include "itf/hart_expt_if.h"
 #include "itf/trap_send_if.h"
 #include "spec/core/hart.h"
 
-#ifndef IFU_CTRLQ_SIZE
 #define IFU_CTRLQ_SIZE 16
-#endif
-
 typedef struct ifu_ctrlq_entry {
     bool vld;
     u32 pc;
@@ -24,7 +22,8 @@ typedef struct ifu_ctrlq_entry {
 typedef enum ifu_fch_state {
     IFU_FCH_STATE_REQ = 0,
     IFU_FCH_STATE_PEND,
-    IFU_FCH_STATE_RSP
+    IFU_FCH_STATE_RSP,
+    IFU_FCH_STATE_FAULT
 } ifu_fch_state_t;
 
 typedef enum ifu_redirect_state {
@@ -40,6 +39,7 @@ typedef struct ifu {
     itf_t *ex_req_mst;
     itf_t *ex_rsp_slv;
     itf_t *fl_req_mst;
+    itf_t *hart_expt_mst;
     itf_t *trap_send_slv;
 
     u32 reset_pc;

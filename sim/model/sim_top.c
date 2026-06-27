@@ -219,7 +219,9 @@ static void sim_top_clock(sim_top_t *sim_top)
     if (!itf_fifo_empty(&sim_top->uart_rx_itf)) {
         uart_if_t pkt;
         itf_read(&sim_top->uart_rx_itf, &pkt);
-        i32 c; c.u = pkt.data;
+
+        i32 c;
+        c.u = pkt.data;
         if (c.s != SIM_END_CHAR) {
             sim_top->ui->uart_out(sim_top->ui, (u8)c.s);
         } else {
@@ -230,7 +232,9 @@ static void sim_top_clock(sim_top_t *sim_top)
 
 static void sim_top_free(sim_top_t *sim_top)
 {
-    if (sim_top->ui) sim_top->ui->cleanup(sim_top->ui);
+    if (sim_top->ui) {
+        sim_top->ui->cleanup(sim_top->ui);
+    }
     soc_free(&sim_top->soc);
     ram_free(&sim_top->ddr);
     itf_free(&sim_top->uart_rx_itf);

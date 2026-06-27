@@ -72,6 +72,7 @@ typedef struct hart {
     itf_t l1d_bti_rsp_itf;
     itf_t tlb_flush_itf;
     itf_t l1i_flush_itf;
+    itf_t i_hart_expt_itf;
     itf_t hart_expt_itf;
     itf_t trap_send_itf;
     itf_t exu_csr_read_req_sig_itf;

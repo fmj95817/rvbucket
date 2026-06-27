@@ -28,6 +28,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     BTI_RSP_IF_CONSTRUCT(s, l1d_bti_rsp_itf, 1);
     TLB_FLUSH_IF_CONSTRUCT(s, tlb_flush_itf, 1);
     L1_FLUSH_IF_CONSTRUCT(s, l1i_flush_itf, 1);
+    HART_EXPT_IF_CONSTRUCT(s, i_hart_expt_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, hart_expt_itf, 1);
     TRAP_SEND_IF_CONSTRUCT(s, trap_send_itf, 1);
     EXU_CSR_READ_REQ_SIGNAL_IF_CONSTRUCT(s, exu_csr_read_req_sig_itf, false, false);
@@ -40,6 +41,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->ifu.ex_req_mst = &s->ex_req_itf;
     s->ifu.ex_rsp_slv = &s->ex_rsp_itf;
     s->ifu.fl_req_mst = &s->fl_req_itf;
+    s->ifu.hart_expt_mst = &s->hart_expt_itf;
     s->ifu.trap_send_slv = &s->trap_send_itf;
     ifu_construct(&s->ifu, "u_ifu", conf->boot_rom_base, conf->boot_rom_base, conf->boot_rom_size);
 
@@ -74,6 +76,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->hbi.d_bti_rsp_slv = &s->va_d_bti_rsp_itf;
     s->hbi.fch_req_slv = &s->fch_req_itf;
     s->hbi.fch_rsp_mst = &s->fch_rsp_itf;
+    s->hbi.i_hart_expt_slv = &s->i_hart_expt_itf;
     s->hbi.ldst_req_slv = &s->ldst_req_itf;
     s->hbi.ldst_rsp_mst = &s->ldst_rsp_itf;
     hbi_construct(&s->hbi, "u_hbi");
@@ -82,6 +85,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->mmu.va_i_bti_rsp_mst = &s->va_i_bti_rsp_itf;
     s->mmu.va_d_bti_req_slv = &s->va_d_bti_req_itf;
     s->mmu.va_d_bti_rsp_mst = &s->va_d_bti_rsp_itf;
+    s->mmu.i_hart_expt_mst = &s->i_hart_expt_itf;
     s->mmu.hart_expt_mst = &s->hart_expt_itf;
     s->mmu.pa_i_bti_req_mst = &s->pa_i_bti_req_itf;
     s->mmu.pa_i_bti_rsp_slv = &s->pa_i_bti_rsp_itf;
@@ -216,6 +220,7 @@ void hart_free(hart_t *s)
     itf_free(&s->l1d_bti_rsp_itf);
     itf_free(&s->tlb_flush_itf);
     itf_free(&s->l1i_flush_itf);
+    itf_free(&s->i_hart_expt_itf);
     itf_free(&s->hart_expt_itf);
     itf_free(&s->trap_send_itf);
     itf_free(&s->exu_csr_read_req_sig_itf);
@@ -257,6 +262,7 @@ void hart_clock(hart_t *s)
     itf_dbg_clock(&s->l1d_bti_rsp_itf);
     itf_dbg_clock(&s->tlb_flush_itf);
     itf_dbg_clock(&s->l1i_flush_itf);
+    itf_dbg_clock(&s->i_hart_expt_itf);
     itf_dbg_clock(&s->hart_expt_itf);
     itf_dbg_clock(&s->trap_send_itf);
     itf_dbg_clock(&s->exu_csr_read_req_sig_itf);

@@ -27,7 +27,7 @@ void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base
     dbg_vcd_add_sig("issue_pc", DBG_SIG_TYPE_REG, 32, &ifu->issue.pc);
     dbg_vcd_add_sig("redirect_state", DBG_SIG_TYPE_REG, 2, &ifu->redirect.state);
     dbg_vcd_add_sig("redirect_pc", DBG_SIG_TYPE_REG, 32, &ifu->redirect.pc);
-    dbg_vcd_add_sig("ctrlq_count", DBG_SIG_TYPE_REG, 32, &ifu->ctrlq.num);
+    dbg_vcd_add_sig("ctrlq_entry_num", DBG_SIG_TYPE_REG, 32, &ifu->ctrlq.num);
 }
 
 void ifu_reset(ifu_t *ifu)
@@ -168,15 +168,35 @@ static void ifu_proc_fch_rsp(ifu_t *ifu)
     }
 
     fch_rsp_if_t fch_rsp;
-    itf_read(ifu->fch_rsp_slv, &fch_rsp);
+    itf_fifo_get_front(ifu->fch_rsp_slv, &fch_rsp);
 
     if (ifu->redirect.state == IFU_REDIRECT_STATE_REDIRECT) {
+        itf_fifo_pop_front(ifu->fch_rsp_slv);
         ifu->fch.ir = 0;
         ifu->fch.pc = ifu->redirect.pc;
         ifu->fch.state = IFU_FCH_STATE_REQ;
         ifu->redirect.state = IFU_REDIRECT_STATE_IDLE;
         return;
     }
+
+    if (fch_rsp.expt) {
+        if (itf_fifo_full(ifu->hart_expt_mst)) {
+            return;
+        }
+
+        itf_fifo_pop_front(ifu->fch_rsp_slv);
+        hart_expt_if_t expt = {};
+        expt.type = HART_EXPT_TYPE_EXCEPTION;
+        expt.cause = (hart_expt_cause_t)fch_rsp.cause;
+        expt.priv = fch_rsp.priv;
+        expt.pc = ifu->fch.pc;
+        expt.tval = fch_rsp.tval;
+        itf_write(ifu->hart_expt_mst, &expt);
+        ifu->fch.state = IFU_FCH_STATE_FAULT;
+        return;
+    }
+
+    itf_fifo_pop_front(ifu->fch_rsp_slv);
 
     if (!fch_rsp.ok) {
         ifu->fch.state = IFU_FCH_STATE_REQ;

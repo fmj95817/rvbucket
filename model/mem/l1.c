@@ -48,7 +48,7 @@ static bool l1_bypass(const l1_t *l1, u32 addr)
             return true;
         }
     }
-    return false;
+    return true;
 }
 
 static void l1_invalidate(l1_t *l1)

@@ -31,6 +31,7 @@ typedef struct mmu {
     itf_t *va_i_bti_rsp_mst;
     itf_t *va_d_bti_req_slv;
     itf_t *va_d_bti_rsp_mst;
+    itf_t *i_hart_expt_mst;
     itf_t *hart_expt_mst;
 
     itf_t *pa_i_bti_req_mst;

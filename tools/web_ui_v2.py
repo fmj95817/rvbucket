@@ -75,89 +75,12 @@ def _record_uart_hex(hex_str: str) -> None:
 
 
 def _get_uart_history_hex() -> str:
-    """Return the ring-buffer contents as a hex string, with any trailing
-    incomplete ANSI escape sequence removed.
-
-    Without this, an escape sequence split across the history/live-data
-    boundary would leave xterm.js in a partial-parse state.  The user's
-    first keystroke echo would then combine with the incomplete sequence
-    and render as a spurious '?' character.
-    """
+    """Return the entire ring-buffer contents as a hex string."""
     if not _uart_history_full:
-        raw = bytes(_uart_history[:_uart_history_wr])
-    else:
-        tail = bytes(_uart_history[_uart_history_wr:])
-        head = bytes(_uart_history[:_uart_history_wr])
-        raw = tail + head
-    return _clean_history_tail(raw).hex()
-
-
-def _clean_history_tail(data: bytes, max_lookback: int = 512) -> bytes:
-    """If *data* ends with an incomplete ANSI escape sequence, truncate it.
-
-    Only inspects the last *max_lookback* bytes for an un-terminated
-    ``ESC`` / ``ESC [`` (CSI) / ``ESC ]`` (OSC) sequence.  Normal
-    characters and completely-terminated sequences pass through unchanged.
-    """
-    if not data:
-        return data
-
-    # only search the tail — escape sequences are short
-    lookback = min(len(data), max_lookback)
-    tail = data[-lookback:]
-
-    # find the rightmost ESC
-    esc_pos = tail.rfind(b"\x1b")
-    if esc_pos < 0:
-        return data  # no ESC anywhere near the end — safe
-
-    seq = tail[esc_pos:]          # bytes from that ESC to end of history
-    if _escape_seq_is_complete(seq):
-        return data                # complete — safe
-
-    # incomplete — discard everything from that ESC onward
-    cutoff = len(data) - lookback + esc_pos
-    return data[:cutoff]
-
-
-def _escape_seq_is_complete(seq: bytes) -> bool:
-    """Return True if *seq* (starting with ``\\x1b``) forms a complete,
-    well-formed ANSI escape sequence."""
-    if len(seq) < 2:
-        return False               # lone ESC
-
-    introducer = seq[1]
-
-    if introducer == 0x5B:         # ESC [  → CSI
-        # CSI ends with a final byte in 0x40–0x7E
-        for b in seq[2:]:
-            if 0x40 <= b <= 0x7E:
-                return True
-            # parameter (0x30–0x3F, 0x3B) / intermediate (0x20–0x2F) bytes
-            if not (0x20 <= b <= 0x3F or b == 0x3B):
-                return False       # garbage byte inside CSI
-        return False               # no final byte
-
-    if introducer == 0x5D:         # ESC ]  → OSC
-        # OSC ends with BEL (0x07) or ST (ESC \)
-        for i in range(2, len(seq)):
-            if seq[i] == 0x07:
-                return True
-            if seq[i] == 0x1B and i + 1 < len(seq) and seq[i + 1] == 0x5C:
-                return True
-        return False
-
-    # ESC P / ESC _ / ESC ^  (DCS, APC, PM) — same terminator as OSC
-    if introducer in (0x50, 0x5F, 0x5E):
-        for i in range(2, len(seq)):
-            if seq[i] == 0x07:
-                return True
-            if seq[i] == 0x1B and i + 1 < len(seq) and seq[i + 1] == 0x5C:
-                return True
-        return False
-
-    # simple 2-byte ESC sequence  (e.g. ESC 7, ESC 8, ESC c, ESC M …)
-    return len(seq) >= 2
+        return bytes(_uart_history[:_uart_history_wr]).hex()
+    tail = bytes(_uart_history[_uart_history_wr:])
+    head = bytes(_uart_history[:_uart_history_wr])
+    return (tail + head).hex()
 
 # ── stdin reader (background thread → asyncio queue) ──────────────────────
 
@@ -276,12 +199,7 @@ async def ws_handler(request: web.Request) -> "web.WebSocketResponse":
         except Exception:
             return ws
 
-    # --- add to broadcast set AFTER replaying history ---
-    # this ensures the client gets the history first, then live data
-
     clients.add(ws)
-
-    first_input = True  # prepend \\r on first keystroke to prime the TTY
 
     try:
         async for msg in ws:
@@ -297,23 +215,12 @@ async def ws_handler(request: web.Request) -> "web.WebSocketResponse":
                         int(hex_val, 16)
                     except ValueError:
                         continue
-
-                    if first_input:
-                        first_input = False
-                        try:
-                            sys.stdout.write("in:0d\n")
-                            sys.stdout.flush()
-                            await asyncio.sleep(0.05)
-                        except (BrokenPipeError, OSError):
-                            pass
-
                     try:
                         for i in range(0, len(hex_val), 2):
                             byte_hex = hex_val[i : i + 2]
                             if len(byte_hex) == 2:
                                 sys.stdout.write(f"in:{byte_hex}\n")
-                                sys.stdout.flush()
-                                await asyncio.sleep(0)
+                        sys.stdout.flush()
                     except (BrokenPipeError, OSError):
                         pass
 
