@@ -159,6 +159,29 @@ void hart_reset(hart_t *s)
     l1_reset(&s->l1i);
     l1_reset(&s->l1d);
     trap_reset(&s->trap);
+
+    itf_reset(&s->ex_req_itf);
+    itf_reset(&s->ex_rsp_itf);
+    itf_reset(&s->fl_req_itf);
+    itf_reset(&s->fch_req_itf);
+    itf_reset(&s->fch_rsp_itf);
+    itf_reset(&s->ldst_req_itf);
+    itf_reset(&s->ldst_rsp_itf);
+    BTI_IF_RESET(s, va_i_);
+    BTI_IF_RESET(s, va_d_);
+    BTI_IF_RESET(s, pa_i_);
+    BTI_IF_RESET(s, pa_d_);
+    BTI_IF_RESET(s, pa_ptw_);
+    BTI_IF_RESET(s, l1d_);
+    itf_reset(&s->tlb_flush_itf);
+    itf_reset(&s->l1i_flush_itf);
+    itf_reset(&s->i_hart_expt_itf);
+    itf_reset(&s->hart_expt_itf);
+    itf_reset(&s->trap_send_itf);
+    itf_reset(&s->exu_csr_read_req_sig_itf);
+    itf_reset(&s->csr_exu_read_rsp_sig_itf);
+    itf_reset(&s->exu_csr_write_req_sig_itf);
+    itf_reset(&s->csr_exu_write_rsp_sig_itf);
 }
 
 void hart_free(hart_t *s)

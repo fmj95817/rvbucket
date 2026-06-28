@@ -98,6 +98,16 @@ void soc_reset(soc_t *soc)
     axi_demux_reset(&soc->mm_d_axi_demux);
     axi_mux_reset(&soc->ddr_axi_mux);
     axi_mux_reset(&soc->flash_axi_mux);
+
+    AXI4_IF_RESET(soc, mm_i_);
+    AXI4_IF_RESET(soc, mm_d_);
+    AXI4_IF_RESET(soc, ddr_i_);
+    AXI4_IF_RESET(soc, ddr_d_);
+    AXI4_IF_RESET(soc, flash_i_);
+    AXI4_IF_RESET(soc, flash_d_);
+    AXI4_IF_RESET(soc, flash_);
+    APB_IF_RESET(soc, peri_);
+    itf_reset(&soc->peri_irq_sig_itf);
 }
 
 void soc_clock(soc_t *soc)
@@ -139,4 +149,5 @@ void soc_free(soc_t *soc)
     AXI4_IF_FREE(soc, flash_d_);
     AXI4_IF_FREE(soc, flash_);
     APB_IF_FREE(soc, peri_);
+    itf_free(&soc->peri_irq_sig_itf);
 }

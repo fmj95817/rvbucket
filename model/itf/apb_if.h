@@ -9,6 +9,11 @@
     APB_RSP_IF_CONSTRUCT(module, pfx##apb_rsp_itf, 1); \
 } while (0)
 
+#define APB_IF_RESET(obj, pfx) do { \
+    itf_reset(&((obj)->pfx##apb_req_itf)); \
+    itf_reset(&((obj)->pfx##apb_rsp_itf)); \
+} while (0)
+
 #define APB_IF_FREE(obj, pfx) do { \
     itf_free(&((obj)->pfx##apb_req_itf)); \
     itf_free(&((obj)->pfx##apb_rsp_itf)); \

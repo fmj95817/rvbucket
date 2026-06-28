@@ -46,6 +46,11 @@ void peri_reset(peri_t *peri)
     uart_reset(&peri->uart);
     gpio_reset(&peri->gpio);
     apb_demux_reset(&peri->apb_demux);
+
+    itf_reset(&peri->uart_apb_req_itf);
+    itf_reset(&peri->uart_apb_rsp_itf);
+    itf_reset(&peri->gpio_apb_req_itf);
+    itf_reset(&peri->gpio_apb_rsp_itf);
 }
 
 void peri_clock(peri_t *peri)

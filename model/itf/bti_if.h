@@ -9,6 +9,11 @@
     BTI_RSP_IF_CONSTRUCT(module, pfx##bti_rsp_itf, 1); \
 } while (0)
 
+#define BTI_IF_RESET(obj, pfx) do { \
+    itf_reset(&((obj)->pfx##bti_req_itf)); \
+    itf_reset(&((obj)->pfx##bti_rsp_itf)); \
+} while (0)
+
 #define BTI_IF_FREE(obj, pfx) do { \
     itf_free(&((obj)->pfx##bti_req_itf)); \
     itf_free(&((obj)->pfx##bti_rsp_itf)); \

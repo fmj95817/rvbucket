@@ -78,6 +78,14 @@ void cbi_reset(cbi_t *cbi)
     axi2bti_reset(&cbi->cfg_axi2bti);
     bti2apb_reset(&cbi->cfg_bti2apb);
     apb_demux_reset(&cbi->cfg_apb_demux);
+
+    AXI4_IF_RESET(cbi, boot_rom_);
+    AXI4_IF_RESET(cbi, itcm_i_);
+    AXI4_IF_RESET(cbi, itcm_d_);
+    AXI4_IF_RESET(cbi, dtcm_);
+    AXI4_IF_RESET(cbi, cfg_);
+    BTI_IF_RESET(cbi, cfg_);
+    APB_IF_RESET(cbi, cfg_);
 }
 
 void cbi_free(cbi_t *cbi)

@@ -153,6 +153,22 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
     construct(itf, name, conf);
 }
 
+void itf_reset(itf_t *itf)
+{
+    if (itf->mode == ITF_MODE_SIGNAL) {
+        itf->ctx.signal.write_vld = false;
+    } else if (itf->mode == ITF_MODE_FIFO) {
+        itf->ctx.fifo.pkt_num = 0;
+        itf->ctx.fifo.rptr = 0;
+        itf->ctx.fifo.wptr = 0;
+        if (itf->vcd_enable) {
+            memset(itf->ctx.fifo.pkts_pend_mask, 0, sizeof(bool) * itf->ctx.fifo.fifo_depth);
+        }
+        itf->ctx.fifo.read_vld = false;
+        itf->ctx.fifo.write_vld = false;
+    }
+}
+
 static void signal_itf_free(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);

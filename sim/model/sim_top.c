@@ -164,6 +164,11 @@ static void sim_top_reset(sim_top_t *sim_top)
     }
     soc_reset(&sim_top->soc);
     dbg_vcd_reset();
+
+    itf_reset(&sim_top->uart_rx_itf);
+    itf_reset(&sim_top->uart_tx_itf);
+    AXI4_IF_RESET(sim_top, ddr_);
+    itf_reset(&sim_top->gpio_sig_itf);
 }
 
 static void sim_top_clock(sim_top_t *sim_top)
@@ -212,6 +217,7 @@ static void sim_top_free(sim_top_t *sim_top)
     }
     soc_free(&sim_top->soc);
     ram_free(&sim_top->ddr);
+
     itf_free(&sim_top->uart_rx_itf);
     itf_free(&sim_top->uart_tx_itf);
     AXI4_IF_FREE(sim_top, ddr_);
@@ -245,6 +251,11 @@ int main(int argc, char *argv[])
     sim_top_construct(&sim_top, "sim_top", prog_path, fast_load_linux);
     sim_top_reset(&sim_top);
 
+    while (!sim_top.end_sim) {
+        sim_top_clock(&sim_top);
+    }
+
+    sim_top_reset(&sim_top);
     while (!sim_top.end_sim) {
         sim_top_clock(&sim_top);
     }

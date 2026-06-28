@@ -121,6 +121,20 @@ void rv32g_reset(rv32g_t *s)
     ram_reset(&s->dtcm);
     aclint_reset(&s->aclint);
     plic_reset(&s->plic);
+
+    BTI_IF_RESET(s, boot_rom_);
+    BTI_IF_RESET(s, itcm_i_);
+    BTI_IF_RESET(s, itcm_d_);
+    BTI_IF_RESET(s, dtcm_);
+    APB_IF_RESET(s, aclint_cfg_);
+    APB_IF_RESET(s, plic_cfg_);
+    AXI4_IF_RESET(s, hart_i_);
+    AXI4_IF_RESET(s, hart_d_);
+    itf_reset(&s->core_timer_sig_itf);
+    itf_reset(&s->core_m_irq_sig_itf);
+    itf_reset(&s->core_s_irq_itf);
+    itf_reset(&s->core_swi_pend_sig_itf);
+    itf_reset(&s->conv_ext_irq_sig_itf);
 }
 
 void rv32g_free(rv32g_t *s)

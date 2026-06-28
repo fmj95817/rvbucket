@@ -75,6 +75,7 @@ typedef struct itf {
 } itf_t;
 
 extern void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf);
+extern void itf_reset(itf_t *itf);
 extern void itf_free(itf_t *itf);
 extern void itf_write(itf_t *itf, const void *pkt);
 extern void itf_read(itf_t *itf, void *pkt);

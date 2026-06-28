@@ -15,6 +15,14 @@
     AXI4_R_IF_CONSTRUCT(module, pfx##axi4_r_itf, 1); \
 } while (0)
 
+#define AXI4_IF_RESET(obj, pfx) do { \
+    itf_reset(&((obj)->pfx##axi4_aw_itf)); \
+    itf_reset(&((obj)->pfx##axi4_w_itf)); \
+    itf_reset(&((obj)->pfx##axi4_b_itf)); \
+    itf_reset(&((obj)->pfx##axi4_ar_itf)); \
+    itf_reset(&((obj)->pfx##axi4_r_itf)); \
+} while (0)
+
 #define AXI4_IF_FREE(obj, pfx) do { \
     itf_free(&((obj)->pfx##axi4_aw_itf)); \
     itf_free(&((obj)->pfx##axi4_w_itf)); \
