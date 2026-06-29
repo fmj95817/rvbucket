@@ -53,13 +53,66 @@ _trap_entry:
     .type trap_handler,@function
 
 trap_handler:
-    bgez a0, 1f
-    /* interrupt: return mepc unchanged */
+    bgez a0, 2f
+    /* ── interrupt ─────────────────────────────────────────────────── */
+    li t0, 0x8000000B
+    bne a0, t0, 1f
+
+    /* external interrupt: claim PLIC, dispatch by source */
+    addi sp, sp, -16
+    sw ra, 0(sp)
+    sw a0, 4(sp)
+    sw a1, 8(sp)
+
+    li t0, 0x31300004
+    lw a0, 0(t0)            /* claim */
+
+    beqz a0, 3f
+    li t0, 1
+    beq a0, t0, 4f
+    li t0, 2
+    beq a0, t0, 5f
+    li t0, 3
+    beq a0, t0, 6f
+    j 3f
+
+4:  call uart_irq_handler;  j 3f
+5:  call gpio_irq_handler;  j 3f
+6:  call timer_irq_handler; j 3f
+
+3:  li t0, 0x31300004
+    sw a0, 0(t0)            /* complete */
+
+    lw ra, 0(sp)
+    lw a1, 8(sp)
+    lw a0, 4(sp)
+    addi sp, sp, 16
+
+1:  /* interrupt: return mepc unchanged */
     mv a0, a1
     ret
-1:
+2:
     /* exception: skip the faulting instruction */
     addi a0, a1, 4
+    ret
+
+    /* ── weak default IRQ handlers ─────────────────────────────────── */
+    .weak uart_irq_handler
+    .globl uart_irq_handler
+    .type uart_irq_handler,@function
+uart_irq_handler:
+    ret
+
+    .weak gpio_irq_handler
+    .globl gpio_irq_handler
+    .type gpio_irq_handler,@function
+gpio_irq_handler:
+    ret
+
+    .weak timer_irq_handler
+    .globl timer_irq_handler
+    .type timer_irq_handler,@function
+timer_irq_handler:
     ret
 
     .section .init

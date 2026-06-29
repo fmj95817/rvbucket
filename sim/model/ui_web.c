@@ -108,12 +108,11 @@ static bool gpio_in_poll(void *ctx, u32 *val)
     }
 
     /* scan buffer for gpin: line */
+    int saved_rpos = uw->rpos;
     for (int i = uw->rpos; i < uw->rlen; i++) {
-        if (uw->rbuf[i] != '\n') {
-            continue;
-        }
+        if (uw->rbuf[i] != '\n') continue;
         uw->rbuf[i] = '\0';
-        char *line = uw->rbuf + uw->rpos;
+        char *line = uw->rbuf + saved_rpos;
         uw->rpos = i + 1;
 
         if (strncmp(line, "gpin:", 5) == 0) {
@@ -125,7 +124,7 @@ static bool gpio_in_poll(void *ctx, u32 *val)
         }
         /* not gpin: — put it back for uart_in to consume */
         uw->rbuf[i] = '\n';
-        uw->rpos = i;
+        uw->rpos = saved_rpos;
         break;
     }
     return false;

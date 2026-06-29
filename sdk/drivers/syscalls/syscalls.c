@@ -14,9 +14,27 @@ int _write(int fd, char *ptr, int len)
 int _read(int fd, char *ptr, int len)
 {
     (void)fd;
-    (void)ptr;
-    (void)len;
-    return 0;
+    int i = 0;
+    while (i < len) {
+        char ch;
+        while ((ch = uart_read()) == 0) {
+            uart_irq_handler();
+        }
+
+        if (ch == 0x7f || ch == '\b') {
+            /* backspace: remove last char from buffer */
+            if (i > 0) {
+                i--;
+            }
+            continue;
+        }
+
+        ptr[i++] = ch;
+        if (ch == '\n' || ch == '\r') {
+            break;
+        }
+    }
+    return i;
 }
 
 int _close(int fd)

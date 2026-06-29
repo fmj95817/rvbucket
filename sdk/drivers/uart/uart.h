@@ -17,5 +17,6 @@ extern void uart_init(uint32_t bc);
 extern void uart_write(char ch);
 extern char uart_read(void);
 extern uint32_t uart_status(void);
+extern void uart_irq_handler(void);
 
 #endif

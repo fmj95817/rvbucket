@@ -15,5 +15,7 @@
 extern void gpio_write(uint32_t val);
 extern uint32_t gpio_read(void);
 extern void gpio_set_mode(uint32_t pin, uint32_t mode);
+extern void gpio_set_irq_callback(void (*cb)(void));
+extern void gpio_irq_handler(void);
 
 #endif

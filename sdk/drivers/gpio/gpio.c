@@ -3,6 +3,8 @@
 #define MMIO_WRITE32(addr, val) (*(volatile uint32_t *)(addr) = (val))
 #define MMIO_READ32(addr)       (*(volatile uint32_t *)(addr))
 
+static void (*irq_callback)(void);
+
 void gpio_write(uint32_t val)
 {
     MMIO_WRITE32(GPIO_BASE_ADDR + GPIO_REG_OUT, val);
@@ -22,4 +24,14 @@ void gpio_set_mode(uint32_t pin, uint32_t mode)
     cur &= ~(0x3u << shift);
     cur |= (mode & 0x3u) << shift;
     MMIO_WRITE32(addr, cur);
+}
+
+void gpio_set_irq_callback(void (*cb)(void))
+{
+    irq_callback = cb;
+}
+
+void gpio_irq_handler(void)
+{
+    if (irq_callback) irq_callback();
 }

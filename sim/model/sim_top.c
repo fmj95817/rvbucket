@@ -19,7 +19,8 @@
 #define SIM_END_CHAR 0x10
 #define BIN_TYPE_LINUX 1u
 #define LINUX_BIN_HEADER_SIZE 40u
-#define UART_IN_POLL_INTERVAL 256u
+#define UART_IN_POLL_INTERVAL 500u
+#define GPIO_IN_POLL_INTERVAL 500u
 
 typedef struct program {
     u32 size;
@@ -206,6 +207,14 @@ static void sim_top_clock(sim_top_t *sim_top)
 {
     DBG_CHECK(sim_top->ui != NULL);
 
+    u32 gpio_in;
+    if (((*sim_top->cycle) % GPIO_IN_POLL_INTERVAL) == 0u) {
+        if (sim_top->ui->gpio_in_poll(sim_top->ui, &gpio_in)) {
+            sim_top->gpio_inout_io->val =
+                (sim_top->gpio_inout_io->val & 0xFFFFu) | (gpio_in & 0xFF0000u);
+        }
+    }
+
     u8 ch_rx;
     if (((*sim_top->cycle) % UART_IN_POLL_INTERVAL) == 0u) {
         while (!itf_fifo_full(&sim_top->uart_tx_itf) &&
@@ -214,12 +223,6 @@ static void sim_top_clock(sim_top_t *sim_top)
             pkt.data = ch_rx;
             itf_write(&sim_top->uart_tx_itf, &pkt);
         }
-    }
-
-    u32 gpio_in;
-    if (sim_top->ui->gpio_in_poll(sim_top->ui, &gpio_in)) {
-        sim_top->gpio_inout_io->val =
-            (sim_top->gpio_inout_io->val & 0xFFFFu) | (gpio_in & 0xFF0000u);
     }
 
     soc_clock(&sim_top->soc);
