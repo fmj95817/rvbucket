@@ -107,6 +107,25 @@ _start:
     la t0, _trap_entry
     csrw mtvec, t0
 
+    /* ── interrupt infrastructure ────────────────────────────────────── */
+    /* enable M-mode external / timer / software interrupts + global IE */
+    li t0, (1 << 11) | (1 << 7) | (1 << 3)
+    csrs mie, t0
+    li t0, (1 << 3)
+    csrs mstatus, t0
+
+    /* configure PLIC: priority=1, enable, threshold=0 for sources 1..3 */
+    li t0, 0x31100000
+    li t1, 1
+    sw t1, 4(t0)          /* source 1 (UART)  priority = 1 */
+    sw t1, 8(t0)          /* source 2 (GPIO)  priority = 1 */
+    sw t1, 12(t0)         /* source 3 (timer) priority = 1 */
+    li t1, 0xE
+    li t2, 0x31102000
+    sw t1, 0(t2)          /* enable bits 1..3 */
+    li t2, 0x31300000
+    sw x0, 0(t2)          /* threshold = 0 */
+
     li a0, 9
     call uart_init
 

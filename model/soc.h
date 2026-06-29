@@ -14,7 +14,7 @@ typedef struct soc {
     AXI4_MST_DECL(ddr_);
     itf_t *uart_tx_mst;
     itf_t *uart_rx_slv;
-    itf_t *gpio_out;
+    itf_t *gpio_inout;
     itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
 
     rv32g_t cpu;
@@ -33,7 +33,9 @@ typedef struct soc {
     AXI4_IF_DECL(flash_d_);
     AXI4_IF_DECL(flash_);
     APB_IF_DECL(peri_);
-    itf_t peri_irq_sig_itf;
+    itf_t peri_uart_irq_itf;
+    itf_t peri_gpio_irq_itf;
+    itf_t peri_timer_irq_itf;
 } soc_t;
 
 extern void soc_construct(soc_t *soc, const char *name);

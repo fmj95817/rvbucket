@@ -107,6 +107,18 @@ def stdin_reader() -> None:
     except Exception:
         pass
 
+def _fix_newlines(hex_str: str) -> str:
+    """Insert \\r (0x0D) before any lone \\n (0x0A) that isn't already
+    preceded by \\r.  xterm.js, like a real terminal, requires CR+LF to
+    move the cursor to column 0 of the next line."""
+    raw = bytes.fromhex(hex_str)
+    out = bytearray()
+    for i, b in enumerate(raw):
+        if b == 0x0A and (i == 0 or raw[i - 1] != 0x0D):
+            out.append(0x0D)
+        out.append(b)
+    return out.hex()
+
 # ── broadcast task ────────────────────────────────────────────────────────
 
 async def broadcast_from_stdin() -> None:
@@ -142,7 +154,7 @@ async def broadcast_from_stdin() -> None:
                 parts.append(nxt[5:])
             elif nxt.startswith("gpio:"):
                 # flush UART batch, then handle GPIO
-                batched = "".join(parts)
+                batched = _fix_newlines("".join(parts))
                 _record_uart_hex(batched)
                 await _broadcast(json.dumps({"type": "uart", "data": batched}))
                 hex_val = nxt[5:]
@@ -159,7 +171,7 @@ async def broadcast_from_stdin() -> None:
                 pass  # skip unrecognised
 
         if parts:
-            batched = "".join(parts)
+            batched = _fix_newlines("".join(parts))
             _record_uart_hex(batched)
             await _broadcast(json.dumps({"type": "uart", "data": batched}))
 
@@ -227,6 +239,18 @@ async def ws_handler(request: web.Request) -> "web.WebSocketResponse":
                 elif data.get("type") == "reset":
                     try:
                         sys.stdout.write("reset\n")
+                        sys.stdout.flush()
+                    except (BrokenPipeError, OSError):
+                        pass
+
+                elif data.get("type") == "gpio_in":
+                    hex_val = data.get("data", "")
+                    try:
+                        int(hex_val, 16)
+                    except ValueError:
+                        continue
+                    try:
+                        sys.stdout.write(f"gpin:{hex_val}\n")
                         sys.stdout.flush()
                     except (BrokenPipeError, OSError):
                         pass

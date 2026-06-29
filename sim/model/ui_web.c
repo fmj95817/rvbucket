@@ -68,7 +68,11 @@ static bool uart_in(void *ctx, u8 *ch)
     char *line = uw->rbuf + start;
     if (strcmp(line, "reset") == 0) {
         uw->reset_req = true;
-        return uart_in(ctx, ch);  // skip this line, try next
+        return uart_in(ctx, ch);
+    }
+    if (strncmp(line, "gpin:", 5) == 0) {
+        /* GPIO input from Web UI — handled by sim_top polling */
+        return uart_in(ctx, ch);
     }
     if (strncmp(line, "in:", 3) == 0) {
         int val;
@@ -87,11 +91,51 @@ static bool reset_pending(void *ctx)
     return uw->reset_req;
 }
 
+static bool gpio_in_poll(void *ctx, u32 *val)
+{
+    ui_web_t *uw = (ui_web_t *)ctx;
+
+    /* refill buffer if consumed or empty */
+    if (uw->rpos >= uw->rlen) {
+        int n = read(uw->fd, uw->rbuf, sizeof(uw->rbuf) - 1);
+        if (n <= 0) {
+            uw->rpos = uw->rlen = 0;
+            return false;
+        }
+        uw->rbuf[n] = '\0';
+        uw->rpos = 0;
+        uw->rlen = n;
+    }
+
+    /* scan buffer for gpin: line */
+    for (int i = uw->rpos; i < uw->rlen; i++) {
+        if (uw->rbuf[i] != '\n') {
+            continue;
+        }
+        uw->rbuf[i] = '\0';
+        char *line = uw->rbuf + uw->rpos;
+        uw->rpos = i + 1;
+
+        if (strncmp(line, "gpin:", 5) == 0) {
+            unsigned v;
+            if (sscanf(line + 5, "%x", &v) == 1) {
+                *val = (u32)v;
+                return true;
+            }
+        }
+        /* not gpin: — put it back for uart_in to consume */
+        uw->rbuf[i] = '\n';
+        uw->rpos = i;
+        break;
+    }
+    return false;
+}
+
 static void gpio_change(void *ctx, u32 val)
 {
     ui_web_t *uw = (ui_web_t *)ctx;
     char buf[32];
-    int n = snprintf(buf, sizeof(buf), "gpio:%04x\n", val & 0xffff);
+    int n = snprintf(buf, sizeof(buf), "gpio:%06x\n", val & 0xffffff);
     write(uw->fd, buf, n);
 }
 
@@ -144,6 +188,7 @@ sim_ui_t *ui_web_create(void)
     uw->ui.uart_out = uart_out;
     uw->ui.uart_in = uart_in;
     uw->ui.gpio_change = gpio_change;
+    uw->ui.gpio_in_poll = gpio_in_poll;
     uw->ui.cleanup = cleanup;
     return &uw->ui;
 }

@@ -9,6 +9,7 @@ typedef struct sim_ui {
     void (*uart_out)(void *ui, u8 ch);
     bool (*uart_in)(void *ui, u8 *ch);
     void (*gpio_change)(void *ui, u32 val);
+    bool (*gpio_in_poll)(void *ui, u32 *val);
     void (*cleanup)(void *ui);
 } sim_ui_t;
 

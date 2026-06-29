@@ -45,8 +45,8 @@ typedef struct sim_top {
     itf_t uart_tx_itf;
     AXI4_IF_DECL(ddr_);
 
-    itf_t gpio_sig_itf;
-    gpio_if_t *gpio_o;
+    itf_t gpio_inout_itf;
+    gpio_if_t *gpio_inout_io;
 
     ram_t ddr;
     soc_t soc;
@@ -64,7 +64,7 @@ typedef struct sim_top {
 static void sim_top_gpio_cb(void *args)
 {
     sim_top_t *s = (sim_top_t *)args;
-    u32 val = s->gpio_o->val;
+    u32 val = s->gpio_inout_io->val;
     DBG_LOG(LOG_INFO, "gpio: output = 0x%08x\n", val);
     DBG_CHECK(s->ui != NULL);
     s->ui->gpio_change(s->ui, val);
@@ -152,16 +152,16 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
     UART_IF_CONSTRUCT(sim_top, uart_rx_itf, 1);
     UART_IF_CONSTRUCT(sim_top, uart_tx_itf, 1);
     AXI4_IF_CONSTRUCT(sim_top, ddr_);
-    GPIO_SIGNAL_IF_CONSTRUCT(sim_top, gpio_sig_itf, false, false);
+    GPIO_SIGNAL_IF_CONSTRUCT(sim_top, gpio_inout_itf, false, false);
 
-    sim_top->gpio_o = itf_signal_get_src_and_chk(&sim_top->gpio_sig_itf);
-    itf_signal_set_wcb(&sim_top->gpio_sig_itf, &sim_top_gpio_cb, sim_top);
+    sim_top->gpio_inout_io = itf_signal_get_src_and_chk(&sim_top->gpio_inout_itf);
+    itf_signal_set_wcb(&sim_top->gpio_inout_itf, &sim_top_gpio_cb, sim_top);
 
     sim_top->soc.cycle = sim_top->cycle;
     AXI4_MST_CONNECT(&sim_top->soc, ddr_, sim_top, ddr_);
     sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
     sim_top->soc.uart_rx_slv = &sim_top->uart_tx_itf;
-    sim_top->soc.gpio_out = &sim_top->gpio_sig_itf;
+    sim_top->soc.gpio_inout = &sim_top->gpio_inout_itf;
     for (u32 i = 0; i < PLIC_MAX_IRQ_NUM; i++) {
         sim_top->soc.ext_irq_ins[i] = NULL;
     }
@@ -199,19 +199,27 @@ static void sim_top_reset(sim_top_t *sim_top)
     itf_reset(&sim_top->uart_rx_itf);
     itf_reset(&sim_top->uart_tx_itf);
     AXI4_IF_RESET(sim_top, ddr_);
-    itf_reset(&sim_top->gpio_sig_itf);
+    itf_reset(&sim_top->gpio_inout_itf);
 }
 
 static void sim_top_clock(sim_top_t *sim_top)
 {
+    DBG_CHECK(sim_top->ui != NULL);
+
+    u8 ch_rx;
     if (((*sim_top->cycle) % UART_IN_POLL_INTERVAL) == 0u) {
-        u8 ch;
         while (!itf_fifo_full(&sim_top->uart_tx_itf) &&
-               sim_top->ui->uart_in(sim_top->ui, &ch)) {
+               sim_top->ui->uart_in(sim_top->ui, &ch_rx)) {
             uart_if_t pkt;
-            pkt.data = ch;
+            pkt.data = ch_rx;
             itf_write(&sim_top->uart_tx_itf, &pkt);
         }
+    }
+
+    u32 gpio_in;
+    if (sim_top->ui->gpio_in_poll(sim_top->ui, &gpio_in)) {
+        sim_top->gpio_inout_io->val =
+            (sim_top->gpio_inout_io->val & 0xFFFFu) | (gpio_in & 0xFF0000u);
     }
 
     soc_clock(&sim_top->soc);
@@ -220,22 +228,31 @@ static void sim_top_clock(sim_top_t *sim_top)
     itf_dbg_clock(&sim_top->uart_rx_itf);
     itf_dbg_clock(&sim_top->uart_tx_itf);
     AXI4_IF_DBG_CLOCK(sim_top, ddr_);
-    itf_dbg_clock(&sim_top->gpio_sig_itf);
+    itf_dbg_clock(&sim_top->gpio_inout_itf);
 
     (*sim_top->cycle)++;
     dbg_vcd_clock();
 
-    /* UART output */
-    i32 c;
+    i32 ch_tx;
     if (!itf_fifo_empty(&sim_top->uart_rx_itf)) {
         uart_if_t pkt;
         itf_read(&sim_top->uart_rx_itf, &pkt);
 
-        c.u = pkt.data;
-        if (!sim_top->no_end_detect && c.s == SIM_END_CHAR) {
+        ch_tx.u = pkt.data;
+        if (!sim_top->no_end_detect && ch_tx.s == SIM_END_CHAR) {
             sim_top->end_sim = true;
         } else {
-            sim_top->ui->uart_out(sim_top->ui, (u8)c.s);
+            sim_top->ui->uart_out(sim_top->ui, (u8)ch_tx.s);
+        }
+    }
+
+    if (sim_top->ui->reset_pending(sim_top->ui)) {
+        sim_top_reset(sim_top);
+        if (sim_top->fast_load_linux) {
+            program_t program = read_program(sim_top->prog_path);
+            DBG_CHECK(program.code != NULL);
+            sim_top_preload_linux(sim_top, &program);
+            free(program.code);
         }
     }
 }
@@ -251,7 +268,7 @@ static void sim_top_free(sim_top_t *sim_top)
     itf_free(&sim_top->uart_rx_itf);
     itf_free(&sim_top->uart_tx_itf);
     AXI4_IF_FREE(sim_top, ddr_);
-    itf_free(&sim_top->gpio_sig_itf);
+    itf_free(&sim_top->gpio_inout_itf);
 }
 
 int main(int argc, char *argv[])
@@ -287,20 +304,8 @@ int main(int argc, char *argv[])
     sim_top_construct(&sim_top, "sim_top", prog_path, fast_load_linux, web_ui, no_end_detect);
     sim_top_reset(&sim_top);
 
-    DBG_CHECK(sim_top.ui != NULL);
-
     while (!sim_top.end_sim) {
         sim_top_clock(&sim_top);
-
-        if (sim_top.ui->reset_pending(sim_top.ui)) {
-            sim_top_reset(&sim_top);
-            if (sim_top.fast_load_linux) {
-                program_t program = read_program(sim_top.prog_path);
-                DBG_CHECK(program.code != NULL);
-                sim_top_preload_linux(&sim_top, &program);
-                free(program.code);
-            }
-        }
     }
 
     sim_top_free(&sim_top);

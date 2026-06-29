@@ -1,13 +1,16 @@
 #include "ui_def.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
 #include <errno.h>
 #include <pthread.h>
+#include <ctype.h>
 
 #define BUF_SIZE 1024
+#define CMD_BUF_SIZE 16
 
 typedef struct {
     sim_ui_t ui;
@@ -16,6 +19,11 @@ typedef struct {
     bool input_thread_valid;
     bool input_thread_stop;
     bool reset_req;
+    bool cmd_mode;
+    char cmd_buf[CMD_BUF_SIZE];
+    int  cmd_len;
+    u32  gpio_in_val;
+    bool gpio_in_dirty;
     pthread_t input_thread;
     pthread_mutex_t lock;
     pthread_cond_t space_cond;
@@ -81,6 +89,78 @@ static void stop_input_thread(ui_term_t *ut)
     ut->input_thread_valid = false;
 }
 
+static void cmd_prompt(void)
+{
+    write(STDOUT_FILENO, "\n:", 2);
+}
+
+static void cmd_process(ui_term_t *ut)
+{
+    char *c = ut->cmd_buf;
+    int len = ut->cmd_len;
+    ut->cmd_len = 0;
+
+    if (len == 1 && c[0] == 'i') {
+        /* return to interactive mode */
+        ut->cmd_mode = false;
+        write(STDOUT_FILENO, "\n", 1);
+        return;
+    }
+
+    if (len == 1 && c[0] == 'r') {
+        /* reset — exit cmd mode, set reset request */
+        ut->cmd_mode = false;
+        ut->reset_req = true;
+        write(STDOUT_FILENO, "\n", 1);
+        return;
+    }
+
+    /* p1..p4 — toggle button (GPIO 16..19) */
+    if (len == 2 && c[0] == 'p' && c[1] >= '1' && c[1] <= '4') {
+        int bit = 16 + (c[1] - '1');
+        ut->gpio_in_val ^= (1u << bit);
+        ut->gpio_in_dirty = true;
+        cmd_prompt();
+        return;
+    }
+
+    /* s1..s4 — toggle switch (GPIO 20..23) */
+    if (len == 2 && c[0] == 's' && c[1] >= '1' && c[1] <= '4') {
+        int bit = 20 + (c[1] - '1');
+        ut->gpio_in_val ^= (1u << bit);
+        ut->gpio_in_dirty = true;
+        cmd_prompt();
+        return;
+    }
+
+    /* unknown command */
+    cmd_prompt();
+}
+
+static void cmd_handle_char(ui_term_t *ut, u8 ch)
+{
+    if (ch == '\r' || ch == '\n') {
+        cmd_process(ut);
+        return;
+    }
+    if (ch == 0x7f || ch == '\b') {
+        /* backspace */
+        if (ut->cmd_len > 0) {
+            ut->cmd_len--;
+            write(STDOUT_FILENO, "\b \b", 3);
+        }
+        return;
+    }
+    if (ut->cmd_len >= CMD_BUF_SIZE - 1) {
+        return;
+    }
+    if (!isprint(ch)) {
+        return;
+    }
+    ut->cmd_buf[ut->cmd_len++] = (char)ch;
+    write(STDOUT_FILENO, &ch, 1);
+}
+
 static void reset(void *ctx)
 {
     ui_term_t *ut = (ui_term_t *)ctx;
@@ -90,6 +170,9 @@ static void reset(void *ctx)
     ut->rd = 0;
     ut->wr = 0;
     ut->reset_req = false;
+    ut->cmd_mode = false;
+    ut->cmd_len = 0;
+    ut->gpio_in_dirty = false;
     ut->input_thread_stop = false;
     pthread_mutex_unlock(&ut->lock);
 
@@ -131,11 +214,21 @@ static bool uart_in(void *ctx, u8 *ch)
     pthread_cond_signal(&ut->space_cond);
     pthread_mutex_unlock(&ut->lock);
 
-    /* ESC key triggers a reset request instead of going to the UART */
     if (c == 0x1b) {
-        ut->reset_req = true;
+        /* ESC: enter cmd mode (vim-style) */
+        if (!ut->cmd_mode) {
+            ut->cmd_mode = true;
+            ut->cmd_len = 0;
+            cmd_prompt();
+        }
         return false;
     }
+
+    if (ut->cmd_mode) {
+        cmd_handle_char(ut, c);
+        return false;
+    }
+
     *ch = c;
     return true;
 }
@@ -144,6 +237,17 @@ static bool reset_pending(void *ctx)
 {
     ui_term_t *ut = (ui_term_t *)ctx;
     return ut->reset_req;
+}
+
+static bool gpio_in_poll(void *ctx, u32 *val)
+{
+    ui_term_t *ut = (ui_term_t *)ctx;
+    if (!ut->gpio_in_dirty) {
+        return false;
+    }
+    *val = ut->gpio_in_val;
+    ut->gpio_in_dirty = false;
+    return true;
 }
 
 static void gpio_change(void *ctx, u32 val)
@@ -174,7 +278,7 @@ sim_ui_t *ui_term_create(void)
     ut->ui.uart_out = uart_out;
     ut->ui.uart_in = uart_in;
     ut->ui.gpio_change = gpio_change;
+    ut->ui.gpio_in_poll = gpio_in_poll;
     ut->ui.cleanup = cleanup;
-
     return &ut->ui;
 }

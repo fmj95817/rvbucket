@@ -10,6 +10,7 @@
 #include "bus/demux.h"
 #include "peri/uart.h"
 #include "peri/gpio.h"
+#include "peri/timer.h"
 
 typedef struct peri {
     const u64 *cycle;
@@ -17,20 +18,25 @@ typedef struct peri {
     itf_t *apb_rsp_mst;
     itf_t *uart_tx_mst;
     itf_t *uart_rx_slv;
-    itf_t *irq_out;
-    itf_t *gpio_out;
+    itf_t *uart_irq_out;
+    itf_t *gpio_inout;
+    itf_t *gpio_irq_out;
+    itf_t *timer_irq_out;
 
     u32 base;
     u32 size;
 
     uart_t uart;
     gpio_t gpio;
+    peri_timer_t timer;
     apb_demux_t apb_demux;
 
     itf_t uart_apb_req_itf;
     itf_t uart_apb_rsp_itf;
     itf_t gpio_apb_req_itf;
     itf_t gpio_apb_rsp_itf;
+    itf_t timer_apb_req_itf;
+    itf_t timer_apb_rsp_itf;
 } peri_t;
 
 extern void peri_construct(peri_t *peri, const char *name, u32 base, u32 size);

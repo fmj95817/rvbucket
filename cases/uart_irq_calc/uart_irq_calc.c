@@ -3,17 +3,11 @@
 #include "drivers/uart/uart.h"
 
 #define PLIC_BASE_ADDR     0x31100000u
-#define PLIC_PRIORITY_BASE 0x000000u
-#define PLIC_PENDING_BASE  0x001000u
-#define PLIC_ENABLE_BASE   0x002000u
-#define PLIC_CONTEXT_BASE  0x200000u
-#define PLIC_THRESHOLD     (PLIC_CONTEXT_BASE + 0x00u)
-#define PLIC_CLAIM         (PLIC_CONTEXT_BASE + 0x04u)
+#define PLIC_CTX_BASE      0x200000u
+#define PLIC_CLAIM         (PLIC_CTX_BASE + 0x04u)
 
 #define MCAUSE_INTERRUPT_BIT    0x80000000u
 #define MCAUSE_M_EXT            11u
-#define MIE_MEIE                (1u << 11)
-#define MSTATUS_MIE             (1u << 3)
 
 #define UART_IRQ_BIT            (1u << UART_IRQ_NUM)
 #define EXPR_BUF_SIZE           128u
@@ -39,38 +33,14 @@ typedef struct parser {
     const char *err;
 } parser_t;
 
-static volatile uint32_t *plic_reg(uint32_t offset)
-{
-    return (volatile uint32_t *)(PLIC_BASE_ADDR + offset);
-}
-
-static void plic_enable_uart_irq(void)
-{
-    *plic_reg(PLIC_PRIORITY_BASE + UART_IRQ_NUM * 4u) = 1u;
-    *plic_reg(PLIC_THRESHOLD) = 0u;
-    *plic_reg(PLIC_ENABLE_BASE) = UART_IRQ_BIT;
-}
-
 static uint32_t plic_claim_irq(void)
 {
-    return *plic_reg(PLIC_CLAIM);
+    return *(volatile uint32_t *)(PLIC_BASE_ADDR + PLIC_CLAIM);
 }
 
 static void plic_complete_irq(uint32_t irq)
 {
-    *plic_reg(PLIC_CLAIM) = irq;
-}
-
-static void irq_enable(void)
-{
-    asm volatile("csrs mie, %0" :: "r"(MIE_MEIE) : "memory");
-    asm volatile("csrs mstatus, %0" :: "r"(MSTATUS_MIE) : "memory");
-}
-
-static void irq_disable(void)
-{
-    asm volatile("csrc mstatus, %0" :: "r"(MSTATUS_MIE) : "memory");
-    asm volatile("csrc mie, %0" :: "r"(MIE_MEIE) : "memory");
+    *(volatile uint32_t *)(PLIC_BASE_ADDR + PLIC_CLAIM) = irq;
 }
 
 uint32_t trap_handler(uint32_t mcause, uint32_t mepc, uint32_t mtval)
@@ -270,15 +240,12 @@ int main(void)
     uart_irq_count = 0;
     bad_trap_cause = 0;
 
-    plic_enable_uart_irq();
     uart_puts("uart_irq_calc> ");
-    irq_enable();
 
     while (!expr_done && !expr_overflow && bad_trap_cause == 0u) {
-        asm volatile("wfi" ::: "memory");
+        __asm__ volatile ("wfi");
     }
 
-    irq_disable();
     plic_complete_irq(UART_IRQ_NUM);
 
     if (bad_trap_cause != 0u) {

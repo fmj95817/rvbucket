@@ -6,9 +6,6 @@
 
 #define MCAUSE_INTERRUPT_BIT    0x80000000u
 #define MCAUSE_M_TIMER          7u
-#define MIE_MTIE                (1u << 7)
-#define MSTATUS_MIE             (1u << 3)
-
 static volatile uint32_t timer_irq_seen;
 static volatile uint32_t timer_irq_bad_cause;
 
@@ -61,15 +58,10 @@ int main(void)
     mtimecmp_write(UINT64_MAX);
     mtimecmp_write(mtime_read() + 2u);
 
-    asm volatile("csrs mie, %0" :: "r"(MIE_MTIE) : "memory");
-    asm volatile("csrs mstatus, %0" :: "r"(MSTATUS_MIE) : "memory");
-
     for (uint32_t i = 0; i < 4u && timer_irq_seen == 0u && timer_irq_bad_cause == 0u; i++) {
-        asm volatile("wfi" ::: "memory");
+        __asm__ volatile ("wfi");
     }
 
-    asm volatile("csrc mstatus, %0" :: "r"(MSTATUS_MIE) : "memory");
-    asm volatile("csrc mie, %0" :: "r"(MIE_MTIE) : "memory");
     mtimecmp_write(UINT64_MAX);
 
     if (timer_irq_seen == 1u && timer_irq_bad_cause == 0u) {
