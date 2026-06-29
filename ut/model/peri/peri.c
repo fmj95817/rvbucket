@@ -13,8 +13,10 @@ typedef struct peri_tb {
     itf_t apb_rsp_itf;
     itf_t uart_tx_itf;
     itf_t uart_rx_itf;
-    itf_t irq_sig_itf;
+    itf_t uart_irq_itf;
     itf_t gpio_sig_itf;
+    itf_t gpio_irq_itf;
+    itf_t timer_irq_itf;
 
     ext_irq_if_t *irq_o;
     gpio_if_t *gpio_o;
@@ -35,10 +37,12 @@ static void tb_construct(peri_tb_t *tb, const char *name)
     APB_RSP_IF_CONSTRUCT(tb, apb_rsp_itf, 1);
     UART_IF_CONSTRUCT(tb, uart_tx_itf, 1);
     UART_IF_CONSTRUCT(tb, uart_rx_itf, 1);
-    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, irq_sig_itf, true, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, uart_irq_itf, true, false);
     GPIO_SIGNAL_IF_CONSTRUCT(tb, gpio_sig_itf, true, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, gpio_irq_itf, true, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, timer_irq_itf, true, false);
 
-    tb->irq_o = itf_signal_get_src_and_chk(&tb->irq_sig_itf);
+    tb->irq_o = itf_signal_get_src_and_chk(&tb->uart_irq_itf);
     tb->gpio_o = itf_signal_get_src_and_chk(&tb->gpio_sig_itf);
 
     tb->dut.cycle = tb->cycle;
@@ -46,9 +50,11 @@ static void tb_construct(peri_tb_t *tb, const char *name)
     tb->dut.apb_rsp_mst = &tb->apb_rsp_itf;
     tb->dut.uart_tx_mst = &tb->uart_tx_itf;
     tb->dut.uart_rx_slv = &tb->uart_rx_itf;
-    tb->dut.uart_irq_out = &tb->irq_sig_itf;
+    tb->dut.uart_irq_out = &tb->uart_irq_itf;
     tb->dut.gpio_inout = &tb->gpio_sig_itf;
-    peri_construct(&tb->dut, "u_dut", 0x30000000, 0x2000);
+    tb->dut.gpio_irq_out = &tb->gpio_irq_itf;
+    tb->dut.timer_irq_out = &tb->timer_irq_itf;
+    peri_construct(&tb->dut, "u_dut", 0x30000000, 0x3000);
 
     ut_sbd_init(&tb->sbd);
 }
@@ -66,8 +72,10 @@ static void tb_free(peri_tb_t *tb)
     itf_free(&tb->apb_rsp_itf);
     itf_free(&tb->uart_tx_itf);
     itf_free(&tb->uart_rx_itf);
-    itf_free(&tb->irq_sig_itf);
+    itf_free(&tb->uart_irq_itf);
     itf_free(&tb->gpio_sig_itf);
+    itf_free(&tb->gpio_irq_itf);
+    itf_free(&tb->timer_irq_itf);
 }
 
 static void tb_clock(peri_tb_t *tb)
@@ -77,8 +85,10 @@ static void tb_clock(peri_tb_t *tb)
     itf_dbg_clock(&tb->apb_rsp_itf);
     itf_dbg_clock(&tb->uart_tx_itf);
     itf_dbg_clock(&tb->uart_rx_itf);
-    itf_dbg_clock(&tb->irq_sig_itf);
+    itf_dbg_clock(&tb->uart_irq_itf);
     itf_dbg_clock(&tb->gpio_sig_itf);
+    itf_dbg_clock(&tb->gpio_irq_itf);
+    itf_dbg_clock(&tb->timer_irq_itf);
     (*tb->cycle)++; dbg_vcd_clock();
 }
 
@@ -140,21 +150,21 @@ TEST_CASE(peri_tb_t, gpio_via_apb)
 {
     TEST_BEGIN("GPIO via APB Demux");
 
-    tb_apb_write(tb, 0x30001000, 0xdeadbeef);
+    tb_apb_write(tb, 0x30001000, 0x00adbeef);
     RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
     {
         apb_rsp_if_t rsp;
         itf_read(&tb->apb_rsp_itf, &rsp);
         REQUIRE(!rsp.pslverr, "GPIO write: no slave error");
     }
-    REQUIRE(tb->gpio_o->val == 0xdeadbeef, "GPIO signal = 0xdeadbeef");
+    REQUIRE(tb->gpio_o->val == 0x00adbeef, "GPIO signal = 0x00adbeef");
 
     tb_apb_read(tb, 0x30001000);
     RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
     {
         apb_rsp_if_t rsp;
         itf_read(&tb->apb_rsp_itf, &rsp);
-        REQUIRE(rsp.prdata == 0xdeadbeef, "GPIO read = 0xdeadbeef");
+        REQUIRE(rsp.prdata == 0x00adbeef, "GPIO read = 0x00adbeef");
     }
 
     TEST_END();

@@ -12,6 +12,7 @@ typedef struct gpio_tb {
     itf_t apb_req_itf;
     itf_t apb_rsp_itf;
     itf_t out_sig_itf;
+    itf_t irq_sig_itf;
     gpio_if_t *out_o;
 
     gpio_t dut;
@@ -29,12 +30,14 @@ static void tb_construct(gpio_tb_t *tb, const char *name)
     APB_REQ_IF_CONSTRUCT(tb, apb_req_itf, 1);
     APB_RSP_IF_CONSTRUCT(tb, apb_rsp_itf, 1);
     GPIO_SIGNAL_IF_CONSTRUCT(tb, out_sig_itf, true, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, irq_sig_itf, true, false);
 
     tb->out_o = itf_signal_get_src_and_chk(&tb->out_sig_itf);
 
     tb->dut.apb_req_slv = &tb->apb_req_itf;
     tb->dut.apb_rsp_mst = &tb->apb_rsp_itf;
     tb->dut.inout_sig = &tb->out_sig_itf;
+    tb->dut.irq_out = &tb->irq_sig_itf;
     gpio_construct(&tb->dut, "u_dut", 0x30001000, 16);
 
     ut_sbd_init(&tb->sbd);
@@ -52,6 +55,7 @@ static void tb_free(gpio_tb_t *tb)
     itf_free(&tb->apb_req_itf);
     itf_free(&tb->apb_rsp_itf);
     itf_free(&tb->out_sig_itf);
+    itf_free(&tb->irq_sig_itf);
 }
 
 static void tb_clock(gpio_tb_t *tb)
@@ -60,6 +64,7 @@ static void tb_clock(gpio_tb_t *tb)
     itf_dbg_clock(&tb->apb_req_itf);
     itf_dbg_clock(&tb->apb_rsp_itf);
     itf_dbg_clock(&tb->out_sig_itf);
+    itf_dbg_clock(&tb->irq_sig_itf);
     (*tb->cycle)++; dbg_vcd_clock();
 }
 
@@ -81,14 +86,14 @@ TEST_CASE(gpio_tb_t, write_output)
 {
     TEST_BEGIN("Write GPIO Output");
 
-    tb_apb_write(tb, 0x30001000, 0xdeadbeef);
+    tb_apb_write(tb, 0x30001000, 0x00adbeef);
     RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
     {
         apb_rsp_if_t rsp;
         itf_read(&tb->apb_rsp_itf, &rsp);
         REQUIRE(!rsp.pslverr, "APB write: no slave error");
     }
-    REQUIRE(tb->out_o->val == 0xdeadbeef, "signal output = 0xdeadbeef");
+    REQUIRE(tb->out_o->val == 0x00adbeef, "signal output = 0x00adbeef");
 
     TEST_END();
 }
@@ -97,7 +102,7 @@ TEST_CASE(gpio_tb_t, read_output)
 {
     TEST_BEGIN("Read GPIO Output");
 
-    tb_apb_write(tb, 0x30001000, 0xcafebabe);
+    tb_apb_write(tb, 0x30001000, 0x00fababe);
     RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
     {
         apb_rsp_if_t rsp;
@@ -109,7 +114,7 @@ TEST_CASE(gpio_tb_t, read_output)
     {
         apb_rsp_if_t rsp;
         itf_read(&tb->apb_rsp_itf, &rsp);
-        REQUIRE(rsp.prdata == 0xcafebabe, "read back = 0xcafebabe");
+        REQUIRE(rsp.prdata == 0x00fababe, "read back = 0x00fababe");
     }
 
     TEST_END();
@@ -119,21 +124,21 @@ TEST_CASE(gpio_tb_t, write_then_overwrite)
 {
     TEST_BEGIN("Write Then Overwrite");
 
-    tb_apb_write(tb, 0x30001000, 0x11111111);
+    tb_apb_write(tb, 0x30001000, 0x00111111);
     RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
     {
         apb_rsp_if_t rsp;
         itf_read(&tb->apb_rsp_itf, &rsp);
     }
 
-    tb_apb_write(tb, 0x30001000, 0x22222222);
+    tb_apb_write(tb, 0x30001000, 0x00222222);
     RUN_POLL_UNTIL(tb_cond_apb_rsp_ready, UT_TIMEOUT);
     {
         apb_rsp_if_t rsp;
         itf_read(&tb->apb_rsp_itf, &rsp);
     }
 
-    REQUIRE(tb->out_o->val == 0x22222222, "signal output = 0x22222222 (overwritten)");
+    REQUIRE(tb->out_o->val == 0x00222222, "signal output = 0x00222222 (overwritten)");
 
     TEST_END();
 }
