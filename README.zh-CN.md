@@ -7,24 +7,29 @@
 ## 系统规格
 
 - **CPU核心**: 2级流水线的RV32G (RV32IMACZicsr) CPU，含MMU和TLB
+- **L1 Cache**: 可配置组相联L1指令缓存和数据缓存，支持写回
 - **Boot ROM**: 1 KB
 - **Flash**: 1 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
 - **DTCM (Data Tightly Coupled Memory)**: 64 KB
 - **DDR**: 可配置大小，支持预加载Linux镜像
-- **UART**: 16550兼容串口
+- **UART**: 基础TX & RX
+- **GPIO**: 16位GPIO输出，支持LED显示
 - **ACLINT**: 核局部中断控制器（mtime, mtimecmp, MSWI, SSWI）
 - **PLIC**: 平台级中断控制器
-- **总线架构**: BTI/AXI4/APB协议桥接与交叉开关
+- **总线架构**: BTI/AXI4/APB协议桥接、多路选择及地址路由
 
 ## 功能特性
 
 - **RV32G指令集**: 支持 RV32I + M + A + Zicsr + Zifencei。
 - **2级流水线**: IF/EX流水线，含分支预测（BHT）。
 - **MMU与Sv32分页**: TLB支持，页表遍历器，可启动Linux内核。
+- **L1缓存**: 可配置组相联L1指令/数据缓存，支持bypass模式。
 - **陷阱处理**: 机器态/监管态陷阱、中断、委托机制。
-- **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、ACLINT、PLIC。
+- **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、ACLINT、PLIC。
 - **C模型**: 精确到时钟周期的仿真，支持VCD波形和接口事务dump。
+- **Web UI Dashboard**: 实时UART终端（xterm.js）、GPIO LED面板、仿真复位控制。支持多客户端重连及历史回放。
+- **Terminal UI**: 基于终端的UART控制台，支持ESC键复位。
 - **RTL实现**: SystemVerilog实现，支持VCS和Verilator仿真及FPGA综合。
 - **单元测试框架**: 模块化UT框架，彩色输出，计分板，接口dump验证。
 
@@ -35,6 +40,7 @@
 - **仿真工具**: VCS 或 Verilator 仿真器。
 - **RISC-V工具链**: RISC-V GCC 工具链，用于编译测试程序。详见 [RISC-V工具链GitHub仓库](https://github.com/riscv/riscv-gnu-toolchain)。
 - **FPGA工具**: Xilinx Vivado（FPGA目标）。
+- **Python（Web UI）**: Python 3 + aiohttp (`pip3 install aiohttp`)。
 
 ### 编译命令
 
@@ -55,11 +61,33 @@
 **C模型:**
 ```bash
 cd build/hw/model
+
+# 终端模式运行测试用例:
 ./sim_top ../../sw/<用例名称>/<用例名称>.bin
+
+# 启用Web UI Dashboard（浏览器打开 http://localhost:5000）:
+./sim_top --web-ui ../../sw/<用例名称>/<用例名称>.bin
 
 # Linux快速加载（预加载kernel/initrd/dtb至DDR）:
 ./sim_top --fast-load-linux ../../sw/linux/linux.bin
+
+# 禁用仿真结束检测（用于交互式调试）:
+./sim_top --no-end-detect --web-ui ../../sw/<用例名称>/<用例名称>.bin
+
+# 完整Linux + Web UI:
+./sim_top --fast-load-linux --web-ui ../../sw/linux/linux.bin
 ```
+
+**Web UI Dashboard 功能:**
+- 基于 xterm.js 的完整终端仿真（ANSI彩色、方向键、粘贴等）
+- GPIO LED 面板（16个LED实时状态显示）
+- Reset 按钮一键复位仿真SoC
+- 服务端重启自动重连，支持历史回放
+- 多浏览器标签页共享UART控制台
+
+**Terminal UI 功能:**
+- 终端原始模式下交互式UART控制台
+- 按 `ESC` 键触发仿真复位
 
 **C模型单元测试:**
 ```bash
@@ -92,30 +120,31 @@ cd build/hw/verilator
 
 ```
 model/            C模型源码
-├── base/         基础类型、ITF接口、FIFO
+├── base/         基础类型、ITF接口、FIFO、仲裁器
 ├── bus/          总线架构（bridge, mux, demux）
 │   ├── bridge/   bti2apb, bti2axi, axi2bti
-│   ├── mux/      BTI多路选择
-│   └── demux/    BTI/APB地址路由
+│   ├── mux/      BTI多路选择、AXI多路选择
+│   └── demux/    BTI地址路由、APB地址路由、AXI地址路由
 ├── core/         CPU核心与外设
 │   └── hart/     Hart子模块（ifu, exu, mmu, csr, trap）
 ├── dbg/          调试基础设施（VCD, log, PCM）
-├── io/           I/O外设（UART）
 ├── itf/          接口定义（BTI, AXI4, APB等）
-├── mem/          存储模型（RAM, ROM）
+├── mem/          存储模型（RAM, ROM, L1 Cache）
+├── peri/         外设模块（UART, GPIO）
 └── spec/         架构规格（CSR, ISA, SoC配置）
 sim/              仿真环境
-├── model/        C模型仿真顶层
+├── model/        C模型仿真顶层、UI接口及实现
 └── rtl/          RTL仿真顶层
 ut/model/         单元测试（镜像 model/ 目录结构）
 ├── utils.h/c     UT框架（计分板、宏）
-├── bus/bridge/   桥接模块UT（bti2axi, axi2bti）
+├── bus/          总线模块UT（bridge, mux, demux）
 ├── core/         核心模块UT（aclint, hart/ifu）
-└── io/           I/O模块UT（uart）
+├── mem/          存储模块UT（ram, rom, l1）
+└── peri/         外设模块UT（uart, gpio, peri）
 rtl/              RTL源码（SystemVerilog）
 cases/            软件测试用例
 sdk/              软件SDK（CRT、驱动）
-tools/            构建工具（bin2x, mkbin）
+tools/            构建工具（bin2x, mkbin）+ Web UI（web_ui_v2.py/html）
 build/            构建产物
 ├── hw/model/     C模型可执行文件 + UT可执行文件
 ├── hw/vcs/       VCS仿真
@@ -128,11 +157,16 @@ build/            构建产物
 
 - [x] C-Model RV32G (I/M/A/Zicsr/Zifencei) 指令集
 - [x] C-Model MMU 含 Sv32 分页和 TLB
+- [x] C-Model L1 指令/数据缓存，支持bypass
 - [x] C-Model 启动 Linux 内核
-- [x] C-Model 总线架构含 BTI/AXI4/APB 协议桥接
-- [x] C-Model 单元测试框架，覆盖5个模块
+- [x] C-Model 总线架构含 BTI/AXI4/APB 协议桥接、多路选择及地址路由
+- [x] C-Model GPIO 外设
+- [x] C-Model Web UI Dashboard（xterm.js, GPIO LED, reset, 历史回放）
+- [x] C-Model Terminal UI 含 ESC 键复位
+- [x] C-Model 单元测试框架，覆盖13+个模块
 - [x] RTL RV32G 指令集
 - [ ] RTL MMU 分页
+- [ ] RTL L1 缓存
 - [ ] RTL 启动 Linux 内核
 - [ ] FPGA 启动 Linux 内核
 - [ ] C-Model/RTL F/D 指令集扩展

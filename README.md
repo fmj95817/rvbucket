@@ -7,24 +7,29 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 ## System Specifications
 
 - **CPU Core**: 2-stage pipelined RV32G (RV32IMACZicsr) CPU with MMU and TLB
+- **L1 Cache**: Configurable set-associative L1 I-Cache and L1 D-Cache with write-back support
 - **Boot ROM**: 1 KB
 - **Flash**: 1 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
 - **DTCM (Data Tightly Coupled Memory)**: 64 KB
 - **DDR**: Configurable size, supports preloading Linux payloads
-- **UART**: 16550-compatible serial interface
+- **UART**: basic TX & RX
+- **GPIO**: 16-bit GPIO with LED output
 - **ACLINT**: Core-local interruptor (mtime, mtimecmp, MSWI, SSWI)
 - **PLIC**: Platform-level interrupt controller
-- **Bus Fabric**: BTI/AXI4/APB protocol bridges and crossbars
+- **Bus Fabric**: BTI/AXI4/APB protocol bridges, mux, and demux
 
 ## Features
 
 - **RV32G Instruction Set**: Supports RV32I + M + A + Zicsr + Zifencei.
 - **2-Stage Pipeline**: IF/EX pipeline with branch prediction (BHT).
 - **MMU with Sv32 Paging**: TLB support, page table walker, boots Linux kernel.
+- **L1 Cache**: Configurable set-associative L1 I-Cache and D-Cache with bypass support.
 - **Trap Handling**: Machine/Supervisor mode traps, interrupts, delegations.
-- **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, ACLINT, PLIC.
+- **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, ACLINT, PLIC.
 - **C-Model**: Cycle-accurate simulation with VCD waveform dumps and interface transaction dumps.
+- **Web UI Dashboard**: Real-time UART console (xterm.js), GPIO LED panel, simulation reset control. Supports multi-client reconnect with history replay.
+- **Terminal UI**: Direct terminal-based UART console with ESC-key reset.
 - **RTL**: SystemVerilog implementation, supports VCS and Verilator simulation, FPGA synthesis.
 - **Unit Test Framework**: Modular UT framework with scoreboard, colored output, and interface dump verification.
 
@@ -35,6 +40,7 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 - **Simulation Tools**: VCS or Verilator simulator.
 - **RISC-V Toolchain**: RISC-V GCC toolchain for compiling test programs. See [RISC-V Toolchain GitHub Repository](https://github.com/riscv/riscv-gnu-toolchain).
 - **FPGA Tools**: Xilinx Vivado (for FPGA target).
+- **Python (Web UI)**: Python 3 + aiohttp (`pip3 install aiohttp`).
 
 ### Build Commands
 
@@ -55,11 +61,33 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 **C-Model:**
 ```bash
 cd build/hw/model
+
+# Run a test case in terminal mode:
 ./sim_top ../../sw/<test_case>/<test_case>.bin
+
+# Run with Web UI dashboard (open http://localhost:5000 in browser):
+./sim_top --web-ui ../../sw/<test_case>/<test_case>.bin
 
 # Fast-load Linux (preloads kernel/initrd/dtb to DDR):
 ./sim_top --fast-load-linux ../../sw/linux/linux.bin
+
+# Disable simulation end detection (for interactive use):
+./sim_top --no-end-detect --web-ui ../../sw/<test_case>/<test_case>.bin
+
+# Full Linux + Web UI:
+./sim_top --fast-load-linux --web-ui ../../sw/linux/linux.bin
 ```
+
+**Web UI Dashboard:**
+- UART console with full xterm.js terminal emulation (ANSI colors, cursor keys, paste)
+- GPIO LED panel (16 LEDs with real-time state)
+- Reset button to reboot the simulated SoC
+- Auto-reconnect with history replay on server restart
+- Multi-browser support (shared console)
+
+**Terminal UI:**
+- Interactive UART console in terminal (raw mode)
+- Press `ESC` key to trigger simulation reset
 
 **C-Model Unit Tests:**
 ```bash
@@ -92,30 +120,31 @@ cd build/hw/verilator
 
 ```
 model/            C-Model source
-├── base/         Base types, ITF, FIFO
+├── base/         Base types, ITF, FIFO, arbiter
 ├── bus/          Bus fabric (bridge, mux, demux)
 │   ├── bridge/   bti2apb, bti2axi, axi2bti
-│   ├── mux/      BTI mux
-│   └── demux/    BTI/APB demux
+│   ├── mux/      BTI mux, AXI mux
+│   └── demux/    BTI demux, APB demux, AXI demux
 ├── core/         CPU core + peripherals
 │   └── hart/     Hart sub-modules (ifu, exu, mmu, csr, trap)
 ├── dbg/          Debug infrastructure (VCD, log, PCM)
-├── io/           I/O peripherals (UART)
 ├── itf/          Interface definitions (BTI, AXI4, APB, etc.)
-├── mem/          Memory models (RAM, ROM)
+├── mem/          Memory models (RAM, ROM, L1 cache)
+├── peri/         Peripherals (UART, GPIO)
 └── spec/         Architecture specifications (CSR, ISA, SoC config)
 sim/              Simulation environment
-├── model/        C-Model simulation top
+├── model/        C-Model simulation top, UI interface & implementations
 └── rtl/          RTL simulation top
 ut/model/         Unit tests (mirrors model/ structure)
 ├── utils.h/c     UT framework (scoreboard, macros)
-├── bus/bridge/   Bridge UTs (bti2axi, axi2bti)
+├── bus/          Bus UTs (bridge, mux, demux)
 ├── core/         Core UTs (aclint, hart/ifu)
-└── io/           I/O UTs (uart)
+├── mem/          Memory UTs (ram, rom, l1)
+└── peri/         Peripheral UTs (uart, gpio, peri)
 rtl/              RTL source (SystemVerilog)
 cases/            Software test cases
 sdk/              Software SDK (CRT, drivers)
-tools/            Build tools (bin2x, mkbin)
+tools/            Build tools (bin2x, mkbin) + Web UI (web_ui_v2.py/html)
 build/            Build outputs
 ├── hw/model/     C-Model binary + UT binaries
 ├── hw/vcs/       VCS simulation
@@ -128,11 +157,16 @@ build/            Build outputs
 
 - [x] C-Model RV32G (I/M/A/Zicsr/Zifencei) instruction set
 - [x] C-Model MMU with Sv32 paging and TLB
+- [x] C-Model L1 I-Cache and D-Cache with bypass
 - [x] C-Model boots Linux kernel
-- [x] C-Model bus fabric with BTI/AXI4/APB protocol bridges
-- [x] C-Model unit test framework with 5 module UTs
+- [x] C-Model bus fabric with BTI/AXI4/APB protocol bridges, mux, and demux
+- [x] C-Model GPIO peripheral
+- [x] C-Model Web UI dashboard (xterm.js, GPIO LEDs, reset, history replay)
+- [x] C-Model Terminal UI with ESC-key reset
+- [x] C-Model unit test framework with 13+ module UTs
 - [x] RTL RV32G instruction set
 - [ ] RTL MMU with paging
+- [ ] RTL L1 cache
 - [ ] RTL boots Linux kernel
 - [ ] FPGA boots Linux kernel
 - [ ] C-Model/RTL F/D instruction set extensions
