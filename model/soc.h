@@ -35,7 +35,7 @@ typedef struct soc {
     APB_IF_DECL(peri_);
     itf_t peri_uart_irq_itf;
     itf_t peri_gpio_irq_itf;
-    itf_t peri_timer_irq_itf;
+    itf_t peri_gtimer_irq_itf;
 } soc_t;
 
 extern void soc_construct(soc_t *soc, const char *name);

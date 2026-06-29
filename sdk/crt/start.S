@@ -54,7 +54,7 @@ _trap_entry:
 
 trap_handler:
     bgez a0, 2f
-    /* ── interrupt ─────────────────────────────────────────────────── */
+    /* ───────────── interrupt ───────────── */
     li t0, 0x8000000B
     bne a0, t0, 1f
 
@@ -78,7 +78,7 @@ trap_handler:
 
 4:  call uart_irq_handler;  j 3f
 5:  call gpio_irq_handler;  j 3f
-6:  call timer_irq_handler; j 3f
+6:  call gtimer_irq_handler; j 3f
 
 3:  li t0, 0x31300004
     sw a0, 0(t0)            /* complete */
@@ -96,7 +96,7 @@ trap_handler:
     addi a0, a1, 4
     ret
 
-    /* ── weak default IRQ handlers ─────────────────────────────────── */
+    /* ───────────── weak default IRQ handlers ───────────── */
     .weak uart_irq_handler
     .globl uart_irq_handler
     .type uart_irq_handler,@function
@@ -109,10 +109,10 @@ uart_irq_handler:
 gpio_irq_handler:
     ret
 
-    .weak timer_irq_handler
-    .globl timer_irq_handler
-    .type timer_irq_handler,@function
-timer_irq_handler:
+    .weak gtimer_irq_handler
+    .globl gtimer_irq_handler
+    .type gtimer_irq_handler,@function
+gtimer_irq_handler:
     ret
 
     .section .init
@@ -160,7 +160,7 @@ _start:
     la t0, _trap_entry
     csrw mtvec, t0
 
-    /* ── interrupt infrastructure ────────────────────────────────────── */
+    /* ───────────── interrupt infrastructure ───────────── */
     /* enable M-mode external / timer / software interrupts + global IE */
     li t0, (1 << 11) | (1 << 7) | (1 << 3)
     csrs mie, t0

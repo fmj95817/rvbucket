@@ -6,7 +6,7 @@
 #include "itf/apb_if.h"
 #include "itf/ext_irq_if.h"
 
-typedef struct timer {
+typedef struct gtimer {
     itf_t *apb_req_slv;
     itf_t *apb_rsp_mst;
     itf_t *irq_out;
@@ -19,11 +19,11 @@ typedef struct timer {
     u32 count;      /* current counter */
     u32 reload;     /* reload / preset */
     bool irq_pend;  /* interrupt pending */
-} peri_timer_t;
+} gtimer_t;
 
-extern void timer_construct(peri_timer_t *t, const char *name, u32 base, u32 size);
-extern void timer_reset(peri_timer_t *t);
-extern void timer_clock(peri_timer_t *t);
-extern void timer_free(peri_timer_t *t);
+extern void gtimer_construct(gtimer_t *t, const char *name, u32 base, u32 size);
+extern void gtimer_reset(gtimer_t *t);
+extern void gtimer_clock(gtimer_t *t);
+extern void gtimer_free(gtimer_t *t);
 
 #endif

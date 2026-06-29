@@ -1,4 +1,4 @@
-#include "timer.h"
+#include "gtimer.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
@@ -7,7 +7,7 @@
 #define REG_RELOAD  2u
 #define REG_IRQ     3u
 
-void timer_construct(peri_timer_t *t, const char *name, u32 base, u32 size)
+void gtimer_construct(gtimer_t *t, const char *name, u32 base, u32 size)
 {
     DBG_VCD_MODULE_SCOPE(name);
     t->base_addr = base;
@@ -16,7 +16,7 @@ void timer_construct(peri_timer_t *t, const char *name, u32 base, u32 size)
     dbg_vcd_add_sig("count", DBG_SIG_TYPE_REG, 32, &t->count);
 }
 
-void timer_reset(peri_timer_t *t)
+void gtimer_reset(gtimer_t *t)
 {
     t->ctrl = 0;
     t->count = 0;
@@ -26,7 +26,7 @@ void timer_reset(peri_timer_t *t)
     itf_signal_write_notify(t->irq_out);
 }
 
-static void timer_apb_proc(peri_timer_t *t)
+static void gtimer_apb_proc(gtimer_t *t)
 {
     if (itf_fifo_empty(t->apb_req_slv)) {
         return;
@@ -82,7 +82,7 @@ static void timer_apb_proc(peri_timer_t *t)
     itf_write(t->apb_rsp_mst, &rsp);
 }
 
-static void timer_count_proc(peri_timer_t *t)
+static void gtimer_count_proc(gtimer_t *t)
 {
     if (!(t->ctrl & 1u)) {
         return;
@@ -99,13 +99,13 @@ static void timer_count_proc(peri_timer_t *t)
     }
 }
 
-void timer_clock(peri_timer_t *t)
+void gtimer_clock(gtimer_t *t)
 {
-    timer_count_proc(t);
-    timer_apb_proc(t);
+    gtimer_count_proc(t);
+    gtimer_apb_proc(t);
 }
 
-void timer_free(peri_timer_t *t)
+void gtimer_free(gtimer_t *t)
 {
     (void)t;
 }

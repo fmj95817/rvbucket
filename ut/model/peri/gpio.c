@@ -68,7 +68,10 @@ static void tb_clock(gpio_tb_t *tb)
     (*tb->cycle)++; dbg_vcd_clock();
 }
 
-static bool tb_cond_apb_rsp_ready(gpio_tb_t *tb) { return !itf_fifo_empty(&tb->apb_rsp_itf); }
+static bool tb_cond_apb_rsp_ready(gpio_tb_t *tb)
+{
+    return !itf_fifo_empty(&tb->apb_rsp_itf);
+}
 
 static void tb_apb_write(gpio_tb_t *tb, u32 addr, u32 data)
 {

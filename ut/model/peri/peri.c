@@ -16,7 +16,7 @@ typedef struct peri_tb {
     itf_t uart_irq_itf;
     itf_t gpio_sig_itf;
     itf_t gpio_irq_itf;
-    itf_t timer_irq_itf;
+    itf_t gtimer_irq_itf;
 
     ext_irq_if_t *irq_o;
     gpio_if_t *gpio_o;
@@ -40,7 +40,7 @@ static void tb_construct(peri_tb_t *tb, const char *name)
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, uart_irq_itf, true, false);
     GPIO_SIGNAL_IF_CONSTRUCT(tb, gpio_sig_itf, true, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, gpio_irq_itf, true, false);
-    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, timer_irq_itf, true, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, gtimer_irq_itf, true, false);
 
     tb->irq_o = itf_signal_get_src_and_chk(&tb->uart_irq_itf);
     tb->gpio_o = itf_signal_get_src_and_chk(&tb->gpio_sig_itf);
@@ -53,7 +53,7 @@ static void tb_construct(peri_tb_t *tb, const char *name)
     tb->dut.uart_irq_out = &tb->uart_irq_itf;
     tb->dut.gpio_inout = &tb->gpio_sig_itf;
     tb->dut.gpio_irq_out = &tb->gpio_irq_itf;
-    tb->dut.timer_irq_out = &tb->timer_irq_itf;
+    tb->dut.gtimer_irq_out = &tb->gtimer_irq_itf;
     peri_construct(&tb->dut, "u_dut", 0x30000000, 0x3000);
 
     ut_sbd_init(&tb->sbd);
@@ -75,7 +75,7 @@ static void tb_free(peri_tb_t *tb)
     itf_free(&tb->uart_irq_itf);
     itf_free(&tb->gpio_sig_itf);
     itf_free(&tb->gpio_irq_itf);
-    itf_free(&tb->timer_irq_itf);
+    itf_free(&tb->gtimer_irq_itf);
 }
 
 static void tb_clock(peri_tb_t *tb)
@@ -88,7 +88,7 @@ static void tb_clock(peri_tb_t *tb)
     itf_dbg_clock(&tb->uart_irq_itf);
     itf_dbg_clock(&tb->gpio_sig_itf);
     itf_dbg_clock(&tb->gpio_irq_itf);
-    itf_dbg_clock(&tb->timer_irq_itf);
+    itf_dbg_clock(&tb->gtimer_irq_itf);
     (*tb->cycle)++; dbg_vcd_clock();
 }
 
