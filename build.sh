@@ -108,6 +108,8 @@ function build_sw_case {
         return
     fi
 
+    echo "  compiling sw/${case_name} ..."
+
     local case_dir="cases/${case_name}"
     local output_dir="build/sw/${case_name}"
 
@@ -176,16 +178,36 @@ function build_model {
 }
 
 function build_ut {
+    local target="${1}"
+    local name="${2}"
+
+    if [ "${target}" = "rtl" ]; then
+        echo "build_ut: RTL UT not yet implemented"
+        return
+    fi
+
     local model_srcs=($(find model -name *.c ! -path "*/sim/*"))
-    local ut_srcs=($(find ut/model -name *.c ! -name utils.c))
+
+    # find UT sources — optionally scoped to a name or subdirectory
+    local ut_root="ut/model"
+    local find_args=("${ut_root}" -name '*.c' ! -name 'utils.c')
+    if [ -n "${name}" ]; then
+        if [ -d "${ut_root}/${name}" ]; then
+            find_args=("${ut_root}/${name}" -name '*.c' ! -name 'utils.c')
+        else
+            find_args=("${ut_root}" -name "${name}.c" ! -name 'utils.c')
+        fi
+    fi
+
+    local ut_srcs=($(find "${find_args[@]}"))
 
     if [ ${#ut_srcs[@]} -eq 0 ]; then
-        echo "build_ut: no UT sources found under ut/model/"
+        echo "build_ut: no UT sources found"
         return
     fi
 
     for ut_src in ${ut_srcs[@]}; do
-        local rel_path="${ut_src#ut/model/}"
+        local rel_path="${ut_src#${ut_root}/}"
         local ut_name="${rel_path%.c}"
         local ut_dir="build/hw/model/ut/$(dirname ${ut_name})"
         local ut_bin="build/hw/model/ut/${ut_name}_ut"
@@ -262,27 +284,28 @@ function build_sw {
         elif [ "${1}" != "boot" ]; then
             build_sw_case "${1}"
         fi
+        echo "build_sw: 1 case built."
         return
     fi
 
     local args=(-mindepth 1 -maxdepth 1 -type d)
     local cases=("$(find cases ${args[@]})")
+    local count=0
 
     for case_dir in ${cases[@]}; do
         local case_name="$(basename ${case_dir})"
         if [ "${case_name}" != "boot" ]; then
             build_sw_case "${case_name}"
+            count=$((count + 1))
         fi
     done
+    echo "build_sw: ${count} case(s) built."
 }
 
 function build_hw {
     build_sw_case boot "${1}"
     if [ "${1}" = "model" ]; then
         build_model
-        if [ "${2}" = "ut" ]; then
-            build_ut
-        fi
     elif [ "${1}" = "rtl" ]; then
         build_rtl "${2}"
     elif [ "${1}" = "fpga" ]; then
@@ -296,6 +319,8 @@ if [ "${1}" = "hw" ]; then
     build_hw "${2}" "${3}"
 elif [ "${1}" = "sw" ]; then
     build_sw "${2}"
+elif [ "${1}" = "ut" ]; then
+    build_ut "${2}" "${3}"
 elif [ "${1}" = "linux" ]; then
     build_linux_case
 fi

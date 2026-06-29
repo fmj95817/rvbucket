@@ -46,8 +46,8 @@ static void tb_construct(peri_tb_t *tb, const char *name)
     tb->dut.apb_rsp_mst = &tb->apb_rsp_itf;
     tb->dut.uart_tx_mst = &tb->uart_tx_itf;
     tb->dut.uart_rx_slv = &tb->uart_rx_itf;
-    tb->dut.irq_out = &tb->irq_sig_itf;
-    tb->dut.gpio_out = &tb->gpio_sig_itf;
+    tb->dut.uart_irq_out = &tb->irq_sig_itf;
+    tb->dut.gpio_inout = &tb->gpio_sig_itf;
     peri_construct(&tb->dut, "u_dut", 0x30000000, 0x2000);
 
     ut_sbd_init(&tb->sbd);

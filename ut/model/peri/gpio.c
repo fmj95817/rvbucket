@@ -34,7 +34,7 @@ static void tb_construct(gpio_tb_t *tb, const char *name)
 
     tb->dut.apb_req_slv = &tb->apb_req_itf;
     tb->dut.apb_rsp_mst = &tb->apb_rsp_itf;
-    tb->dut.out_sig = &tb->out_sig_itf;
+    tb->dut.inout_sig = &tb->out_sig_itf;
     gpio_construct(&tb->dut, "u_dut", 0x30001000, 16);
 
     ut_sbd_init(&tb->sbd);
