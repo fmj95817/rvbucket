@@ -192,10 +192,20 @@ void exu_reset(exu_t *exu)
     for (int i = 1; i < RV32G_GPR_NUM; i++) {
         exu->gpr[i] = (u32)rand();
     }
+    exu->cur_opcode = 0;
     exu->ldst_req_pend = false;
+    exu->ld_rd = 0;
+    exu->ld_funct3 = 0;
     exu->amo_stage = AMO_STAGE_IDLE;
-    exu->irq_defer = false;
+    exu->amo_rd = 0;
+    exu->amo_addr = 0;
+    exu->amo_s2.u = 0;
+    exu->amo_funct375 = 0;
+    exu->amo_lr_set = false;
+    exu->amo_rsvd_addr = 0;
     exu->wfi = false;
+    exu->wfi_resume_pc = 0;
+    exu->irq_defer = false;
     exu->priv = RV32G_PRIV_MACHINE;
     exu->cur_pc = 0;
     exu->irq_epc = 0;

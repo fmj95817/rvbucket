@@ -224,12 +224,29 @@ async def ws_handler(request: web.Request) -> "web.WebSocketResponse":
                     except (BrokenPipeError, OSError):
                         pass
 
+                elif data.get("type") == "reset":
+                    try:
+                        sys.stdout.write("reset\n")
+                        sys.stdout.flush()
+                    except (BrokenPipeError, OSError):
+                        pass
+
             elif msg.type == web.WSMsgType.ERROR:
                 pass
 
     finally:
         clients.discard(ws)
     return ws
+
+
+async def _handle_reset(request: web.Request) -> "web.Response":
+    """HTTP endpoint for reset — any client can POST to trigger a reset."""
+    try:
+        sys.stdout.write("reset\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, OSError):
+        pass
+    return web.Response(text="ok")
 
 # ── HTTP handlers ─────────────────────────────────────────────────────────
 
@@ -264,6 +281,7 @@ def main() -> None:
     app = web.Application()
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
+    app.router.add_post("/reset", _handle_reset)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

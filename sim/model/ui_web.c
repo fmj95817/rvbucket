@@ -13,6 +13,7 @@ typedef struct {
     sim_ui_t ui;
     int fd;
     pid_t pid;
+    bool reset_req;
     char rbuf[256];   // persistent read buffer for uart_in
     int rpos;         // read position in rbuf
     int rlen;         // valid data length in rbuf
@@ -23,6 +24,7 @@ static void reset(void *ctx)
     ui_web_t *uw = (ui_web_t *)ctx;
     uw->rpos = 0;
     uw->rlen = 0;
+    uw->reset_req = false;
 }
 
 static void uart_out(void *ctx, u8 ch)
@@ -64,6 +66,10 @@ static bool uart_in(void *ctx, u8 *ch)
     uw->rpos = end + 1;    // advance past the \n
 
     char *line = uw->rbuf + start;
+    if (strcmp(line, "reset") == 0) {
+        uw->reset_req = true;
+        return uart_in(ctx, ch);  // skip this line, try next
+    }
     if (strncmp(line, "in:", 3) == 0) {
         int val;
         if (sscanf(line + 3, "%x", &val) == 1) {
@@ -73,6 +79,12 @@ static bool uart_in(void *ctx, u8 *ch)
     }
     /* line didn't match — try the next one */
     return uart_in(ctx, ch);
+}
+
+static bool reset_pending(void *ctx)
+{
+    ui_web_t *uw = (ui_web_t *)ctx;
+    return uw->reset_req;
 }
 
 static void gpio_change(void *ctx, u32 val)
@@ -128,6 +140,7 @@ sim_ui_t *ui_web_create(void)
     uw->fd = sv[0];
     uw->pid = pid;
     uw->ui.reset = reset;
+    uw->ui.reset_pending = reset_pending;
     uw->ui.uart_out = uart_out;
     uw->ui.uart_in = uart_in;
     uw->ui.gpio_change = gpio_change;

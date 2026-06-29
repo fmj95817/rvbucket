@@ -36,6 +36,13 @@ body {
 }
 .header h1 { color: #00d4ff; font-size: 16px; font-weight: normal; }
 .header .port { color: #888; font-size: 12px; }
+#reset-btn {
+    background: #2a2a4a; color: #f88; border: 1px solid #f44;
+    padding: 4px 14px; border-radius: 4px; font-size: 12px;
+    font-family: 'Courier New', monospace; cursor: pointer;
+    transition: all 0.15s;
+}
+#reset-btn:hover { background: #f44; color: #fff; }
 
 /* ── main area ────────────────────────────────────────────────────────── */
 .main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
@@ -114,7 +121,10 @@ body {
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="header">
     <h1>RVBucket Dashboard</h1>
-    <span class="port">GPIO: <span id="gpio-hex">0x0000</span></span>
+    <div style="display:flex;align-items:center;gap:16px;">
+        <span class="port">GPIO: <span id="gpio-hex">0x0000</span></span>
+        <button id="reset-btn" onclick="sendReset()" title="Reset simulation">&#x21bb; Reset</button>
+    </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -339,6 +349,16 @@ term.onData(function(data) {
     }
     ws.send(JSON.stringify({type: 'uart_in', data: hex}));
 });
+
+/* ── reset button ─────────────────────────────────────────────────────── */
+function sendReset() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({type: 'reset'}));
+    } else {
+        // fallback: HTTP POST
+        fetch('/reset', {method: 'POST'}).catch(function(){});
+    }
+}
 
 /* ── start ────────────────────────────────────────────────────────────── */
 wsConnect();

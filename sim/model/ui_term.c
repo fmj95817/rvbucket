@@ -15,6 +15,7 @@ typedef struct {
     bool tty_raw;
     bool input_thread_valid;
     bool input_thread_stop;
+    bool reset_req;
     pthread_t input_thread;
     pthread_mutex_t lock;
     pthread_cond_t space_cond;
@@ -88,6 +89,7 @@ static void reset(void *ctx)
     pthread_mutex_lock(&ut->lock);
     ut->rd = 0;
     ut->wr = 0;
+    ut->reset_req = false;
     ut->input_thread_stop = false;
     pthread_mutex_unlock(&ut->lock);
 
@@ -124,11 +126,24 @@ static bool uart_in(void *ctx, u8 *ch)
         pthread_mutex_unlock(&ut->lock);
         return false;
     }
-    *ch = ut->buf[ut->rd];
+    u8 c = ut->buf[ut->rd];
     ut->rd = (ut->rd + 1u) % BUF_SIZE;
     pthread_cond_signal(&ut->space_cond);
     pthread_mutex_unlock(&ut->lock);
+
+    /* ESC key triggers a reset request instead of going to the UART */
+    if (c == 0x1b) {
+        ut->reset_req = true;
+        return false;
+    }
+    *ch = c;
     return true;
+}
+
+static bool reset_pending(void *ctx)
+{
+    ui_term_t *ut = (ui_term_t *)ctx;
+    return ut->reset_req;
 }
 
 static void gpio_change(void *ctx, u32 val)
@@ -155,6 +170,7 @@ sim_ui_t *ui_term_create(void)
     pthread_mutex_init(&ut->lock, NULL);
     pthread_cond_init(&ut->space_cond, NULL);
     ut->ui.reset = reset;
+    ut->ui.reset_pending = reset_pending;
     ut->ui.uart_out = uart_out;
     ut->ui.uart_in = uart_in;
     ut->ui.gpio_change = gpio_change;
