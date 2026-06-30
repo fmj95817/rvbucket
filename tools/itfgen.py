@@ -5,7 +5,7 @@ import sys
 import math
 
 def gen_c_itf(itf_name, desc):
-    c_path = "model/itf/{}_if.h".format(itf_name)
+    c_path = "design/model/itf/{}_if.h".format(itf_name)
     f = open(c_path, "w")
     f.write("#ifndef {}_IF_H\n".format(itf_name.upper()))
     f.write("#define {}_IF_H\n\n".format(itf_name.upper()))
@@ -165,10 +165,10 @@ def gen_rtl_itf(itf_name, desc):
     enums = desc.get("enums", {})
     inc_rtl = desc.get("include_rtl", [])
 
-    sv_path = "rtl/itf/{}_if.sv".format(itf_name)
+    sv_path = "design/rtl/itf/{}_if.sv".format(itf_name)
 
     if enums:
-        svh_path = "rtl/itf/{}_if.svh".format(itf_name)
+        svh_path = "design/rtl/itf/{}_if.svh".format(itf_name)
         guard = "{}_IF_SVH".format(itf_name.upper())
         with open(svh_path, "w") as f:
             f.write("`ifndef {}\n".format(guard))

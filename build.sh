@@ -183,10 +183,10 @@ function build_sw_case {
 
     if [ "${case_name}" = "boot" ]; then
         if [ "${2}" = "model" ]; then
-            ${BIN2X} "${itcm}" c_array > model/core/boot.c
+            ${BIN2X} "${itcm}" c_array > design/model/core/boot.c
         elif [ "${2}" = "rtl" ]; then
-            ${BIN2X} "${itcm}" sv_rom_header > rtl/boot.svh
-            ${BIN2X} "${itcm}" sv_rom_src > rtl/boot.sv
+            ${BIN2X} "${itcm}" sv_rom_header > design/rtl/boot.svh
+            ${BIN2X} "${itcm}" sv_rom_src > design/rtl/boot.sv
         fi
     fi
 }
@@ -197,9 +197,11 @@ function build_model {
         -Wall \
         -O3 \
         -pthread \
-        -I./model \
+        -I./base/model \
+        -I./design/model \
         -o build/hw/model/sim_top \
-        $(find model -name *.c) \
+        $(find base/model -name *.c) \
+        $(find design/model -name *.c) \
         $(find sim/model -name *.c)
 }
 
@@ -212,9 +214,6 @@ function build_ut {
         return
     fi
 
-    local model_srcs=($(find model -name *.c ! -path "*/sim/*"))
-
-    # find UT sources — optionally scoped to a name or subdirectory
     local ut_root="ut/model"
     local find_args=("${ut_root}" -name '*.c' ! -name 'utils.c')
     if [ -n "${name}" ]; then
@@ -242,12 +241,14 @@ function build_ut {
         ${HOST_CC} \
             -Wall \
             -O0 -g \
-            -I./model \
+            -I./base/model \
+            -I./design/model \
             -I./ut/model \
             -o "${ut_bin}" \
             "${ut_src}" \
             ut/model/utils.c \
-            "${model_srcs[@]}"
+            $(find base/model -name *.c) \
+            $(find design/model -name *.c)
     done
     echo "build_ut: ${#ut_srcs[@]} UT(s) built."
 }
@@ -257,10 +258,10 @@ function build_rtl {
     local wd="$(pwd)"
 
     local common_args=(
-        +incdir+${wd}/rtl \
+        +incdir+${wd}/design/rtl \
     )
     local rtl_sim_src=(
-        $(find ${wd}/rtl -name *.sv) \
+        $(find ${wd}/design/rtl -name *.sv) \
         $(find ${wd}/sim/rtl/model -name *.sv) \
         $(find ${wd}/sim/rtl/${simulator} -name *.sv) \
     )
