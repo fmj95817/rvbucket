@@ -141,7 +141,7 @@ function run_ut_tests {
     done < <(find "${ut_dir}" -type f -executable -name '*_ut' -print0 2>/dev/null)
 
     if [[ ${#ut_bins[@]} -eq 0 ]]; then
-        skip "all UTs" "no UT binaries found (run './build.sh hw model ut' first)"
+        skip "all UTs" "no UT binaries found (run './build.sh ut model' first)"
         return
     fi
 
