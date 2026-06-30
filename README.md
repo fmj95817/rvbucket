@@ -30,7 +30,7 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 - **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, GTimer, ACLINT, PLIC.
 - **C-Model**: Cycle-accurate simulation with VCD waveform dumps and interface transaction dumps.
 - **Dual UI**: Web UI Dashboard (xterm.js terminal + GPIO panel + reset) and Terminal UI (vim-style cmd mode).
-- **RTL**: SystemVerilog implementation, supports VCS and Verilator simulation, FPGA synthesis.
+- **RTL**: SystemVerilog implementation with auto-generated interfaces (`itfgen.py`), supports VCS/Verilator/FPGA.
 - **Unit Test Framework**: Modular UT framework with scoreboard, colored output, and interface dump verification.
 - **Linux Support**: UART console, sysfs GPIO interface.
 - **Regression Suite**: `run.sh` automates full SW case + UT regression with single-case mode.
@@ -120,39 +120,29 @@ cd build/hw/verilator
 ## Project Structure
 
 ```
-model/            C-Model source
-├── base/         Base types, ITF, FIFO, arbiter
-├── bus/          Bus fabric (bridge, mux, demux)
-│   ├── bridge/   bti2apb, bti2axi, axi2bti
-│   ├── mux/      BTI mux, AXI mux
-│   └── demux/    BTI demux, APB demux, AXI demux
-├── core/         CPU core + peripherals
-│   └── hart/     Hart sub-modules (ifu, exu, mmu, csr, trap)
-├── dbg/          Debug infrastructure (VCD, log, PCM)
-├── itf/          Interface definitions (BTI, AXI4, APB, GPIO, etc.)
-├── mem/          Memory models (RAM, ROM, L1 cache)
-├── peri/         Peripherals (UART, GPIO, GTimer)
-└── spec/         Architecture specifications (CSR, ISA, SoC config)
-sim/              Simulation environment
-├── model/        C-Model simulation top, UI interface & implementations
-└── rtl/          RTL simulation top
-ut/model/         Unit tests (mirrors model/ structure)
-├── utils.h/c     UT framework (scoreboard, macros)
-├── bus/          Bus UTs (bridge, mux, demux)
-├── core/         Core UTs (aclint, hart/ifu)
-├── mem/          Memory UTs (ram, rom, l1)
-└── peri/         Peripheral UTs (uart, gpio, gtimer, peri)
-rtl/              RTL source (SystemVerilog)
-cases/            Software test cases
-sdk/              Software SDK (CRT, drivers for UART/GPIO/GTimer/syscalls)
-tools/            Build tools (bin2x, mkbin) + Web UI (web_ui_v2.py/html)
-thirdparty/       Third-party code (Linux kernel, OpenSBI)
-build/            Build outputs
-├── hw/model/     C-Model binary + UT binaries
-├── hw/vcs/       VCS simulation
-├── hw/verilator/ Verilator simulation
-├── hw/vivado/    FPGA project
-└── sw/           Software build outputs
+.
+├── base/                    Shared library (C-Model + RTL)
+│   ├── model/base/          types, itf, fifo, arbiter
+│   ├── model/dbg/           debug: vcd, log, pcm, chk
+│   └── rtl/                 RTL base
+├── design/
+│   ├── model/               C-Model source
+│   │   ├── bus/             fabric: bridge, mux, demux
+│   │   ├── core/            CPU & peripherals
+│   │   ├── itf/             interface definitions
+│   │   ├── mem/             memory: ram, rom, L1
+│   │   ├── peri/            uart, gpio, gtimer
+│   │   └── spec/            ISA, CSR, SoC config
+│   └── rtl/                 RTL source (SystemVerilog)
+├── sim/
+│   ├── model/               C simulation top & UI
+│   └── rtl/                 RTL simulation top
+├── ut/model/                Unit tests (mirrors design/model/)
+├── cases/                   Software test cases
+├── sdk/                     Software SDK (CRT, drivers)
+├── tools/                   Build tools, Web UI, itfgen
+├── thirdparty/              Linux kernel, OpenSBI
+└── build/                   Build outputs
 ```
 
 ## Development Status

@@ -30,7 +30,7 @@
 - **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、GTimer、ACLINT、PLIC。
 - **C模型**: 精确到时钟周期的仿真，支持VCD波形和接口事务dump。
 - **双UI**: Web UI Dashboard（xterm.js终端 + GPIO面板）和 Terminal UI（vim风格命令模式）。
-- **RTL实现**: SystemVerilog实现，支持VCS和Verilator仿真及FPGA综合。
+- **RTL实现**: SystemVerilog实现，接口由 `itfgen.py` 自动生成，支持VCS/Verilator/FPGA。
 - **单元测试框架**: 模块化UT框架，彩色输出，计分板，接口dump验证。
 - **Linux支持**: UART控制台、sysfs GPIO接口。
 - **回归套件**: `run.sh` 全量SW用例 + UT回归，支持单用例运行。
@@ -120,39 +120,29 @@ cd build/hw/verilator
 ## 项目结构
 
 ```
-model/            C模型源码
-├── base/         基础类型、ITF接口、FIFO、仲裁器
-├── bus/          总线架构（bridge, mux, demux）
-│   ├── bridge/   bti2apb, bti2axi, axi2bti
-│   ├── mux/      BTI多路选择、AXI多路选择
-│   └── demux/    BTI地址路由、APB地址路由、AXI地址路由
-├── core/         CPU核心与外设
-│   └── hart/     Hart子模块（ifu, exu, mmu, csr, trap）
-├── dbg/          调试基础设施（VCD, log, PCM）
-├── itf/          接口定义（BTI, AXI4, APB, GPIO等）
-├── mem/          存储模型（RAM, ROM, L1 Cache）
-├── peri/         外设模块（UART, GPIO, GTimer）
-└── spec/         架构规格（CSR, ISA, SoC配置）
-sim/              仿真环境
-├── model/        C模型仿真顶层、UI接口及实现
-└── rtl/          RTL仿真顶层
-ut/model/         单元测试（镜像 model/ 目录结构）
-├── utils.h/c     UT框架（计分板、宏）
-├── bus/          总线模块UT（bridge, mux, demux）
-├── core/         核心模块UT（aclint, hart/ifu）
-├── mem/          存储模块UT（ram, rom, l1）
-└── peri/         外设模块UT（uart, gpio, gtimer, peri）
-rtl/              RTL源码（SystemVerilog）
-cases/            软件测试用例
-sdk/              软件SDK（CRT、UART/GPIO/GTimer驱动、syscalls）
-tools/            构建工具（bin2x, mkbin）+ Web UI（web_ui_v2.py/html）
-thirdparty/       第三方代码（Linux内核、OpenSBI）
-build/            构建产物
-├── hw/model/     C模型可执行文件 + UT可执行文件
-├── hw/vcs/       VCS仿真
-├── hw/verilator/ Verilator仿真
-├── hw/vivado/    FPGA工程
-└── sw/           软件构建产物
+.
+├── base/                    共享基础库（C模型 + RTL）
+│   ├── model/base/          types, itf, fifo, 仲裁器
+│   ├── model/dbg/           调试: vcd, log, pcm, chk
+│   └── rtl/                 RTL基础
+├── design/
+│   ├── model/               C模型源码
+│   │   ├── bus/             总线架构: bridge, mux, demux
+│   │   ├── core/            CPU与外设
+│   │   ├── itf/             接口定义
+│   │   ├── mem/             存储: ram, rom, L1
+│   │   ├── peri/            外设: uart, gpio, gtimer
+│   │   └── spec/            ISA, CSR, SoC配置
+│   └── rtl/                 RTL源码（SystemVerilog）
+├── sim/
+│   ├── model/               C仿真顶层及UI
+│   └── rtl/                 RTL仿真顶层
+├── ut/model/                单元测试（镜像 design/model/）
+├── cases/                   软件测试用例
+├── sdk/                     软件SDK（CRT, 驱动）
+├── tools/                   构建工具, Web UI, itfgen
+├── thirdparty/              Linux内核, OpenSBI
+└── build/                   构建产物
 ```
 
 ## 开发状态
