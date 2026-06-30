@@ -14,8 +14,8 @@ module biu(
 );
 
     assign i_bti_req_mst.vld = fch_req_slv.vld;
-    assign i_bti_req_mst.pkt.tid = {`BTI_TIDW{1'b0}};
-    assign i_bti_req_mst.pkt.cmd = BTI_CMD_READ;
+    assign i_bti_req_mst.pkt.trans_id = {16{1'b0}};
+    assign i_bti_req_mst.pkt.cmd = BTI_REQ_CMD_READ;
     assign i_bti_req_mst.pkt.addr = fch_req_slv.pkt.pc;
     assign fch_req_slv.rdy = i_bti_req_mst.rdy;
 
@@ -24,8 +24,8 @@ module biu(
     assign i_bti_rsp_slv.rdy = fch_rsp_mst.rdy;
 
     assign d_bti_req_mst.vld = ldst_req_slv.vld;
-    assign d_bti_req_mst.pkt.tid = {`BTI_TIDW{1'b0}};
-    assign d_bti_req_mst.pkt.cmd = ldst_req_slv.pkt.st ? BTI_CMD_WRITE : BTI_CMD_READ;
+    assign d_bti_req_mst.pkt.trans_id = {16{1'b0}};
+    assign d_bti_req_mst.pkt.cmd = ldst_req_slv.pkt.st ? BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
     assign d_bti_req_mst.pkt.addr = ldst_req_slv.pkt.addr;
     assign d_bti_req_mst.pkt.data = ldst_req_slv.pkt.data;
     assign d_bti_req_mst.pkt.strobe = ldst_req_slv.pkt.strobe;

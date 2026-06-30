@@ -31,20 +31,20 @@ module bti_to_sram #(
     localparam SRAM_WORD_AW = SRAM_AW - 2;
 
     reg_slice #(
-        .DW(`BTI_TIDW)
+        .DW(16)
     ) u_reg_slice(
         .clk      (clk),
         .rst_n    (rst_n),
         .src_vld  (bti_req_slv.vld),
         .src_rdy  (bti_req_slv.rdy),
-        .src_data (bti_req_slv.pkt.tid),
+        .src_data (bti_req_slv.pkt.trans_id),
         .dst_vld  (bti_rsp_mst.vld),
         .dst_rdy  (bti_rsp_mst.rdy),
-        .dst_data (bti_rsp_mst.pkt.tid)
+        .dst_data (bti_rsp_mst.pkt.trans_id)
     );
 
     tri cs = bti_req_slv.vld & bti_req_slv.rdy;
-    tri wen = bti_req_slv.pkt.cmd == BTI_CMD_WRITE;
+    tri wen = bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE;
     tri [3:0] strobe = bti_req_slv.pkt.strobe;
 
     assign sram_bank0_rw_mst.cs = cs;

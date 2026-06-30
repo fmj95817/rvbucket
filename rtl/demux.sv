@@ -58,25 +58,25 @@ module bti_demux #(
 
     logic gsts_bti_rsp_vld[GST_NUM];
     logic gsts_bti_rsp_ok[GST_NUM];
-    logic [`BTI_TIDW-1:0] gsts_bti_rsp_tid[GST_NUM];
+    logic [16-1:0] gsts_bti_rsp_tid[GST_NUM];
     logic [BTI_DW-1:0] gsts_bti_rsp_data[GST_NUM];
     for (genvar i = 0; i < GST_NUM; i++) begin
         assign gsts_bti_rsp_vld[i] = gst_bti_rsp_slvs[i].vld;
         assign gsts_bti_rsp_ok[i] = gst_bti_rsp_slvs[i].pkt.ok;
-        assign gsts_bti_rsp_tid[i] = gst_bti_rsp_slvs[i].pkt.tid;
+        assign gsts_bti_rsp_tid[i] = gst_bti_rsp_slvs[i].pkt.trans_id;
         assign gsts_bti_rsp_data[i] = gst_bti_rsp_slvs[i].pkt.data;
     end
 
     always_comb begin
         host_bti_rsp_mst.vld = 1'b0;
-        host_bti_rsp_mst.pkt.tid = {`BTI_TIDW{1'b0}};
+        host_bti_rsp_mst.pkt.trans_id = {16{1'b0}};
         host_bti_rsp_mst.pkt.data = {BTI_DW{1'b0}};
         host_bti_rsp_mst.pkt.ok = 1'b0;
 
         for (int i = 0; i < GST_NUM; i++) begin
             host_bti_rsp_mst.vld |= (gsts_bti_rsp_vld[i] & gsts_req_pend[i]);
             host_bti_rsp_mst.pkt.ok |= (gsts_bti_rsp_ok[i] & gsts_req_pend[i]);
-            host_bti_rsp_mst.pkt.tid |= (gsts_bti_rsp_tid[i] & {`BTI_TIDW{gsts_req_pend[i]}});
+            host_bti_rsp_mst.pkt.trans_id |= (gsts_bti_rsp_tid[i] & {16{gsts_req_pend[i]}});
             host_bti_rsp_mst.pkt.data |= (gsts_bti_rsp_data[i] & {BTI_DW{gsts_req_pend[i]}});
         end
     end

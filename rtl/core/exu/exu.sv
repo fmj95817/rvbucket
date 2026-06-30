@@ -26,7 +26,7 @@ module exu(
             need_fl <= 1'b0;
     end
 
-    tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.ir.base.opcode;
+    tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.inst.base.opcode;
     tri is_lui = ex_req_slv.vld & (opcode == OPCODE_LUI);
     tri is_auipc = ex_req_slv.vld & (opcode == OPCODE_AUIPC);
     tri is_jal = ex_req_slv.vld & (opcode == OPCODE_JAL);
@@ -95,7 +95,7 @@ module exu(
         .clk          (clk),
         .rst_n        (rst_n),
         .sel          (alu_sel),
-        .inst         (ex_req_slv.pkt.ir),
+        .inst         (ex_req_slv.pkt.inst),
         .gpr_mst      (gpr_src_if_arr[ALU_CHN_IDX])
     );
 
@@ -103,7 +103,7 @@ module exu(
         .clk          (clk),
         .rst_n        (rst_n),
         .sel          (branch_sel),
-        .inst         (ex_req_slv.pkt.ir),
+        .inst         (ex_req_slv.pkt.inst),
         .pc           (ex_req_slv.pkt.pc),
         .pred_taken   (ex_req_slv.pkt.pred_taken),
         .pred_pc      (ex_req_slv.pkt.pred_pc),
@@ -116,7 +116,7 @@ module exu(
         .clk          (clk),
         .rst_n        (rst_n),
         .sel          (ldst_sel),
-        .inst         (ex_req_slv.pkt.ir),
+        .inst         (ex_req_slv.pkt.inst),
         .ldst_req_mst (ldst_req_mst),
         .ldst_rsp_slv (ldst_rsp_slv),
         .gpr_mst      (gpr_src_if_arr[LDST_CHN_IDX]),
@@ -127,7 +127,7 @@ module exu(
         .clk          (clk),
         .rst_n        (rst_n),
         .sel          (misc_sel),
-        .inst         (ex_req_slv.pkt.ir),
+        .inst         (ex_req_slv.pkt.inst),
         .pc           (ex_req_slv.pkt.pc),
         .gpr_mst      (gpr_src_if_arr[MISC_CHN_IDX])
     );
@@ -136,7 +136,7 @@ module exu(
         .clk          (clk),
         .rst_n        (rst_n),
         .sel          (sys_sel),
-        .inst         (ex_req_slv.pkt.ir),
+        .inst         (ex_req_slv.pkt.inst),
         .gpr_mst      (gpr_src_if_arr[SYS_CHN_IDX])
     );
 

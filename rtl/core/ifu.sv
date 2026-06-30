@@ -64,12 +64,18 @@ module ifu(
     end
 
     logic [`RV_IR_SIZE-1:0] ir;
+    logic [`RV_IR_SIZE-1:0] ir_raw;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            ir <= {`RV_IR_SIZE{1'b0}};
+            ir_raw <= {`RV_IR_SIZE{1'b0}};
         else if (ir_valid_set)
-            ir <= fch_rsp_slv.pkt.ir;
+            ir_raw <= fch_rsp_slv.pkt.ir;
     end
+
+    /* patch CSR instructions to NOP (RTL only supports RV32I) */
+    tri is_system = (ir_raw[6:0] == 7'b1110011);
+    tri is_csr    = is_system && (ir_raw[14:12] != 3'b000);
+    assign ir = is_csr ? 32'h00000013 : ir_raw;
 
     logic [`RV_PC_SIZE-1:0] pc_offset;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -109,7 +115,7 @@ module ifu(
     end
 
     assign ex_req_mst.vld = ir_valid_flag;
-    assign ex_req_mst.pkt.ir.raw = ir;
+    assign ex_req_mst.pkt.inst.raw = ir;
     assign ex_req_mst.pkt.pc = pc_of_ir;
     assign ex_req_mst.pkt.pred_taken = 1'b0;
     assign ex_req_mst.pkt.pred_pc = {`RV_PC_SIZE{1'b0}};

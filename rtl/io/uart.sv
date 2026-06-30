@@ -191,10 +191,10 @@ module bti_to_uart #(
     tri [REG_AW-1:0] reg_addr = bti_req_slv.pkt.addr[REG_AW+1:2];
     tri [BTI_DW-1:0] reg_data = bti_req_slv.pkt.data;
     tri bti_req_cmd = bti_req_slv.pkt.cmd;
-    tri bti_wr = (bti_req_cmd == BTI_CMD_WRITE) && bti_req_hsk;
+    tri bti_wr = (bti_req_cmd == BTI_REQ_CMD_WRITE) && bti_req_hsk;
 
     logic bti_req_cmd_pend;
-    tri bti_rd_pend = (bti_req_cmd_pend == BTI_CMD_READ);
+    tri bti_rd_pend = (bti_req_cmd_pend == BTI_REQ_CMD_READ);
 
     always_ff @(posedge clk) begin
         if (bti_req_hsk)
@@ -237,7 +237,7 @@ module bti_to_uart #(
             S_IDLE: begin
                 if (bti_req_slv.vld)
                     if (reg_addr == REG_TX_ADDR &&
-                        bti_req_cmd == BTI_CMD_WRITE)
+                        bti_req_cmd == BTI_REQ_CMD_WRITE)
                         state_nxt = S_TX;
                     else
                         state_nxt = S_REG_RW;

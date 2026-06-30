@@ -23,15 +23,15 @@ module soc(
     localparam DTCM_SEL = 8'h20;
     localparam UART_SEL = 8'h30;
 
-    bti_req_if_t #(`RV_AW, `RV_XLEN) i_bti_req_if();
-    bti_rsp_if_t #(`RV_XLEN)         i_bti_rsp_if();
-    bti_req_if_t #(`RV_AW, `RV_XLEN) d_bti_req_if();
-    bti_rsp_if_t #(`RV_XLEN)         d_bti_rsp_if();
+    bti_req_if_t i_bti_req_if();
+    bti_rsp_if_t         i_bti_rsp_if();
+    bti_req_if_t d_bti_req_if();
+    bti_rsp_if_t         d_bti_rsp_if();
 
-    bti_req_if_t #(`RV_AW, `RV_XLEN) i_bti_req_if_arr[I_BTI_GST_NUM]();
-    bti_rsp_if_t #(`RV_XLEN)         i_bti_rsp_if_arr[I_BTI_GST_NUM]();
-    bti_req_if_t #(`RV_AW, `RV_XLEN) d_bti_req_if_arr[D_BTI_GST_NUM]();
-    bti_rsp_if_t #(`RV_XLEN)         d_bti_rsp_if_arr[D_BTI_GST_NUM]();
+    bti_req_if_t i_bti_req_if_arr[I_BTI_GST_NUM]();
+    bti_rsp_if_t         i_bti_rsp_if_arr[I_BTI_GST_NUM]();
+    bti_req_if_t d_bti_req_if_arr[D_BTI_GST_NUM]();
+    bti_rsp_if_t         d_bti_rsp_if_arr[D_BTI_GST_NUM]();
 
     tri                              boot_rom_cs;
     tri [`BOOT_ROM_WORD_AW-1:0]      boot_rom_addr;
