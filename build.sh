@@ -21,7 +21,8 @@ BIN2X="./build/tools/bin2x"
 MKBIN="./build/tools/mkbin"
 GXPR="./tools/gxpr.py"
 
-LINUX_DIR="./thirdparty/linux/linux-6.14.4"
+OPEN_SBI_DIR="./thirdparty/opensbi"
+LINUX_DIR="./thirdparty/linux"
 LINUX_CROSS_PREFIX="riscv32-unknown-linux-gnu"
 LINUX_KERNEL_LOAD="0x40000000"
 LINUX_INITRD_LOAD="0x45000000"
@@ -36,8 +37,8 @@ function build_tools {
 function build_opensbi_case {
     local case_name="opensbi"
     local output_dir="build/sw/${case_name}"
-    local opensbi_dir="thirdparty/opensbi"
-    local fw_dir="${opensbi_dir}/build/platform/rvbucket/firmware"
+
+    local fw_dir="${OPEN_SBI_DIR}/build/platform/rvbucket/firmware"
     local fw_bin="${fw_dir}/fw_payload.bin"
     local fw_elf="${fw_dir}/fw_payload.elf"
     local empty_dtcm="${output_dir}/${case_name}.dtcm"
@@ -46,7 +47,7 @@ function build_opensbi_case {
 
     mkdir -p "${output_dir}"
 
-    ${GMAKE} -C "${opensbi_dir}" \
+    ${GMAKE} -C "${OPEN_SBI_DIR}" \
         PLATFORM=rvbucket \
         CROSS_COMPILE="${CROSS_PREFIX}-" \
         FW_PAYLOAD_OFFSET=0x50000 \
@@ -61,10 +62,26 @@ function build_opensbi_case {
 }
 
 function build_linux_case {
+    local clean="${1}"
+
+    if [ "${clean}" = "clean" ]; then
+        ${GMAKE} -C "${LINUX_DIR}" \
+            ARCH=riscv \
+            CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
+            clean
+        ${GMAKE} -C "${OPEN_SBI_DIR}" \
+            PLATFORM=rvbucket \
+            CROSS_COMPILE="${CROSS_PREFIX}-" \
+            FW_PIC=n \
+            clean
+        echo "build_sw: linux clean done."
+        return
+    fi
+
     local case_name="linux"
     local output_dir="build/sw/${case_name}"
-    local opensbi_dir="thirdparty/opensbi"
-    local fw_dir="${opensbi_dir}/build/platform/rvbucket/firmware"
+
+    local fw_dir="${OPEN_SBI_DIR}/build/platform/rvbucket/firmware"
     local fw_bin="${fw_dir}/fw_jump.bin"
     local fw_elf="${fw_dir}/fw_jump.elf"
     local kernel="${LINUX_DIR}/arch/riscv/boot/Image"
@@ -76,12 +93,17 @@ function build_linux_case {
 
     mkdir -p "${output_dir}"
 
+    ${GMAKE} -C "${LINUX_DIR}" \
+        ARCH=riscv \
+        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
+        rvbucket_defconfig
+
     ${GMAKE} -j16 -C "${LINUX_DIR}" \
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
         Image rvbucket/rvbucket.dtb
 
-    ${GMAKE} -B -C "${opensbi_dir}" \
+    ${GMAKE} -B -C "${OPEN_SBI_DIR}" \
         PLATFORM=rvbucket \
         CROSS_COMPILE="${CROSS_PREFIX}-" \
         FW_PAYLOAD=n \
@@ -105,6 +127,10 @@ function build_sw_case {
     local case_name="${1}"
     if [ "${case_name}" = "opensbi" ]; then
         build_opensbi_case
+        return
+    fi
+    if [ "${case_name}" = "linux" ]; then
+        build_linux_case "${2}"
         return
     fi
 
@@ -279,12 +305,9 @@ function build_fpga {
 
 function build_sw {
     if [ -n "${1}" ]; then
-        if [ "${1}" = "linux" ]; then
-            build_linux_case
-        elif [ "${1}" != "boot" ]; then
-            build_sw_case "${1}"
+        if [ "${1}" != "boot" ]; then
+            build_sw_case "${1}" "${2}"
         fi
-        echo "build_sw: 1 case built."
         return
     fi
 
@@ -318,9 +341,7 @@ build_tools
 if [ "${1}" = "hw" ]; then
     build_hw "${2}" "${3}"
 elif [ "${1}" = "sw" ]; then
-    build_sw "${2}"
+    build_sw "${2}" "${3}"
 elif [ "${1}" = "ut" ]; then
     build_ut "${2}" "${3}"
-elif [ "${1}" = "linux" ]; then
-    build_linux_case
 fi
