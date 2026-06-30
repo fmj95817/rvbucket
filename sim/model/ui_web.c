@@ -6,9 +6,11 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
-#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 typedef struct {
     sim_ui_t ui;
@@ -161,7 +163,9 @@ sim_ui_t *ui_web_create(void)
 
     pid_t pid = fork();
     if (pid == 0) {
+#ifdef __linux__
         prctl(PR_SET_PDEATHSIG, SIGTERM);
+#endif
         close(sv[0]);
         dup2(sv[1], STDIN_FILENO);
         dup2(sv[1], STDOUT_FILENO);
