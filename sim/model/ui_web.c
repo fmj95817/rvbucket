@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 
@@ -160,6 +161,7 @@ sim_ui_t *ui_web_create(void)
 
     pid_t pid = fork();
     if (pid == 0) {
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
         close(sv[0]);
         dup2(sv[1], STDIN_FILENO);
         dup2(sv[1], STDOUT_FILENO);
