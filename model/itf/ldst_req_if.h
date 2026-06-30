@@ -36,13 +36,13 @@ typedef struct ldst_req_if {
     u32 addr;
     bool st;
     u32 data;
-    u8 strobe;
+    u8 strobe; // 4-bit
 } ldst_req_if_t;
 
 static inline void ldst_req_if_to_str(const void *pkt, char *str)
 {
     const ldst_req_if_t *ldst_req = (const ldst_req_if_t *)pkt;
-    sprintf(str, "%08x %01x %08x %02x\n", ldst_req->addr, ldst_req->st, ldst_req->data, ldst_req->strobe);
+    sprintf(str, "%08x %01x %08x %01x\n", ldst_req->addr, ldst_req->st, ldst_req->data, ldst_req->strobe);
 }
 
 static inline void ldst_req_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
@@ -51,7 +51,7 @@ static inline void ldst_req_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
     dbg_vcd_add_sig("addr", type, 32, &ldst_req->addr);
     dbg_vcd_add_sig("st", type, 1, &ldst_req->st);
     dbg_vcd_add_sig("data", type, 32, &ldst_req->data);
-    dbg_vcd_add_sig("strobe", type, 8, &ldst_req->strobe);
+    dbg_vcd_add_sig("strobe", type, 4, &ldst_req->strobe);
 }
 
 #endif

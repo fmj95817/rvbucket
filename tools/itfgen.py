@@ -51,8 +51,10 @@ def gen_c_itf(itf_name, desc):
             max_bw = 0
             enum_full_name = "{}_{}".format(itf_name, enum_name)
             f.write("typedef enum {} {{\n".format(enum_full_name))
-            for item_name, item_val in enum_list.items():
-                f.write("    {}_{} = {},\n".format(enum_full_name.upper(), item_name.upper(), item_val))
+            items = list(enum_list.items())
+            for idx, (item_name, item_val) in enumerate(items):
+                comma = "" if idx == len(items) - 1 else ","
+                f.write("    {}_{} = {}{}\n".format(enum_full_name.upper(), item_name.upper(), item_val, comma))
                 max_bw = max(math.ceil(math.log2(item_val + 1)), max_bw)
             f.write("}} {}_t;\n\n".format(enum_full_name))
             enums_bw[enum_name] = max_bw
@@ -143,9 +145,151 @@ def gen_c_itf(itf_name, desc):
     f.close()
 
 
+def _rtl_field_width(p):
+    """return (width_bits, is_enum) for RTL logic declaration."""
+    if "type" in p:
+        return (None, True)   # enum — width derived from enum name
+    if "ext_type" in p:
+        return (p["width"], False)  # external type
+    return (p["width"], False)
+
+
+def gen_rtl_itf(itf_name, desc):
+    """Generate RTL .sv interface and .svh header for one interface."""
+    if desc.get("model_only", False):
+        return
+
+    itf_type = desc.get("type", "vld-rdy")
+    payloads = desc.get("payloads", [])
+    ctrl_sigs = desc.get("ctrl", [])
+    enums = desc.get("enums", {})
+    inc_rtl = desc.get("include_rtl", [])
+
+    sv_path = "rtl/itf/{}_if.sv".format(itf_name)
+
+    if enums:
+        svh_path = "rtl/itf/{}_if.svh".format(itf_name)
+        guard = "{}_IF_SVH".format(itf_name.upper())
+        with open(svh_path, "w") as f:
+            f.write("`ifndef {}\n".format(guard))
+            f.write("`define {}\n".format(guard))
+
+            for inc in inc_rtl:
+                f.write("`include \"{}\"\n".format(inc))
+
+            for enum_name, enum_list in enums.items():
+                max_val = max(enum_list.values())
+                enum_bw = max(1, math.ceil(math.log2(max_val + 1)))
+                f.write("\ntypedef enum logic [{}:0] {{\n".format(enum_bw - 1))
+                full = "{}_{}".format(itf_name, enum_name)
+                items = list(enum_list.items())
+                for idx, (item_name, item_val) in enumerate(items):
+                    comma = "" if idx == len(items) - 1 else ","
+                    f.write("    {}_{} = {}'d{}{}\n".format(full.upper(), item_name.upper(), enum_bw, item_val, comma))
+                f.write("}} {}_{}_t;\n".format(itf_name, enum_name))
+
+            f.write("\n`endif\n")
+
+    with open(sv_path, "w") as f:
+        needs_blank = False
+        # include own .svh if enums exist
+        if enums:
+            f.write("`include \"itf/{}_if.svh\"\n".format(itf_name))
+            needs_blank = True
+        for inc in inc_rtl:
+            f.write("`include \"{}\"\n".format(inc))
+            needs_blank = True
+
+        f.write("{}interface {}_if_t;\n".format("\n" if needs_blank else "", itf_name))
+
+        has_vld  = itf_type in ("vld", "vld-rdy")
+        has_rdy  = itf_type == "vld-rdy"
+        has_pkt  = len(payloads) > 0
+        has_ctrl = len(ctrl_sigs) > 0
+
+        if has_vld:
+            f.write("    logic vld;\n")
+        if has_rdy:
+            f.write("    logic rdy;\n")
+
+        if has_ctrl:
+            for c in ctrl_sigs:
+                cw = c["width"]
+                if cw == 1:
+                    f.write("    logic {};\n".format(c["name"]))
+                else:
+                    f.write("    logic [{}:0] {};\n".format(cw - 1, c["name"]))
+
+        if has_pkt:
+            f.write("\n    struct packed {\n")
+            for p in payloads:
+                name = p.get("rtl_alias", p["name"])
+                if "type" in p:
+                    f.write("        {}_{}_t {};\n".format(itf_name, p["type"], name))
+                elif "ext_type" in p:
+                    f.write("        {} {};\n".format(p["ext_type"], name))
+                else:
+                    w = p["width"]
+                    if w == 1:
+                        f.write("        logic {};\n".format(name))
+                    else:
+                        f.write("        logic [{}:0] {};\n".format(w - 1, name))
+            f.write("    } pkt;\n")
+
+        # modports
+        f.write("\n")
+        mst_outs = []
+        mst_ins  = []
+        slv_outs = []
+        slv_ins  = []
+
+        if has_vld:
+            mst_outs.append("vld")
+            slv_ins.append("vld")
+        if has_rdy:
+            mst_ins.append("rdy")
+            slv_outs.append("rdy")
+        if has_pkt:
+            mst_outs.append("pkt")
+            slv_ins.append("pkt")
+        if has_ctrl:
+            for c in ctrl_sigs:
+                mst_outs.append(c["name"])
+                slv_ins.append(c["name"])
+
+        def _fmt_port_list(items, dir_kw):
+            if not items:
+                return ""
+            return "{} {}".format(dir_kw, ", ".join(items))
+
+        mst_out_str = _fmt_port_list(mst_outs, "output")
+        mst_in_str  = _fmt_port_list(mst_ins,  "input")
+        slv_out_str = _fmt_port_list(slv_outs, "output")
+        slv_in_str  = _fmt_port_list(slv_ins,  "input")
+
+        mst_ports = ", ".join(filter(None, [mst_out_str, mst_in_str]))
+        slv_ports = ", ".join(filter(None, [slv_in_str,  slv_out_str]))
+
+        if mst_ports:
+            f.write("    modport mst ({});\n".format(mst_ports))
+        if slv_ports:
+            f.write("    modport slv ({});\n".format(slv_ports))
+
+        f.write("endinterface\n")
+
+
+if len(sys.argv) < 2:
+    print("usage: {} <itf.json> [c|rtl]".format(sys.argv[0]))
+    sys.exit(1)
+
 conf = open(sys.argv[1], "r")
 desc = json.load(conf)["itfs_desc"]
 conf.close()
 
+mode = sys.argv[2] if len(sys.argv) >= 3 else "all"
+
 for itf_name, itf_desc in desc.items():
-    gen_c_itf(itf_name, itf_desc)
+    if mode in ("c", "all"):
+        gen_c_itf(itf_name, itf_desc)
+    if mode in ("rtl", "all"):
+        gen_rtl_itf(itf_name, itf_desc)

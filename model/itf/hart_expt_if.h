@@ -35,7 +35,7 @@
 typedef enum hart_expt_type {
     HART_EXPT_TYPE_EXCEPTION = 0,
     HART_EXPT_TYPE_MRET = 1,
-    HART_EXPT_TYPE_SRET = 2,
+    HART_EXPT_TYPE_SRET = 2
 } hart_expt_type_t;
 
 typedef enum hart_expt_cause {
@@ -53,7 +53,7 @@ typedef enum hart_expt_cause {
     HART_EXPT_CAUSE_STORE_AMO_PAGE_FAULT = 15,
     HART_EXPT_CAUSE_DOUBLE_TRAP = 16,
     HART_EXPT_CAUSE_SW_CHECK = 18,
-    HART_EXPT_CAUSE_HW_ERROR = 19,
+    HART_EXPT_CAUSE_HW_ERROR = 19
 } hart_expt_cause_t;
 
 typedef struct hart_expt_if {

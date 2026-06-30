@@ -1,12 +1,9 @@
 `ifndef BTI_REQ_IF_SVH
 `define BTI_REQ_IF_SVH
 
-`define BTI_TIDW 4
-
-typedef enum logic {
-    BTI_CMD_READ = 1'b0,
-    BTI_CMD_WRITE = 1'b1
-} bti_cmd_t;
-
+typedef enum logic [0:0] {
+    BTI_REQ_CMD_READ = 1'd0,
+    BTI_REQ_CMD_WRITE = 1'd1
+} bti_req_cmd_t;
 
 `endif

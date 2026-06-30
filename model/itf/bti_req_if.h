@@ -34,7 +34,7 @@
 
 typedef enum bti_req_cmd {
     BTI_REQ_CMD_READ = 0,
-    BTI_REQ_CMD_WRITE = 1,
+    BTI_REQ_CMD_WRITE = 1
 } bti_req_cmd_t;
 
 typedef struct bti_req_if {
@@ -42,13 +42,13 @@ typedef struct bti_req_if {
     bti_req_cmd_t cmd;
     u32 addr;
     u32 data;
-    u8 strobe;
+    u8 strobe; // 4-bit
 } bti_req_if_t;
 
 static inline void bti_req_if_to_str(const void *pkt, char *str)
 {
     const bti_req_if_t *bti_req = (const bti_req_if_t *)pkt;
-    sprintf(str, "%04x %01x %08x %08x %02x\n", bti_req->trans_id, (u32)bti_req->cmd, bti_req->addr, bti_req->data, bti_req->strobe);
+    sprintf(str, "%04x %01x %08x %08x %01x\n", bti_req->trans_id, (u32)bti_req->cmd, bti_req->addr, bti_req->data, bti_req->strobe);
 }
 
 static inline void bti_req_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
@@ -58,7 +58,7 @@ static inline void bti_req_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
     dbg_vcd_add_sig("cmd", type, 1, &bti_req->cmd);
     dbg_vcd_add_sig("addr", type, 32, &bti_req->addr);
     dbg_vcd_add_sig("data", type, 32, &bti_req->data);
-    dbg_vcd_add_sig("strobe", type, 8, &bti_req->strobe);
+    dbg_vcd_add_sig("strobe", type, 4, &bti_req->strobe);
 }
 
 #endif

@@ -36,7 +36,7 @@ typedef enum axi4_b_resp {
     AXI4_B_RESP_OKAY = 0,
     AXI4_B_RESP_EXOKAY = 1,
     AXI4_B_RESP_SLVERR = 2,
-    AXI4_B_RESP_DECERR = 3,
+    AXI4_B_RESP_DECERR = 3
 } axi4_b_resp_t;
 
 typedef struct axi4_b_if {

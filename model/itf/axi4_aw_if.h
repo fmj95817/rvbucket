@@ -35,7 +35,7 @@
 typedef enum axi4_aw_burst {
     AXI4_AW_BURST_FIXED = 0,
     AXI4_AW_BURST_INCR = 1,
-    AXI4_AW_BURST_WRAP = 2,
+    AXI4_AW_BURST_WRAP = 2
 } axi4_aw_burst_t;
 
 typedef enum axi4_aw_size {
@@ -46,7 +46,7 @@ typedef enum axi4_aw_size {
     AXI4_AW_SIZE_B16 = 4,
     AXI4_AW_SIZE_B32 = 5,
     AXI4_AW_SIZE_B64 = 6,
-    AXI4_AW_SIZE_B128 = 7,
+    AXI4_AW_SIZE_B128 = 7
 } axi4_aw_size_t;
 
 typedef struct axi4_aw_if {

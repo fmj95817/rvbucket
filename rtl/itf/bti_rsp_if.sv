@@ -1,12 +1,11 @@
-interface bti_rsp_if_t #(
-    parameter BTI_DW = 32
-);
+interface bti_rsp_if_t;
     logic vld;
     logic rdy;
+
     struct packed {
-        logic [`BTI_TIDW-1:0] tid;
-        logic [BTI_DW-1:0]    data;
-        logic                 ok;
+        logic [15:0] trans_id;
+        logic [31:0] data;
+        logic ok;
     } pkt;
 
     modport mst (output vld, pkt, input rdy);

@@ -1,12 +1,12 @@
-interface ex_rsp_if_t;
+`include "itf/axi4_b_if.svh"
+
+interface axi4_b_if_t;
     logic vld;
     logic rdy;
 
     struct packed {
-        logic [31:0] pc;
-        logic taken;
-        logic pred_true;
-        logic [31:0] target_pc;
+        logic [7:0] id;
+        axi4_b_resp_t resp;
     } pkt;
 
     modport mst (output vld, pkt, input rdy);

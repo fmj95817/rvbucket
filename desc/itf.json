@@ -21,6 +21,7 @@
         "ex_req": {
             "type": "vld-rdy",
             "include": ["spec/core/isa.h"],
+            "include_rtl": ["core/isa.svh"],
             "payloads": [
                 { "name": "inst", "ext_type": "rv32g_inst_t", "raw": "raw", "width": 32 },
                 { "name": "pc", "width": 32 },
@@ -56,7 +57,7 @@
         },
 
         "exu_csr_write_req": {
-            "type": "none",
+            "type": "vld",
             "payloads": [
                 { "name": "addr", "width": 12 },
                 { "name": "val", "width": 32 },
@@ -65,7 +66,7 @@
         },
 
         "csr_exu_write_rsp": {
-            "type": "none",
+            "type": "vld",
             "payloads": [
                 { "name": "ok", "width": 1 }
             ]
@@ -87,7 +88,7 @@
                 { "name": "addr", "width": 32 },
                 { "name": "st", "width": 1 },
                 { "name": "data", "width": 32 },
-                { "name": "strobe", "width": 8 }
+                { "name": "strobe", "width": 4 }
             ]
         },
         "ldst_rsp": {
@@ -100,7 +101,7 @@
 
         "bti_req": {
             "type": "vld-rdy",
-             "enums": {
+            "enums": {
                 "cmd": {
                     "read": 0,
                     "write": 1
@@ -111,7 +112,7 @@
                 { "name": "cmd", "type": "cmd" },
                 { "name": "addr", "width": 32 },
                 { "name": "data", "width": 32 },
-                { "name": "strobe", "width": 8 }
+                { "name": "strobe", "width": 4 }
             ]
         },
         "bti_rsp": {
@@ -255,7 +256,7 @@
         "core_timer": {
             "type": "none",
             "payloads": [
-                { "name": "time", "width": 64 }
+                { "name": "time", "width": 64, "rtl_alias": "mtime" }
             ]
         },
 
@@ -315,7 +316,7 @@
                 }
             },
             "payloads": [
-                { "name": "type", "type": "type" },
+                { "name": "type", "type": "type", "rtl_alias": "expt_type" },
                 { "name": "cause", "type": "cause" },
                 { "name": "priv", "width": 2 },
                 { "name": "pc", "width": 32 },
@@ -332,6 +333,7 @@
 
         "uart": {
             "type": "vld",
+            "model_only": true,
             "payloads": [
                 { "name": "data", "width": 32 }
             ]

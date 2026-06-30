@@ -1,4 +1,4 @@
-interface fl_req_if_t;
+interface tlb_flush_if_t;
     logic vld;
 
     modport mst (output vld);
