@@ -9,14 +9,15 @@
 - **CPU核心**: 2级流水线的RV32G (RV32IMACZicsr) CPU，含MMU和TLB
 - **L1 Cache**: 可配置组相联L1指令缓存和数据缓存，支持写回
 - **Boot ROM**: 1 KB
-- **Flash**: 1 MB
+- **Flash**: 32 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
 - **DTCM (Data Tightly Coupled Memory)**: 64 KB
 - **DDR**: 可配置大小，支持预加载Linux镜像
-- **UART**: 基础TX & RX
-- **GPIO**: 16位GPIO输出，支持LED显示
+- **UART**: 基本TX/RX功能
+- **GPIO**: 24位双向GPIO，支持输出/输入/中断三种模式，Web UI模拟按钮和开关
+- **GTimer**: 通用递减计时器，支持IRQ
 - **ACLINT**: 核局部中断控制器（mtime, mtimecmp, MSWI, SSWI）
-- **PLIC**: 平台级中断控制器
+- **PLIC**: 平台级中断控制器（UART/GPIO/GTimer 共3个中断源）
 - **总线架构**: BTI/AXI4/APB协议桥接、多路选择及地址路由
 
 ## 功能特性
@@ -26,12 +27,13 @@
 - **MMU与Sv32分页**: TLB支持，页表遍历器，可启动Linux内核。
 - **L1缓存**: 可配置组相联L1指令/数据缓存，支持bypass模式。
 - **陷阱处理**: 机器态/监管态陷阱、中断、委托机制。
-- **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、ACLINT、PLIC。
+- **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、GTimer、ACLINT、PLIC。
 - **C模型**: 精确到时钟周期的仿真，支持VCD波形和接口事务dump。
-- **Web UI Dashboard**: 实时UART终端（xterm.js）、GPIO LED面板、仿真复位控制。支持多客户端重连及历史回放。
-- **Terminal UI**: 基于终端的UART控制台，支持ESC键复位。
+- **双UI**: Web UI Dashboard（xterm.js终端 + GPIO面板）和 Terminal UI（vim风格命令模式）。
 - **RTL实现**: SystemVerilog实现，支持VCS和Verilator仿真及FPGA综合。
 - **单元测试框架**: 模块化UT框架，彩色输出，计分板，接口dump验证。
+- **Linux支持**: UART控制台、sysfs GPIO接口。
+- **回归套件**: `run.sh` 全量SW用例 + UT回归，支持单用例运行。
 
 ## 快速开始
 
@@ -47,12 +49,15 @@
 | 命令 | 说明 |
 |------|------|
 | `./build.sh hw model` | 编译C模型仿真 |
-| `./build.sh hw model ut` | 编译C模型 + 全部单元测试 |
 | `./build.sh hw rtl vcs` | 编译RTL仿真（VCS） |
 | `./build.sh hw rtl verilator` | 编译RTL仿真（Verilator） |
 | `./build.sh hw fpga xilinx` | 生成Vivado FPGA工程 |
-| `./build.sh sw` | 编译全部软件测试用例 |
-| `./build.sh linux` | 编译Linux内核 + OpenSBI |
+| `./build.sh sw` | 编译全部裸机C测试用例 |
+| `./build.sh sw <名称>` | 编译单个C测试用例 |
+| `./build.sh sw linux` | 编译Linux内核 + OpenSBI |
+| `./build.sh sw linux clean` | 清理Linux内核 + OpenSBI编译 |
+| `./build.sh ut model` | 编译全部C模型单元测试 |
+| `./build.sh ut model <名称>` | 编译单个UT或UT子目录 |
 
 *备注：FPGA需要在 `fpga/xilinx/boards` 下添加开发板描述文件，并在 `fpga/xilinx/proj.json` 中更新 `board` 项。*
 
@@ -62,58 +67,54 @@
 ```bash
 cd build/hw/model
 
-# 终端模式运行测试用例:
-./sim_top ../../sw/<用例名称>/<用例名称>.bin
+# 终端模式:
+./sim_top ../../sw/<用例>/<用例>.bin
 
-# 启用Web UI Dashboard（浏览器打开 http://localhost:5000）:
-./sim_top --web-ui ../../sw/<用例名称>/<用例名称>.bin
+# Web UI Dashboard（浏览器打开 http://localhost:5000）:
+./sim_top --web-ui ../../sw/<用例>/<用例>.bin
 
-# Linux快速加载（预加载kernel/initrd/dtb至DDR）:
-./sim_top --fast-load-linux ../../sw/linux/linux.bin
-
-# 禁用仿真结束检测（用于交互式调试）:
-./sim_top --no-end-detect --web-ui ../../sw/<用例名称>/<用例名称>.bin
-
-# 完整Linux + Web UI:
+# Linux 快速加载（预加载kernel/initrd/dtb至DDR）:
 ./sim_top --fast-load-linux --web-ui ../../sw/linux/linux.bin
+
+# 禁用仿真结束检测（交互式使用）:
+./sim_top --no-end-detect --web-ui ../../sw/<用例>/<用例>.bin
 ```
 
 **Web UI Dashboard 功能:**
-- 基于 xterm.js 的完整终端仿真（ANSI彩色、方向键、粘贴等）
-- GPIO LED 面板（16个LED实时状态显示）
-- Reset 按钮一键复位仿真SoC
-- 服务端重启自动重连，支持历史回放
-- 多浏览器标签页共享UART控制台
+- xterm.js 完整终端仿真（ANSI彩色、方向键、粘贴、退格）
+- 16 LED GPIO 输出面板 + 4 按钮 + 4 拨码开关
+- Reset 按钮，服务端重启自动重连及历史回放
+- 浅色/深色主题切换，偏好设置持久化
 
 **Terminal UI 功能:**
-- 终端原始模式下交互式UART控制台
-- 按 `ESC` 键触发仿真复位
+- 原始模式交互式UART控制台
+- `ESC` 进入vim风格命令模式：`p1`–`p4` 翻转按钮，`s1`–`s4` 翻转开关，`r` 复位，`i` 返回交互
 
-**C模型单元测试:**
+**回归套件:**
 ```bash
-# 编译全部UT:
-./build.sh hw model ut
+./run.sh model sw              # 全部SW用例（批量）
+./run.sh model sw <名称>       # 单个SW用例
+./run.sh model ut              # 全部UT（批量）
+./run.sh model ut <名称>       # 单个UT
+./run.sh model                 # 全量 SW + UT 回归
+```
 
-# 运行UT（cd到对应模块的build目录，产物落在本地）:
-cd build/hw/model/ut/<模块路径>
-./<模块名>_ut
-
-# 示例：运行axi2bti桥接UT并开启接口dump
-cd build/hw/model/ut/bus/bridge
-ITF_DUMP=1 ./axi2bti_ut
-cat itf_dump/*.txt
+**C模型单元测试（独立编译）:**
+```bash
+./build.sh ut model            # 编译全部UT
+./run.sh model ut axi2bti      # 运行单个UT（自动cd到对应目录）
 ```
 
 **RTL (VCS):**
 ```bash
 cd build/hw/vcs
-./sim_top +program=../../sw/<用例名称>/<用例名称>.hex
+./sim_top +program=../../sw/<用例>/<用例>.hex
 ```
 
 **RTL (Verilator):**
 ```bash
 cd build/hw/verilator
-./obj_dir/Vsim_top +program=../../sw/<用例名称>/<用例名称>.hex
+./obj_dir/Vsim_top +program=../../sw/<用例>/<用例>.hex
 ```
 
 ## 项目结构
@@ -128,9 +129,9 @@ model/            C模型源码
 ├── core/         CPU核心与外设
 │   └── hart/     Hart子模块（ifu, exu, mmu, csr, trap）
 ├── dbg/          调试基础设施（VCD, log, PCM）
-├── itf/          接口定义（BTI, AXI4, APB等）
+├── itf/          接口定义（BTI, AXI4, APB, GPIO等）
 ├── mem/          存储模型（RAM, ROM, L1 Cache）
-├── peri/         外设模块（UART, GPIO）
+├── peri/         外设模块（UART, GPIO, GTimer）
 └── spec/         架构规格（CSR, ISA, SoC配置）
 sim/              仿真环境
 ├── model/        C模型仿真顶层、UI接口及实现
@@ -140,11 +141,12 @@ ut/model/         单元测试（镜像 model/ 目录结构）
 ├── bus/          总线模块UT（bridge, mux, demux）
 ├── core/         核心模块UT（aclint, hart/ifu）
 ├── mem/          存储模块UT（ram, rom, l1）
-└── peri/         外设模块UT（uart, gpio, peri）
+└── peri/         外设模块UT（uart, gpio, gtimer, peri）
 rtl/              RTL源码（SystemVerilog）
 cases/            软件测试用例
-sdk/              软件SDK（CRT、驱动）
+sdk/              软件SDK（CRT、UART/GPIO/GTimer驱动、syscalls）
 tools/            构建工具（bin2x, mkbin）+ Web UI（web_ui_v2.py/html）
+thirdparty/       第三方代码（Linux内核、OpenSBI）
 build/            构建产物
 ├── hw/model/     C模型可执行文件 + UT可执行文件
 ├── hw/vcs/       VCS仿真
@@ -160,11 +162,14 @@ build/            构建产物
 - [x] C-Model L1 指令/数据缓存，支持bypass
 - [x] C-Model 启动 Linux 内核
 - [x] C-Model 总线架构含 BTI/AXI4/APB 协议桥接、多路选择及地址路由
-- [x] C-Model GPIO 外设
-- [x] C-Model Web UI Dashboard（xterm.js, GPIO LED, reset, 历史回放）
-- [x] C-Model Terminal UI 含 ESC 键复位
-- [x] C-Model 单元测试框架，覆盖13+个模块
-- [x] RTL RV32G 指令集
+- [x] C-Model GPIO（24位双向，输出/输入/中断三种模式）
+- [x] C-Model GTimer（通用递减计时器）
+- [x] C-Model Web UI Dashboard（xterm.js, GPIO LED/按钮/开关, reset, 主题切换）
+- [x] C-Model Terminal UI（vim风格cmd模式, ESC键复位）
+- [x] C-Model 模块级单元测试框架
+- [x] C-Model 回归套件（run.sh）
+- [x] Linux RVBucket GPIO 驱动（gpio-rvbucket, sysfs接口）
+- [ ] RTL RV32G 指令集
 - [ ] RTL MMU 分页
 - [ ] RTL L1 缓存
 - [ ] RTL 启动 Linux 内核

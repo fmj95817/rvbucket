@@ -9,14 +9,15 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 - **CPU Core**: 2-stage pipelined RV32G (RV32IMACZicsr) CPU with MMU and TLB
 - **L1 Cache**: Configurable set-associative L1 I-Cache and L1 D-Cache with write-back support
 - **Boot ROM**: 1 KB
-- **Flash**: 1 MB
+- **Flash**: 32 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
 - **DTCM (Data Tightly Coupled Memory)**: 64 KB
 - **DDR**: Configurable size, supports preloading Linux payloads
-- **UART**: basic TX & RX
-- **GPIO**: 16-bit GPIO with LED output
+- **UART**: basic TX/RX function
+- **GPIO**: 24-bit bidirectional GPIO with output/input/interrupt modes, Web UI buttons & switches
+- **GTimer**: General-purpose countdown timer with IRQ
 - **ACLINT**: Core-local interruptor (mtime, mtimecmp, MSWI, SSWI)
-- **PLIC**: Platform-level interrupt controller
+- **PLIC**: Platform-level interrupt controller (UART/GPIO/GTimer IRQs)
 - **Bus Fabric**: BTI/AXI4/APB protocol bridges, mux, and demux
 
 ## Features
@@ -26,12 +27,13 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 - **MMU with Sv32 Paging**: TLB support, page table walker, boots Linux kernel.
 - **L1 Cache**: Configurable set-associative L1 I-Cache and D-Cache with bypass support.
 - **Trap Handling**: Machine/Supervisor mode traps, interrupts, delegations.
-- **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, ACLINT, PLIC.
+- **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, GTimer, ACLINT, PLIC.
 - **C-Model**: Cycle-accurate simulation with VCD waveform dumps and interface transaction dumps.
-- **Web UI Dashboard**: Real-time UART console (xterm.js), GPIO LED panel, simulation reset control. Supports multi-client reconnect with history replay.
-- **Terminal UI**: Direct terminal-based UART console with ESC-key reset.
+- **Dual UI**: Web UI Dashboard (xterm.js terminal + GPIO panel + reset) and Terminal UI (vim-style cmd mode).
 - **RTL**: SystemVerilog implementation, supports VCS and Verilator simulation, FPGA synthesis.
 - **Unit Test Framework**: Modular UT framework with scoreboard, colored output, and interface dump verification.
+- **Linux Support**: UART console, sysfs GPIO interface.
+- **Regression Suite**: `run.sh` automates full SW case + UT regression with single-case mode.
 
 ## Quick Start
 
@@ -47,12 +49,15 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 | Command | Description |
 |---------|-------------|
 | `./build.sh hw model` | Build C-Model simulation |
-| `./build.sh hw model ut` | Build C-Model + all unit tests |
 | `./build.sh hw rtl vcs` | Build RTL simulation (VCS) |
 | `./build.sh hw rtl verilator` | Build RTL simulation (Verilator) |
 | `./build.sh hw fpga xilinx` | Generate Vivado FPGA project |
-| `./build.sh sw` | Build all software test cases |
-| `./build.sh linux` | Build Linux kernel + OpenSBI |
+| `./build.sh sw` | Build all bare-metal C test cases |
+| `./build.sh sw <name>` | Build a single C test case |
+| `./build.sh sw linux` | Build Linux kernel + OpenSBI |
+| `./build.sh sw linux clean` | Clean Linux kernel + OpenSBI build |
+| `./build.sh ut model` | Build all C-Model unit tests |
+| `./build.sh ut model <name>` | Build a single UT or UT subdirectory |
 
 *Note: For FPGA, add board description files under `fpga/xilinx/boards` and update `board` in `fpga/xilinx/proj.json`.*
 
@@ -62,58 +67,54 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 ```bash
 cd build/hw/model
 
-# Run a test case in terminal mode:
-./sim_top ../../sw/<test_case>/<test_case>.bin
+# Terminal mode:
+./sim_top ../../sw/<case>/<case>.bin
 
-# Run with Web UI dashboard (open http://localhost:5000 in browser):
-./sim_top --web-ui ../../sw/<test_case>/<test_case>.bin
+# Web UI dashboard (open http://localhost:5000):
+./sim_top --web-ui ../../sw/<case>/<case>.bin
 
-# Fast-load Linux (preloads kernel/initrd/dtb to DDR):
-./sim_top --fast-load-linux ../../sw/linux/linux.bin
-
-# Disable simulation end detection (for interactive use):
-./sim_top --no-end-detect --web-ui ../../sw/<test_case>/<test_case>.bin
-
-# Full Linux + Web UI:
+# Linux with fast preload to DDR:
 ./sim_top --fast-load-linux --web-ui ../../sw/linux/linux.bin
+
+# Disable end-of-sim detection (interactive use):
+./sim_top --no-end-detect --web-ui ../../sw/<case>/<case>.bin
 ```
 
 **Web UI Dashboard:**
-- UART console with full xterm.js terminal emulation (ANSI colors, cursor keys, paste)
-- GPIO LED panel (16 LEDs with real-time state)
-- Reset button to reboot the simulated SoC
-- Auto-reconnect with history replay on server restart
-- Multi-browser support (shared console)
+- xterm.js full terminal emulation (ANSI, cursor keys, paste, backspace)
+- 16-LED GPIO output panel + 4 buttons + 4 toggle switches
+- Reset button and auto-reconnect with history replay
+- Light/dark theme toggle with persistent preference
 
 **Terminal UI:**
-- Interactive UART console in terminal (raw mode)
-- Press `ESC` key to trigger simulation reset
+- Raw-mode interactive UART console
+- `ESC` enters vim-style cmd mode: `p1`–`p4` toggle buttons, `s1`–`s4` toggle switches, `r` reset, `i` back to interactive
 
-**C-Model Unit Tests:**
+**Regression Suite:**
 ```bash
-# Build all UTs:
-./build.sh hw model ut
+./run.sh model sw              # all SW cases (batch)
+./run.sh model sw <name>       # single SW case
+./run.sh model ut              # all UTs (batch)
+./run.sh model ut <name>       # single UT
+./run.sh model                 # full SW + UT regression
+```
 
-# Run a UT (cd to its build dir to keep artifacts local):
-cd build/hw/model/ut/<module_path>
-./<module_name>_ut
-
-# Example: run the axi2bti bridge UT with interface dump
-cd build/hw/model/ut/bus/bridge
-ITF_DUMP=1 ./axi2bti_ut
-cat itf_dump/*.txt
+**C-Model Unit Tests (stand-alone):**
+```bash
+./build.sh ut model            # build all UTs
+./run.sh model ut axi2bti      # run a single UT (cd to its build dir)
 ```
 
 **RTL (VCS):**
 ```bash
 cd build/hw/vcs
-./sim_top +program=../../sw/<test_case>/<test_case>.hex
+./sim_top +program=../../sw/<case>/<case>.hex
 ```
 
 **RTL (Verilator):**
 ```bash
 cd build/hw/verilator
-./obj_dir/Vsim_top +program=../../sw/<test_case>/<test_case>.hex
+./obj_dir/Vsim_top +program=../../sw/<case>/<case>.hex
 ```
 
 ## Project Structure
@@ -128,9 +129,9 @@ model/            C-Model source
 ├── core/         CPU core + peripherals
 │   └── hart/     Hart sub-modules (ifu, exu, mmu, csr, trap)
 ├── dbg/          Debug infrastructure (VCD, log, PCM)
-├── itf/          Interface definitions (BTI, AXI4, APB, etc.)
+├── itf/          Interface definitions (BTI, AXI4, APB, GPIO, etc.)
 ├── mem/          Memory models (RAM, ROM, L1 cache)
-├── peri/         Peripherals (UART, GPIO)
+├── peri/         Peripherals (UART, GPIO, GTimer)
 └── spec/         Architecture specifications (CSR, ISA, SoC config)
 sim/              Simulation environment
 ├── model/        C-Model simulation top, UI interface & implementations
@@ -140,11 +141,12 @@ ut/model/         Unit tests (mirrors model/ structure)
 ├── bus/          Bus UTs (bridge, mux, demux)
 ├── core/         Core UTs (aclint, hart/ifu)
 ├── mem/          Memory UTs (ram, rom, l1)
-└── peri/         Peripheral UTs (uart, gpio, peri)
+└── peri/         Peripheral UTs (uart, gpio, gtimer, peri)
 rtl/              RTL source (SystemVerilog)
 cases/            Software test cases
-sdk/              Software SDK (CRT, drivers)
+sdk/              Software SDK (CRT, drivers for UART/GPIO/GTimer/syscalls)
 tools/            Build tools (bin2x, mkbin) + Web UI (web_ui_v2.py/html)
+thirdparty/       Third-party code (Linux kernel, OpenSBI)
 build/            Build outputs
 ├── hw/model/     C-Model binary + UT binaries
 ├── hw/vcs/       VCS simulation
@@ -160,11 +162,14 @@ build/            Build outputs
 - [x] C-Model L1 I-Cache and D-Cache with bypass
 - [x] C-Model boots Linux kernel
 - [x] C-Model bus fabric with BTI/AXI4/APB protocol bridges, mux, and demux
-- [x] C-Model GPIO peripheral
-- [x] C-Model Web UI dashboard (xterm.js, GPIO LEDs, reset, history replay)
-- [x] C-Model Terminal UI with ESC-key reset
-- [x] C-Model unit test framework with 13+ module UTs
-- [x] RTL RV32G instruction set
+- [x] C-Model GPIO (24-bit bidirectional, output/input/interrupt modes)
+- [x] C-Model GTimer (general-purpose countdown timer)
+- [x] C-Model Web UI Dashboard (xterm.js, GPIO LEDs/buttons/switches, reset, theme toggle)
+- [x] C-Model Terminal UI (vim-style cmd mode, ESC-key reset)
+- [x] C-Model module-level unit test framework
+- [x] C-Model regression suite (run.sh)
+- [x] Linux RVBucket GPIO driver (gpio-rvbucket, sysfs interface)
+- [ ] RTL RV32G instruction set
 - [ ] RTL MMU with paging
 - [ ] RTL L1 cache
 - [ ] RTL boots Linux kernel
