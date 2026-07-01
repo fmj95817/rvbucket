@@ -4,3 +4,4 @@ build
 qemu-ref
 thirdparty/linux
 thirdparty/opensbi
+thirdparty/busybox

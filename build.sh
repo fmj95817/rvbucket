@@ -23,6 +23,7 @@ GXPR="./tools/gxpr.py"
 
 OPEN_SBI_DIR="./thirdparty/opensbi"
 LINUX_DIR="./thirdparty/linux"
+BUSYBOX_DIR="./thirdparty/busybox"
 LINUX_CROSS_PREFIX="riscv32-unknown-linux-gnu"
 LINUX_KERNEL_LOAD="0x40000000"
 LINUX_INITRD_LOAD="0x45000000"
@@ -61,7 +62,29 @@ function build_opensbi_case {
     ${BIN2X} "${bin}" hex > "${hex}"
 }
 
-function build_linux_case {
+function build_linux_opensbi {
+    local clean="${1}"
+
+    if [ "${clean}" = "clean" ]; then
+        ${GMAKE} -C "${OPEN_SBI_DIR}" \
+            PLATFORM=rvbucket \
+            CROSS_COMPILE="${CROSS_PREFIX}-" \
+            FW_PIC=n \
+            clean
+        return
+    fi
+
+    ${GMAKE} -B -C "${OPEN_SBI_DIR}" \
+        PLATFORM=rvbucket \
+        CROSS_COMPILE="${CROSS_PREFIX}-" \
+        FW_PAYLOAD=n \
+        FW_JUMP=y \
+        FW_JUMP_ADDR="${LINUX_KERNEL_LOAD}" \
+        FW_JUMP_FDT_ADDR="${LINUX_DTB_LOAD}" \
+        FW_PIC=n
+}
+
+function build_linux_kernel {
     local clean="${1}"
 
     if [ "${clean}" = "clean" ]; then
@@ -69,11 +92,76 @@ function build_linux_case {
             ARCH=riscv \
             CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
             clean
-        ${GMAKE} -C "${OPEN_SBI_DIR}" \
-            PLATFORM=rvbucket \
-            CROSS_COMPILE="${CROSS_PREFIX}-" \
-            FW_PIC=n \
+        return
+    fi
+
+    local initrd="${BUSYBOX_DIR}/rootfs.cpio"
+    local initrd_size=$(stat -c %s "${initrd}")
+    local initrd_end=$(printf "0x%08x" $((${LINUX_INITRD_LOAD} + initrd_size)))
+    sed -i "s/linux,initrd-end = <0x[0-9a-fA-F]*>;/linux,initrd-end = <${initrd_end}>;/" \
+        "${LINUX_DIR}/arch/riscv/boot/dts/rvbucket/rvbucket.dts"
+
+    ${GMAKE} -C "${LINUX_DIR}" \
+        ARCH=riscv \
+        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
+        rvbucket_defconfig
+
+    ${GMAKE} -j16 -C "${LINUX_DIR}" \
+        ARCH=riscv \
+        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
+        Image rvbucket/rvbucket.dtb
+}
+
+function build_linux_rootfs {
+    local clean="${1}"
+    local initrd="${BUSYBOX_DIR}/rootfs.cpio"
+
+    if [ "${clean}" = "clean" ]; then
+        ${GMAKE} -C "${BUSYBOX_DIR}" \
+            ARCH=riscv \
+            CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
             clean
+        rm -rf "${BUSYBOX_DIR}/rootfs"
+        rm "${initrd}"
+        return
+    fi
+
+    sed -i '/^config STATIC$/,/^config / { s/^\tdefault n$/\tdefault y/; }' \
+        "${BUSYBOX_DIR}/Config.in"
+
+    ${GMAKE} -C "${BUSYBOX_DIR}" \
+        ARCH=riscv \
+        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
+        defconfig
+    ${GMAKE} -j16 -C "${BUSYBOX_DIR}" \
+        ARCH=riscv \
+        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-"
+    ${GMAKE} -j16 -C "${BUSYBOX_DIR}" \
+        ARCH=riscv \
+        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
+        install
+    mkdir -p ${BUSYBOX_DIR}/rootfs/{bin,sbin,etc,proc,sys,usr/bin,usr/sbin}
+    cp -a "${BUSYBOX_DIR}/_install"/* "${BUSYBOX_DIR}/rootfs/"
+
+    echo "#!/bin/sh" > "${BUSYBOX_DIR}/rootfs/init"
+    echo "mount -t proc none /proc" >> "${BUSYBOX_DIR}/rootfs/init"
+    echo "mount -t sysfs none /sys" >> "${BUSYBOX_DIR}/rootfs/init"
+    echo 'echo -e "\nWelcome to RISC-V 32-bit Linux!\n"' >> "${BUSYBOX_DIR}/rootfs/init"
+    echo "exec /bin/sh" >> "${BUSYBOX_DIR}/rootfs/init"
+    chmod +x "${BUSYBOX_DIR}/rootfs/init"
+
+    cd "${BUSYBOX_DIR}/rootfs"
+    find . | cpio -H newc -o > ../rootfs.cpio
+    cd -
+}
+
+function build_linux_case {
+    local clean="${1}"
+
+    if [ "${clean}" = "clean" ]; then
+        build_linux_opensbi clean
+        build_linux_kernel clean
+        build_linux_rootfs clean
         echo "build_sw: linux clean done."
         return
     fi
@@ -85,7 +173,7 @@ function build_linux_case {
     local fw_bin="${fw_dir}/fw_jump.bin"
     local fw_elf="${fw_dir}/fw_jump.elf"
     local kernel="${LINUX_DIR}/arch/riscv/boot/Image"
-    local initrd="${LINUX_DIR}/rootfs.cpio.gz"
+    local initrd="${BUSYBOX_DIR}/rootfs.cpio"
     local dtb="${LINUX_DIR}/arch/riscv/boot/dts/rvbucket/rvbucket.dtb"
     local empty_dtcm="${output_dir}/${case_name}.dtcm"
     local bin="${output_dir}/${case_name}.bin"
@@ -93,24 +181,9 @@ function build_linux_case {
 
     mkdir -p "${output_dir}"
 
-    ${GMAKE} -C "${LINUX_DIR}" \
-        ARCH=riscv \
-        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
-        rvbucket_defconfig
-
-    ${GMAKE} -j16 -C "${LINUX_DIR}" \
-        ARCH=riscv \
-        CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
-        Image rvbucket/rvbucket.dtb
-
-    ${GMAKE} -B -C "${OPEN_SBI_DIR}" \
-        PLATFORM=rvbucket \
-        CROSS_COMPILE="${CROSS_PREFIX}-" \
-        FW_PAYLOAD=n \
-        FW_JUMP=y \
-        FW_JUMP_ADDR="${LINUX_KERNEL_LOAD}" \
-        FW_JUMP_FDT_ADDR="${LINUX_DTB_LOAD}" \
-        FW_PIC=n
+    build_linux_rootfs
+    build_linux_kernel
+    build_linux_opensbi
 
     cp "${fw_elf}" "${output_dir}/${case_name}.elf"
     cp "${fw_bin}" "${output_dir}/${case_name}.itcm"

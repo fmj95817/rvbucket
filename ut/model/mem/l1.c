@@ -328,6 +328,7 @@ TEST_CASE(l1_tb_t, flush_invalidates)
 int main(void)
 {
     l1_conf_t cached_conf = {
+        .full_bypass = false,
         .ro = false,
         .size = L1_LINE_SIZE,
         .way_num = 1

@@ -40,6 +40,10 @@ static u32 l1_req_tag(const l1_t *l1, u32 addr)
 
 static bool l1_bypass(const l1_t *l1, u32 addr)
 {
+    if (l1->conf.full_bypass) {
+        return true;
+    }
+
     for (u32 i = 0; i < L1_BYPASS_RANGE_NUM; i++) {
         if (l1->conf.bypass_sizes[i] == 0) {
             continue;
@@ -48,7 +52,7 @@ static bool l1_bypass(const l1_t *l1, u32 addr)
             return true;
         }
     }
-    return true;
+    return false;
 }
 
 static void l1_invalidate(l1_t *l1)

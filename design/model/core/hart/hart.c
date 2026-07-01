@@ -95,6 +95,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     bti_mux_construct(&s->l1d_bti_mux, "u_l1d_bti_mux", 2);
 
     l1_conf_t l1i_conf = {
+        .full_bypass = false,
         .ro = true,
         .size = L1I_SIZE,
         .way_num = L1I_WAY_NUM,
@@ -108,6 +109,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     l1_construct(&s->l1i, "u_l1i", &l1i_conf);
 
     l1_conf_t l1d_conf = {
+        .full_bypass = true,
         .ro = false,
         .size = L1D_SIZE,
         .way_num = L1D_WAY_NUM,

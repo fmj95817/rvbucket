@@ -11,6 +11,7 @@
 #define L1_LINE_SIZE 64u
 
 typedef struct l1_conf {
+    bool full_bypass;
     bool ro;
     u32 size;
     u32 way_num;
