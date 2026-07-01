@@ -53,6 +53,7 @@ typedef struct sim_top {
     soc_t soc;
 
     bool end_sim;
+    int exit_code;
 
     const char *prog_path;
     bool fast_load_linux;
@@ -191,6 +192,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
 static void sim_top_reset(sim_top_t *sim_top)
 {
     sim_top->end_sim = false;
+    sim_top->exit_code = 0;
     DBG_CHECK(sim_top->ui != NULL);
     sim_top->ui->reset(sim_top->ui);
     soc_reset(&sim_top->soc);
@@ -243,6 +245,7 @@ static void sim_top_clock(sim_top_t *sim_top)
 
         ch_tx.u = pkt.data;
         if (!sim_top->no_end_detect && ch_tx.s == SIM_END_CHAR) {
+            sim_top->exit_code = (int)sim_top->soc.cpu.hart.exu.gpr[5];
             sim_top->end_sim = true;
         } else {
             sim_top->ui->uart_out(sim_top->ui, (u8)ch_tx.s);
@@ -311,6 +314,7 @@ int main(int argc, char *argv[])
         sim_top_clock(&sim_top);
     }
 
+    int ret = sim_top.exit_code;
     sim_top_free(&sim_top);
-    return 0;
+    return ret;
 }

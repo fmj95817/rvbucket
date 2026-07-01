@@ -183,6 +183,7 @@ _start:
     call uart_init
 
     call main
+    mv t0, a0
 
     li a0, 0x10
     call uart_write
