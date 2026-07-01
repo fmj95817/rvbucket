@@ -8,14 +8,14 @@ void soc_construct(soc_t *soc, const char *name)
 {
     DBG_VCD_MODULE_SCOPE(name);
 
-    AXI4_IF_CONSTRUCT(soc, mm_i_);
-    AXI4_IF_CONSTRUCT(soc, mm_d_);
-    AXI4_IF_CONSTRUCT(soc, ddr_i_);
-    AXI4_IF_CONSTRUCT(soc, ddr_d_);
-    AXI4_IF_CONSTRUCT(soc, flash_i_);
-    AXI4_IF_CONSTRUCT(soc, flash_d_);
-    AXI4_IF_CONSTRUCT(soc, flash_);
-    APB_IF_CONSTRUCT(soc, peri_);
+    AXI4_IF_CONSTRUCT(soc, mm_i_, 1);
+    AXI4_IF_CONSTRUCT(soc, mm_d_, 1);
+    AXI4_IF_CONSTRUCT(soc, ddr_i_, 1);
+    AXI4_IF_CONSTRUCT(soc, ddr_d_, 1);
+    AXI4_IF_CONSTRUCT(soc, flash_i_, 1);
+    AXI4_IF_CONSTRUCT(soc, flash_d_, 1);
+    AXI4_IF_CONSTRUCT(soc, flash_, 1);
+    APB_IF_CONSTRUCT(soc, peri_, 1);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_uart_irq_itf, false, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_gpio_irq_itf, false, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_gtimer_irq_itf, false, false);

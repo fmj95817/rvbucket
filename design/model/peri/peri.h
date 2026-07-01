@@ -31,12 +31,9 @@ typedef struct peri {
     gtimer_t gtimer;
     apb_demux_t apb_demux;
 
-    itf_t uart_apb_req_itf;
-    itf_t uart_apb_rsp_itf;
-    itf_t gpio_apb_req_itf;
-    itf_t gpio_apb_rsp_itf;
-    itf_t gtimer_apb_req_itf;
-    itf_t gtimer_apb_rsp_itf;
+    APB_IF_DECL(uart_);
+    APB_IF_DECL(gpio_);
+    APB_IF_DECL(gtimer_);
 } peri_t;
 
 extern void peri_construct(peri_t *peri, const char *name, u32 base, u32 size);

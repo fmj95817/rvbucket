@@ -4,9 +4,9 @@
 #include "apb_req_if.h"
 #include "apb_rsp_if.h"
 
-#define APB_IF_CONSTRUCT(module, pfx) do { \
-    APB_REQ_IF_CONSTRUCT(module, pfx##apb_req_itf, 1); \
-    APB_RSP_IF_CONSTRUCT(module, pfx##apb_rsp_itf, 1); \
+#define APB_IF_CONSTRUCT(module, pfx, depth) do { \
+    APB_REQ_IF_CONSTRUCT(module, pfx##apb_req_itf, depth); \
+    APB_RSP_IF_CONSTRUCT(module, pfx##apb_rsp_itf, depth); \
 } while (0)
 
 #define APB_IF_RESET(obj, pfx) do { \

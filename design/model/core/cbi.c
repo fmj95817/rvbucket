@@ -5,15 +5,13 @@ void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf)
 {
     DBG_VCD_MODULE_SCOPE(name);
 
-    AXI4_IF_CONSTRUCT(cbi, boot_rom_);
-    AXI4_IF_CONSTRUCT(cbi, itcm_i_);
-    AXI4_IF_CONSTRUCT(cbi, itcm_d_);
-    AXI4_IF_CONSTRUCT(cbi, dtcm_);
-    AXI4_IF_CONSTRUCT(cbi, cfg_);
-    BTI_REQ_IF_CONSTRUCT(cbi, cfg_bti_req_itf, 1);
-    BTI_RSP_IF_CONSTRUCT(cbi, cfg_bti_rsp_itf, 1);
-    APB_REQ_IF_CONSTRUCT(cbi, cfg_apb_req_itf, 1);
-    APB_RSP_IF_CONSTRUCT(cbi, cfg_apb_rsp_itf, 1);
+    AXI4_IF_CONSTRUCT(cbi, boot_rom_, 1);
+    AXI4_IF_CONSTRUCT(cbi, itcm_i_, 1);
+    AXI4_IF_CONSTRUCT(cbi, itcm_d_, 1);
+    AXI4_IF_CONSTRUCT(cbi, dtcm_, 1);
+    AXI4_IF_CONSTRUCT(cbi, cfg_, 1);
+    BTI_IF_CONSTRUCT(cbi, cfg_, 1);
+    APB_IF_CONSTRUCT(cbi, cfg_, 1);
 
     AXI4_SLV_IMPORT(&cbi->i_axi_demux, host_, cbi, hart_i_);
     AXI4_MST_ARR_CONNECT(&cbi->i_axi_demux, gst_, 0, cbi, boot_rom_);
@@ -33,13 +31,11 @@ void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf)
     axi_demux_construct(&cbi->d_axi_demux, "u_d_axi_demux", 4, d_axi_gst_bases, d_axi_gst_sizes);
 
     AXI4_SLV_CONNECT(&cbi->boot_rom_axi2bti, , cbi, boot_rom_);
-    cbi->boot_rom_axi2bti.bti_req_mst = cbi->boot_rom_bti_req_mst;
-    cbi->boot_rom_axi2bti.bti_rsp_slv = cbi->boot_rom_bti_rsp_slv;
+    BTI_MST_IMPORT(&cbi->boot_rom_axi2bti, , cbi, boot_rom_);
     axi2bti_construct(&cbi->boot_rom_axi2bti, "u_boot_rom_axi2bti");
 
     AXI4_SLV_CONNECT(&cbi->itcm_i_axi2bti, , cbi, itcm_i_);
-    cbi->itcm_i_axi2bti.bti_req_mst = cbi->itcm_i_bti_req_mst;
-    cbi->itcm_i_axi2bti.bti_rsp_slv = cbi->itcm_i_bti_rsp_slv;
+    BTI_MST_IMPORT(&cbi->itcm_i_axi2bti, , cbi, itcm_i_);
     axi2bti_construct(&cbi->itcm_i_axi2bti, "u_itcm_i_axi2bti");
 
     AXI4_SLV_CONNECT(&cbi->itcm_d_axi2bti, , cbi, itcm_d_);

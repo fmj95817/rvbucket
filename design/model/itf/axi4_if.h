@@ -7,12 +7,12 @@
 #include "axi4_ar_if.h"
 #include "axi4_r_if.h"
 
-#define AXI4_IF_CONSTRUCT(module, pfx) do { \
-    AXI4_AW_IF_CONSTRUCT(module, pfx##axi4_aw_itf, 1); \
-    AXI4_W_IF_CONSTRUCT(module, pfx##axi4_w_itf, 1); \
-    AXI4_B_IF_CONSTRUCT(module, pfx##axi4_b_itf, 1); \
-    AXI4_AR_IF_CONSTRUCT(module, pfx##axi4_ar_itf, 1); \
-    AXI4_R_IF_CONSTRUCT(module, pfx##axi4_r_itf, 1); \
+#define AXI4_IF_CONSTRUCT(module, pfx, depth) do { \
+    AXI4_AW_IF_CONSTRUCT(module, pfx##axi4_aw_itf, depth); \
+    AXI4_W_IF_CONSTRUCT(module, pfx##axi4_w_itf, depth); \
+    AXI4_B_IF_CONSTRUCT(module, pfx##axi4_b_itf, depth); \
+    AXI4_AR_IF_CONSTRUCT(module, pfx##axi4_ar_itf, depth); \
+    AXI4_R_IF_CONSTRUCT(module, pfx##axi4_r_itf, depth); \
 } while (0)
 
 #define AXI4_IF_RESET(obj, pfx) do { \

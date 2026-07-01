@@ -152,7 +152,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
 
     UART_IF_CONSTRUCT(sim_top, uart_rx_itf, 1);
     UART_IF_CONSTRUCT(sim_top, uart_tx_itf, 1);
-    AXI4_IF_CONSTRUCT(sim_top, ddr_);
+    AXI4_IF_CONSTRUCT(sim_top, ddr_, 1);
     GPIO_SIGNAL_IF_CONSTRUCT(sim_top, gpio_inout_itf, false, false);
 
     sim_top->gpio_inout_io = itf_signal_get_src_and_chk(&sim_top->gpio_inout_itf);

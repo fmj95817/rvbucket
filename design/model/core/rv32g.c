@@ -5,14 +5,14 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
 {
     DBG_VCD_MODULE_SCOPE(name);
 
-    BTI_IF_CONSTRUCT(s, boot_rom_);
-    BTI_IF_CONSTRUCT(s, itcm_i_);
-    BTI_IF_CONSTRUCT(s, itcm_d_);
-    BTI_IF_CONSTRUCT(s, dtcm_);
-    APB_IF_CONSTRUCT(s, aclint_cfg_);
-    APB_IF_CONSTRUCT(s, plic_cfg_);
-    AXI4_IF_CONSTRUCT(s, hart_i_);
-    AXI4_IF_CONSTRUCT(s, hart_d_);
+    BTI_IF_CONSTRUCT(s, boot_rom_, 1);
+    BTI_IF_CONSTRUCT(s, itcm_i_, 1);
+    BTI_IF_CONSTRUCT(s, itcm_d_, 1);
+    BTI_IF_CONSTRUCT(s, dtcm_, 1);
+    APB_IF_CONSTRUCT(s, aclint_cfg_, 1);
+    APB_IF_CONSTRUCT(s, plic_cfg_, 1);
+    AXI4_IF_CONSTRUCT(s, hart_i_, 1);
+    AXI4_IF_CONSTRUCT(s, hart_d_, 1);
     CORE_TIMER_SIGNAL_IF_CONSTRUCT(s, core_timer_sig_itf, false, false);
     CORE_M_IRQ_SIGNAL_IF_CONSTRUCT(s, core_m_irq_sig_itf, false, false);
     CORE_SWI_PEND_SIGNAL_IF_CONSTRUCT(s, core_swi_pend_sig_itf, false, false);
@@ -75,7 +75,6 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     extern u32 g_boot_code_size;
     extern u8 g_boot_code[];
     rom_construct(&s->boot_rom, "u_boot_rom", ROM_MODE_BTI, conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base);
-
 
     BTI_SLV_ARR_CONNECT(&s->itcm, , 0, s, itcm_i_);
     BTI_SLV_ARR_CONNECT(&s->itcm, , 1, s, itcm_d_);

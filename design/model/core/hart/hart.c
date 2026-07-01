@@ -14,12 +14,12 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     FCH_RSP_IF_CONSTRUCT(s, fch_rsp_itf, 1);
     LDST_REQ_IF_CONSTRUCT(s, ldst_req_itf, 1);
     LDST_RSP_IF_CONSTRUCT(s, ldst_rsp_itf, 1);
-    BTI_IF_CONSTRUCT(s, va_i_);
-    BTI_IF_CONSTRUCT(s, va_d_);
-    BTI_IF_CONSTRUCT(s, pa_i_);
-    BTI_IF_CONSTRUCT(s, pa_d_);
-    BTI_IF_CONSTRUCT(s, pa_ptw_);
-    BTI_IF_CONSTRUCT(s, l1d_);
+    BTI_IF_CONSTRUCT(s, va_i_, 1);
+    BTI_IF_CONSTRUCT(s, va_d_, 1);
+    BTI_IF_CONSTRUCT(s, pa_i_, 1);
+    BTI_IF_CONSTRUCT(s, pa_d_, 1);
+    BTI_IF_CONSTRUCT(s, pa_ptw_, 1);
+    BTI_IF_CONSTRUCT(s, l1d_, 1);
     TLB_FLUSH_IF_CONSTRUCT(s, tlb_flush_itf, 1);
     L1_FLUSH_IF_CONSTRUCT(s, l1i_flush_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, i_hart_expt_itf, 1);

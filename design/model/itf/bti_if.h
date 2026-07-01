@@ -4,9 +4,9 @@
 #include "bti_req_if.h"
 #include "bti_rsp_if.h"
 
-#define BTI_IF_CONSTRUCT(module, pfx) do { \
-    BTI_REQ_IF_CONSTRUCT(module, pfx##bti_req_itf, 1); \
-    BTI_RSP_IF_CONSTRUCT(module, pfx##bti_rsp_itf, 1); \
+#define BTI_IF_CONSTRUCT(module, pfx, depth) do { \
+    BTI_REQ_IF_CONSTRUCT(module, pfx##bti_req_itf, depth); \
+    BTI_RSP_IF_CONSTRUCT(module, pfx##bti_rsp_itf, depth); \
 } while (0)
 
 #define BTI_IF_RESET(obj, pfx) do { \
