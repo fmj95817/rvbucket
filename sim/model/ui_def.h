@@ -10,6 +10,7 @@ typedef struct sim_ui {
     bool (*uart_in)(void *ui, u8 *ch);
     void (*gpio_change)(void *ui, u32 val);
     bool (*gpio_in_poll)(void *ui, u32 *val);
+    u32  (*gpio_in_read)(void *ui);
     void (*cleanup)(void *ui);
 } sim_ui_t;
 

@@ -8,7 +8,7 @@
 
 - **CPU核心**: 2级流水线的RV32G (RV32IMACZicsr) CPU，含MMU和TLB
 - **L1 Cache**: 可配置组相联L1指令缓存和数据缓存，支持写回
-- **Boot ROM**: 1 KB
+- **Boot ROM**: 2 KB
 - **Flash**: 32 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
 - **DTCM (Data Tightly Coupled Memory)**: 64 KB

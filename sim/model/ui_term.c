@@ -250,6 +250,12 @@ static bool gpio_in_poll(void *ctx, u32 *val)
     return true;
 }
 
+static u32 gpio_in_read(void *ctx)
+{
+    ui_term_t *ut = (ui_term_t *)ctx;
+    return ut->gpio_in_val;
+}
+
 static void gpio_change(void *ctx, u32 val)
 {
     (void)ctx;
@@ -279,6 +285,7 @@ sim_ui_t *ui_term_create(void)
     ut->ui.uart_in = uart_in;
     ut->ui.gpio_change = gpio_change;
     ut->ui.gpio_in_poll = gpio_in_poll;
+    ut->ui.gpio_in_read = gpio_in_read;
     ut->ui.cleanup = cleanup;
     return &ut->ui;
 }

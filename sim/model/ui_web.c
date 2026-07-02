@@ -17,6 +17,7 @@ typedef struct {
     int fd;
     pid_t pid;
     bool reset_req;
+    u32  gpio_in_val;
     char rbuf[256];   // persistent read buffer for uart_in
     int rpos;         // read position in rbuf
     int rlen;         // valid data length in rbuf
@@ -121,6 +122,7 @@ static bool gpio_in_poll(void *ctx, u32 *val)
         if (strncmp(line, "gpin:", 5) == 0) {
             unsigned v;
             if (sscanf(line + 5, "%x", &v) == 1) {
+                uw->gpio_in_val = (u32)v;
                 *val = (u32)v;
                 return true;
             }
@@ -131,6 +133,12 @@ static bool gpio_in_poll(void *ctx, u32 *val)
         break;
     }
     return false;
+}
+
+static u32 gpio_in_read(void *ctx)
+{
+    ui_web_t *uw = (ui_web_t *)ctx;
+    return uw->gpio_in_val;
 }
 
 static void gpio_change(void *ctx, u32 val)
@@ -194,6 +202,7 @@ sim_ui_t *ui_web_create(void)
     uw->ui.uart_in = uart_in;
     uw->ui.gpio_change = gpio_change;
     uw->ui.gpio_in_poll = gpio_in_poll;
+    uw->ui.gpio_in_read = gpio_in_read;
     uw->ui.cleanup = cleanup;
     return &uw->ui;
 }

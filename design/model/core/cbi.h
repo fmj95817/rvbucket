@@ -48,7 +48,9 @@ typedef struct cbi {
 
     axi_demux_t i_axi_demux;
     axi_demux_t d_axi_demux;
-    axi2bti_t boot_rom_axi2bti;
+    axi2bti_t boot_rom_i_axi2bti;
+    axi2bti_t boot_rom_d_axi2bti;
+    bti_mux_t boot_rom_bti_mux;
     axi2bti_t itcm_i_axi2bti;
     axi2bti_t itcm_d_axi2bti;
     axi2bti_t dtcm_axi2bti;
@@ -56,7 +58,10 @@ typedef struct cbi {
     bti2apb_t cfg_bti2apb;
     apb_demux_t cfg_apb_demux;
 
-    AXI4_IF_DECL(boot_rom_);
+    AXI4_IF_DECL(boot_rom_i_);
+    AXI4_IF_DECL(boot_rom_d_);
+    BTI_IF_DECL(boot_rom_i_);
+    BTI_IF_DECL(boot_rom_d_);
     AXI4_IF_DECL(itcm_i_);
     AXI4_IF_DECL(itcm_d_);
     AXI4_IF_DECL(dtcm_);

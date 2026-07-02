@@ -255,11 +255,13 @@ function build_sw_case {
     ${BIN2X} "${bin}" hex > "${hex}"
 
     if [ "${case_name}" = "boot" ]; then
+        local bootrom="${output_dir}/${case_name}.bootrom"
+        ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bootrom}"
         if [ "${2}" = "model" ]; then
-            ${BIN2X} "${itcm}" c_array > design/model/core/boot.c
+            ${BIN2X} "${bootrom}" c_array > design/model/core/boot.c
         elif [ "${2}" = "rtl" ]; then
-            ${BIN2X} "${itcm}" sv_rom_header > design/rtl/boot.svh
-            ${BIN2X} "${itcm}" sv_rom_src > design/rtl/boot.sv
+            ${BIN2X} "${bootrom}" sv_rom_header > design/rtl/boot.svh
+            ${BIN2X} "${bootrom}" sv_rom_src > design/rtl/boot.sv
         fi
     fi
 }

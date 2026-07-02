@@ -8,7 +8,7 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 
 - **CPU Core**: 2-stage pipelined RV32G (RV32IMACZicsr) CPU with MMU and TLB
 - **L1 Cache**: Configurable set-associative L1 I-Cache and L1 D-Cache with write-back support
-- **Boot ROM**: 1 KB
+- **Boot ROM**: 2 KB
 - **Flash**: 32 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
 - **DTCM (Data Tightly Coupled Memory)**: 64 KB

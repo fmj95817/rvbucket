@@ -6,7 +6,7 @@
 #define HART_NUM       1u
 
 #define BOOT_ROM_BASE  0x00000000u
-#define BOOT_ROM_SIZE  (1u * KiB)
+#define BOOT_ROM_SIZE  (2u * KiB)
 #define ITCM_BASE      0x10000000u
 #define ITCM_SIZE      (512u * KiB)
 #define DTCM_BASE      0x20000000u

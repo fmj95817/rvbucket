@@ -21,6 +21,7 @@
 #define LINUX_BIN_HEADER_SIZE 40u
 #define UART_IN_POLL_INTERVAL 500u
 #define GPIO_IN_POLL_INTERVAL 500u
+#define BOOT_PROG_GPIO_PIN 20u
 
 typedef struct program {
     u32 size;
@@ -59,6 +60,7 @@ typedef struct sim_top {
     bool fast_load_linux;
     bool web_ui;
     bool no_end_detect;
+    bool boot_prog;
 
     sim_ui_t *ui;
 } sim_top_t;
@@ -146,7 +148,8 @@ static void sim_top_burn_program(sim_top_t *sim_top)
 }
 
 static void sim_top_construct(sim_top_t *sim_top, const char *name,
-    const char *prog_path, bool fast_load_linux, bool web_ui, bool no_end_detect)
+    const char *prog_path, bool fast_load_linux, bool web_ui, bool no_end_detect,
+    bool boot_prog)
 {
     DBG_VCD_MODULE_SCOPE(name);
     sim_top->cycle = dbg_pcm_reg_perf_cnt("cycles");
@@ -179,6 +182,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
     sim_top->fast_load_linux = fast_load_linux;
     sim_top->web_ui = web_ui;
     sim_top->no_end_detect = no_end_detect;
+    sim_top->boot_prog = boot_prog;
 
     sim_top_burn_program(sim_top);
 
@@ -203,6 +207,14 @@ static void sim_top_reset(sim_top_t *sim_top)
     itf_reset(&sim_top->uart_tx_itf);
     AXI4_IF_RESET(sim_top, ddr_);
     itf_reset(&sim_top->gpio_inout_itf);
+
+    u32 gpio_val = sim_top->ui->gpio_in_read(sim_top->ui);
+    sim_top->gpio_inout_io->val = gpio_val;
+
+    if (sim_top->boot_prog) {
+        sim_top->gpio_inout_io->val |= (1u << BOOT_PROG_GPIO_PIN);
+        sim_top->ui->gpio_change(sim_top->ui, sim_top->gpio_inout_io->val);
+    }
 }
 
 static void sim_top_clock(sim_top_t *sim_top)
@@ -277,15 +289,32 @@ static void sim_top_free(sim_top_t *sim_top)
     itf_free(&sim_top->gpio_inout_itf);
 }
 
+static void print_usage(const char *prog)
+{
+    fprintf(stderr,
+        "Usage: %s [options] <program.bin>\n"
+        "\n"
+        "Options:\n"
+        "  --fast-load-linux  Preload Linux payloads to DDR via fast path\n"
+        "  --web-ui           Use web-based UI instead of terminal\n"
+        "  --no-end-detect    Disable test-end detection (0x10 terminator)\n"
+        "  --boot-prog        Enable bootloader progress output via UART\n"
+        "\n"
+        "Arguments:\n"
+        "  <program.bin>      Path to the binary program image\n",
+        prog);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: %s [--fast-load-linux] [--web-ui] [--no-end-detect] <program.bin>\n", argv[0]);
+        print_usage(argv[0]);
         return 0;
     }
     bool fast_load_linux = false;
     bool web_ui = false;
     bool no_end_detect = false;
+    bool boot_prog = false;
     const char *prog_path = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--fast-load-linux") == 0) {
@@ -294,20 +323,23 @@ int main(int argc, char *argv[])
             web_ui = true;
         } else if (strcmp(argv[i], "--no-end-detect") == 0) {
             no_end_detect = true;
+        } else if (strcmp(argv[i], "--boot-prog") == 0) {
+            boot_prog = true;
         } else if (!prog_path) {
             prog_path = argv[i];
         } else {
-            fprintf(stderr, "usage: %s [--fast-load-linux] [--web-ui] [--no-end-detect] <program.bin>\n", argv[0]);
+            print_usage(argv[0]);
             return 1;
         }
     }
     if (!prog_path) {
-        fprintf(stderr, "usage: %s [--fast-load-linux] [--web-ui] [--no-end-detect] <program.bin>\n", argv[0]);
+        print_usage(argv[0]);
         return 1;
     }
 
     sim_top_t sim_top;
-    sim_top_construct(&sim_top, "sim_top", prog_path, fast_load_linux, web_ui, no_end_detect);
+    sim_top_construct(&sim_top, "sim_top", prog_path,
+                      fast_load_linux, web_ui, no_end_detect, boot_prog);
     sim_top_reset(&sim_top);
 
     while (!sim_top.end_sim) {

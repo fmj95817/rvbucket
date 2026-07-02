@@ -24,7 +24,7 @@ extern void ifetch_branch(void);
 extern void ifetch_target(void);
 extern void ifetch_wrong_path(void);
 
-void test_finish(void) __attribute__((noreturn));
+int test_finish(void);
 
 static uint32_t root_pt[1024] __attribute__((aligned(4096)));
 static uint32_t code_pt[1024] __attribute__((aligned(4096)));
@@ -127,19 +127,22 @@ static void uart_puts(const char *str)
     }
 }
 
-void test_finish(void)
+int test_finish(void)
 {
     if (target_seen == 1u && wrong_path_seen == 0u &&
         fault_seen == 1u && bad_fault == 0u) {
         uart_puts("ifetch_fault_squash: PASS\n");
+        return 0;
     } else {
         uart_puts("ifetch_fault_squash: FAIL\n");
+        return 1;
     }
 
     UART_TX = 0x10u;
     while (1) {
         asm volatile("wfi");
     }
+    return 0;
 }
 
 static void enter_supervisor(void)
@@ -233,5 +236,5 @@ int main(void)
     fault_seen = 0;
     bad_fault = 0;
     enter_supervisor();
-    test_finish();
+    return test_finish();
 }
