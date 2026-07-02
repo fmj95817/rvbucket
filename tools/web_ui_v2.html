@@ -253,8 +253,15 @@ function setTermTheme(t) { term.options.theme = t; }
 function updateGpio(hexStr) {
     var val = parseInt(hexStr, 16); if (isNaN(val)) return;
     document.querySelectorAll('.led-dot[data-bit]').forEach(function(dot) {
-        var on = (val >> parseInt(dot.getAttribute('data-bit'))) & 1;
+        var bit = parseInt(dot.getAttribute('data-bit'));
+        var on = (val >> bit) & 1;
         dot.className = 'led-dot ' + (on ? 'on' : 'off');
+    });
+    gpioInVal = val & 0xFF0000;
+    document.querySelectorAll('.toggle[data-bit]').forEach(function(tog) {
+        var bit = parseInt(tog.getAttribute('data-bit'));
+        var on = (val >> bit) & 1;
+        if (on) tog.classList.add('on'); else tog.classList.remove('on');
     });
 }
 
