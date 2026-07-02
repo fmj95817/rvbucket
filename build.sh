@@ -2,8 +2,16 @@
 
 set -e
 
+UNAME=$(uname -s)
 HOST_CC="gcc"
-GMAKE="gmake"
+
+if [[ "${UNAME}" == "Darwin" ]]; then
+    MAKE="gmake"
+    SED="gsed"
+else
+    MAKE="make"
+    SED="sed"
+fi
 
 SDK_DIR="./sdk"
 CRT_DIR="${SDK_DIR}/crt"
@@ -48,7 +56,7 @@ function build_opensbi_case {
 
     mkdir -p "${output_dir}"
 
-    ${GMAKE} -C "${OPEN_SBI_DIR}" \
+    ${MAKE} -C "${OPEN_SBI_DIR}" \
         PLATFORM=rvbucket \
         CROSS_COMPILE="${CROSS_PREFIX}-" \
         FW_PAYLOAD_OFFSET=0x50000 \
@@ -66,7 +74,7 @@ function build_linux_opensbi {
     local clean="${1}"
 
     if [ "${clean}" = "clean" ]; then
-        ${GMAKE} -C "${OPEN_SBI_DIR}" \
+        ${MAKE} -C "${OPEN_SBI_DIR}" \
             PLATFORM=rvbucket \
             CROSS_COMPILE="${CROSS_PREFIX}-" \
             FW_PIC=n \
@@ -74,7 +82,7 @@ function build_linux_opensbi {
         return
     fi
 
-    ${GMAKE} -B -C "${OPEN_SBI_DIR}" \
+    ${MAKE} -B -C "${OPEN_SBI_DIR}" \
         PLATFORM=rvbucket \
         CROSS_COMPILE="${CROSS_PREFIX}-" \
         FW_PAYLOAD=n \
@@ -88,7 +96,7 @@ function build_linux_kernel {
     local clean="${1}"
 
     if [ "${clean}" = "clean" ]; then
-        ${GMAKE} -C "${LINUX_DIR}" \
+        ${MAKE} -C "${LINUX_DIR}" \
             ARCH=riscv \
             CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
             clean
@@ -96,17 +104,28 @@ function build_linux_kernel {
     fi
 
     local initrd="${BUSYBOX_DIR}/rootfs.cpio"
-    local initrd_size=$(stat -c %s "${initrd}")
+    local initrd_size=0
+    if [[ "${UNAME}" == "Darwin" ]]; then
+        initrd_size=$(stat -f %z "${initrd}")
+    else
+        initrd_size=$(stat -c %s "${initrd}")
+    fi
     local initrd_end=$(printf "0x%08x" $((${LINUX_INITRD_LOAD} + initrd_size)))
-    sed -i "s/linux,initrd-end = <0x[0-9a-fA-F]*>;/linux,initrd-end = <${initrd_end}>;/" \
+    ${SED} -i "s/linux,initrd-end = <0x[0-9a-fA-F]*>;/linux,initrd-end = <${initrd_end}>;/" \
         "${LINUX_DIR}/arch/riscv/boot/dts/rvbucket/rvbucket.dts"
 
-    ${GMAKE} -C "${LINUX_DIR}" \
+    if [[ "${UNAME}" == "Darwin" ]]; then
+        find "${LINUX_DIR}" -name 'Makefile' -o -name '*.sh' -o -name '*.pl' \
+            | xargs grep -l '\<sed\>' 2>/dev/null \
+            | xargs ${SED} -i 's/\<sed\>/gsed/g' 2>/dev/null || true
+    fi
+
+    ${MAKE} -C "${LINUX_DIR}" \
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
         rvbucket_defconfig
 
-    ${GMAKE} -j16 -C "${LINUX_DIR}" \
+    ${MAKE} -j16 -C "${LINUX_DIR}" \
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
         Image rvbucket/rvbucket.dtb
@@ -117,7 +136,7 @@ function build_linux_rootfs {
     local initrd="${BUSYBOX_DIR}/rootfs.cpio"
 
     if [ "${clean}" = "clean" ]; then
-        ${GMAKE} -C "${BUSYBOX_DIR}" \
+        ${MAKE} -C "${BUSYBOX_DIR}" \
             ARCH=riscv \
             CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
             clean
@@ -126,17 +145,17 @@ function build_linux_rootfs {
         return
     fi
 
-    sed -i '/^config STATIC$/,/^config / { s/^\tdefault n$/\tdefault y/; }' \
+    ${SED} -i '/^config STATIC$/,/^config / { s/^\tdefault n$/\tdefault y/; }' \
         "${BUSYBOX_DIR}/Config.in"
 
-    ${GMAKE} -C "${BUSYBOX_DIR}" \
+    ${MAKE} -C "${BUSYBOX_DIR}" \
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
         defconfig
-    ${GMAKE} -j16 -C "${BUSYBOX_DIR}" \
+    ${MAKE} -j16 -C "${BUSYBOX_DIR}" \
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-"
-    ${GMAKE} -j16 -C "${BUSYBOX_DIR}" \
+    ${MAKE} -j16 -C "${BUSYBOX_DIR}" \
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
         install
