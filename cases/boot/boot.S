@@ -1,4 +1,4 @@
-    .section .text
+    .section .text.boot, "ax"
     .globl _boot
     .type _boot,@function
 

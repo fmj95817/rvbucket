@@ -8,7 +8,9 @@ MEMORY
 
 SECTIONS
 {
-    .text : {
-        *(*)
+    .text 0x00000000 : {
+        KEEP(*(.text.boot))
+        *(.text .text.*)
+        *(.rodata .rodata.*)
     } > BOOT_ROM
 }
