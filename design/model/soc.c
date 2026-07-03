@@ -9,12 +9,7 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
     mod_construct(&soc->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
-    AXI4_IF_CONSTRUCT(soc, mm_i_, 1);
-    AXI4_IF_CONSTRUCT(soc, mm_d_, 1);
-    AXI4_IF_CONSTRUCT(soc, ddr_i_, 1);
-    AXI4_IF_CONSTRUCT(soc, ddr_d_, 1);
-    AXI4_IF_CONSTRUCT(soc, flash_i_, 1);
-    AXI4_IF_CONSTRUCT(soc, flash_d_, 1);
+    AXI4_IF_CONSTRUCT(soc, mm_, 2);
     AXI4_IF_CONSTRUCT(soc, flash_, 1);
     APB_IF_CONSTRUCT(soc, peri_, 1);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_uart_irq_itf, false, false);
@@ -22,8 +17,7 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_gtimer_irq_itf, false, false);
 
     soc->cpu.mod.cycle = soc->mod.cycle;
-    AXI4_MST_CONNECT(&soc->cpu, mm_i_, soc, mm_i_);
-    AXI4_MST_CONNECT(&soc->cpu, mm_d_, soc, mm_d_);
+    AXI4_MST_CONNECT(&soc->cpu, mm_, soc, mm_);
     APB_MST_CONNECT(&soc->cpu, peri_, soc, peri_);
     soc->cpu.ext_irq_ins[0] = &soc->peri_uart_irq_itf;
     soc->cpu.ext_irq_ins[1] = &soc->peri_gpio_irq_itf;
@@ -75,33 +69,14 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
     soc->peri.gtimer_irq_out = &soc->peri_gtimer_irq_itf;
     peri_construct(&soc->peri, soc->mod.hier_name, "u_peri", PERI_BASE, PERI_SIZE);
 
-    AXI4_SLV_CONNECT(&soc->mm_i_axi_demux, host_, soc, mm_i_);
-    AXI4_MST_ARR_CONNECT(&soc->mm_i_axi_demux, gst_, 0, soc, ddr_i_);
-    AXI4_MST_ARR_CONNECT(&soc->mm_i_axi_demux, gst_, 1, soc, flash_i_);
+    AXI4_SLV_CONNECT(&soc->mm_axi_demux, host_, soc, mm_);
+    AXI4_MST_ARR_IMPORT(&soc->mm_axi_demux, gst_, 0, soc, ddr_);
+    AXI4_MST_ARR_CONNECT(&soc->mm_axi_demux, gst_, 1, soc, flash_);
     const u32 mm_axi_gst_bases[] = { DDR_BASE, FLASH_BASE };
     const u32 mm_axi_gst_sizes[] = { DDR_SIZE, FLASH_SIZE };
-    soc->mm_i_axi_demux.mod.cycle = soc->mod.cycle;
-    axi_demux_construct(&soc->mm_i_axi_demux, soc->mod.hier_name,
-        "u_mm_i_axi_demux", 2, mm_axi_gst_bases, mm_axi_gst_sizes);
-
-    AXI4_SLV_CONNECT(&soc->mm_d_axi_demux, host_, soc, mm_d_);
-    AXI4_MST_ARR_CONNECT(&soc->mm_d_axi_demux, gst_, 0, soc, ddr_d_);
-    AXI4_MST_ARR_CONNECT(&soc->mm_d_axi_demux, gst_, 1, soc, flash_d_);
-    soc->mm_d_axi_demux.mod.cycle = soc->mod.cycle;
-    axi_demux_construct(&soc->mm_d_axi_demux, soc->mod.hier_name,
-        "u_mm_d_axi_demux", 2, mm_axi_gst_bases, mm_axi_gst_sizes);
-
-    AXI4_SLV_ARR_CONNECT(&soc->ddr_axi_mux, host_, 0, soc, ddr_i_);
-    AXI4_SLV_ARR_CONNECT(&soc->ddr_axi_mux, host_, 1, soc, ddr_d_);
-    AXI4_MST_IMPORT(&soc->ddr_axi_mux, gst_, soc, ddr_);
-    soc->ddr_axi_mux.mod.cycle = soc->mod.cycle;
-    axi_mux_construct(&soc->ddr_axi_mux, soc->mod.hier_name, "u_ddr_axi_mux", 2);
-
-    AXI4_SLV_ARR_CONNECT(&soc->flash_axi_mux, host_, 0, soc, flash_i_);
-    AXI4_SLV_ARR_CONNECT(&soc->flash_axi_mux, host_, 1, soc, flash_d_);
-    AXI4_MST_CONNECT(&soc->flash_axi_mux, gst_, soc, flash_);
-    soc->flash_axi_mux.mod.cycle = soc->mod.cycle;
-    axi_mux_construct(&soc->flash_axi_mux, soc->mod.hier_name, "u_flash_axi_mux", 2);
+    soc->mm_axi_demux.mod.cycle = soc->mod.cycle;
+    axi_demux_construct(&soc->mm_axi_demux, soc->mod.hier_name,
+        "u_mm_axi_demux", 2, mm_axi_gst_bases, mm_axi_gst_sizes);
 }
 
 void soc_reset(soc_t *soc)
@@ -110,17 +85,9 @@ void soc_reset(soc_t *soc)
     rv32g_reset(&soc->cpu);
     rom_reset(&soc->flash);
     peri_reset(&soc->peri);
-    axi_demux_reset(&soc->mm_i_axi_demux);
-    axi_demux_reset(&soc->mm_d_axi_demux);
-    axi_mux_reset(&soc->ddr_axi_mux);
-    axi_mux_reset(&soc->flash_axi_mux);
+    axi_demux_reset(&soc->mm_axi_demux);
 
-    AXI4_IF_RESET(soc, mm_i_);
-    AXI4_IF_RESET(soc, mm_d_);
-    AXI4_IF_RESET(soc, ddr_i_);
-    AXI4_IF_RESET(soc, ddr_d_);
-    AXI4_IF_RESET(soc, flash_i_);
-    AXI4_IF_RESET(soc, flash_d_);
+    AXI4_IF_RESET(soc, mm_);
     AXI4_IF_RESET(soc, flash_);
     APB_IF_RESET(soc, peri_);
     itf_reset(&soc->peri_uart_irq_itf);
@@ -134,17 +101,9 @@ void soc_clock(soc_t *soc)
     rv32g_clock(&soc->cpu);
     rom_clock(&soc->flash);
     peri_clock(&soc->peri);
-    axi_demux_clock(&soc->mm_i_axi_demux);
-    axi_demux_clock(&soc->mm_d_axi_demux);
-    axi_mux_clock(&soc->ddr_axi_mux);
-    axi_mux_clock(&soc->flash_axi_mux);
+    axi_demux_clock(&soc->mm_axi_demux);
 
-    AXI4_IF_DBG_CLOCK(soc, mm_i_);
-    AXI4_IF_DBG_CLOCK(soc, mm_d_);
-    AXI4_IF_DBG_CLOCK(soc, ddr_i_);
-    AXI4_IF_DBG_CLOCK(soc, ddr_d_);
-    AXI4_IF_DBG_CLOCK(soc, flash_i_);
-    AXI4_IF_DBG_CLOCK(soc, flash_d_);
+    AXI4_IF_DBG_CLOCK(soc, mm_);
     AXI4_IF_DBG_CLOCK(soc, flash_);
     APB_IF_DBG_CLOCK(soc, peri_);
     itf_dbg_clock(&soc->peri_uart_irq_itf);
@@ -158,17 +117,9 @@ void soc_free(soc_t *soc)
     rv32g_free(&soc->cpu);
     rom_free(&soc->flash);
     peri_free(&soc->peri);
-    axi_demux_free(&soc->mm_i_axi_demux);
-    axi_demux_free(&soc->mm_d_axi_demux);
-    axi_mux_free(&soc->ddr_axi_mux);
-    axi_mux_free(&soc->flash_axi_mux);
+    axi_demux_free(&soc->mm_axi_demux);
 
-    AXI4_IF_FREE(soc, mm_i_);
-    AXI4_IF_FREE(soc, mm_d_);
-    AXI4_IF_FREE(soc, ddr_i_);
-    AXI4_IF_FREE(soc, ddr_d_);
-    AXI4_IF_FREE(soc, flash_i_);
-    AXI4_IF_FREE(soc, flash_d_);
+    AXI4_IF_FREE(soc, mm_);
     AXI4_IF_FREE(soc, flash_);
     APB_IF_FREE(soc, peri_);
     itf_free(&soc->peri_uart_irq_itf);

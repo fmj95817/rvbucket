@@ -3,6 +3,12 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
+#define AXI_DEMUX_STATE_IDLE 0
+#define AXI_DEMUX_STATE_RD 1
+#define AXI_DEMUX_STATE_WR_DATA 2
+#define AXI_DEMUX_STATE_WR_RESP 3
+#define AXI_DEMUX_STATE_WR_DECERR 4
+
 void axi_demux_construct(axi_demux_t *axi_demux, const char *parent, const char *name,
     u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
 {

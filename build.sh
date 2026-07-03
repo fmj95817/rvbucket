@@ -334,7 +334,7 @@ function build_ut {
         echo "  compiling ut/${ut_name} ..."
         ${HOST_CC} \
             -Wall \
-            -O0 -g \
+            -O3 \
             -I./base/model \
             -I./design/model \
             -I./ut/model \

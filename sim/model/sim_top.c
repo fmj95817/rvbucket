@@ -129,7 +129,7 @@ static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
     header->initrd_size = 0;
     header->dtb_size = 0;
 
-    fprintf(stderr, "sim_top: preloaded linux payloads to DDR: kernel %u bytes @ 0x%08x,"
+    DBG_LOG(LOG_PRINT, "sim_top: preloaded linux payloads to DDR: kernel %u bytes @ 0x%08x,"
         " initrd %u bytes @ 0x%08x, dtb %u bytes @ 0x%08x\n",
         kernel_size, kernel_load, initrd_size, initrd_load, dtb_size, dtb_load);
 }

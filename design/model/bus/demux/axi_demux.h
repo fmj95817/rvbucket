@@ -8,12 +8,6 @@
 
 #define AXI_DEMUX_GST_NUM_MAX 16
 
-#define AXI_DEMUX_STATE_IDLE 0
-#define AXI_DEMUX_STATE_RD 1
-#define AXI_DEMUX_STATE_WR_DATA 2
-#define AXI_DEMUX_STATE_WR_RESP 3
-#define AXI_DEMUX_STATE_WR_DECERR 4
-
 typedef struct axi_demux {
     mod_t mod;
     itf_t *host_axi4_aw_slv;

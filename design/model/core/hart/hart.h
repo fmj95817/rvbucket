@@ -11,7 +11,7 @@
 #include "hbi.h"
 #include "mmu.h"
 #include "trap.h"
-#include "mem/l1.h"
+#include "l1.h"
 #include "bus/mux.h"
 
 typedef struct hart_conf {

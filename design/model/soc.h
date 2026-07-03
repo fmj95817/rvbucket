@@ -7,7 +7,6 @@
 #include "mem/ram.h"
 #include "mem/rom.h"
 #include "peri/peri.h"
-#include "bus/mux.h"
 #include "bus/demux.h"
 
 typedef struct soc {
@@ -21,17 +20,9 @@ typedef struct soc {
     rv32g_t cpu;
     rom_t flash;
     peri_t peri;
-    axi_demux_t mm_i_axi_demux;
-    axi_demux_t mm_d_axi_demux;
-    axi_mux_t ddr_axi_mux;
-    axi_mux_t flash_axi_mux;
+    axi_demux_t mm_axi_demux;
 
-    AXI4_IF_DECL(mm_i_);
-    AXI4_IF_DECL(mm_d_);
-    AXI4_IF_DECL(ddr_i_);
-    AXI4_IF_DECL(ddr_d_);
-    AXI4_IF_DECL(flash_i_);
-    AXI4_IF_DECL(flash_d_);
+    AXI4_IF_DECL(mm_);
     AXI4_IF_DECL(flash_);
     APB_IF_DECL(peri_);
     itf_t peri_uart_irq_itf;

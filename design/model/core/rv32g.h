@@ -7,6 +7,7 @@
 #include "mem/rom.h"
 #include "mem/ram.h"
 #include "hart/hart.h"
+#include "l2.h"
 #include "cbi.h"
 #include "aclint.h"
 #include "plic.h"
@@ -41,8 +42,7 @@ typedef struct rv32g_conf {
 
 typedef struct rv32g {
     mod_t mod;
-    AXI4_MST_DECL(mm_i_);
-    AXI4_MST_DECL(mm_d_);
+    AXI4_MST_DECL(mm_);
     APB_MST_DECL(peri_);
     itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
 
@@ -53,6 +53,7 @@ typedef struct rv32g {
     ram_t dtcm;
     aclint_t aclint;
     plic_t plic;
+    l2_t l2;
 
     BTI_IF_DECL(boot_rom_);
     BTI_IF_DECL(itcm_i_);
@@ -67,6 +68,8 @@ typedef struct rv32g {
     itf_t conv_ext_irq_sig_itf;
     AXI4_IF_DECL(hart_i_);
     AXI4_IF_DECL(hart_d_);
+    AXI4_IF_DECL(cbi_mm_i_);
+    AXI4_IF_DECL(cbi_mm_d_);
 } rv32g_t;
 
 extern void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv32g_conf_t *conf);

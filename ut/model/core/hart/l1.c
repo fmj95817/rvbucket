@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mem/l1.h"
+#include "core/hart/l1.h"
 #include "dbg/vcd.h"
 #include "utils.h"
 

@@ -6,7 +6,7 @@
 #include "dbg/env.h"
 
 #define DBG_SIG_TOKEN_MAX 32
-#define DBG_SIG_BIT_MAX 64
+#define DBG_SIG_BIT_MAX 128
 #define DBG_SIG_BYTE_MAX 8
 
 typedef struct dbg_sig {

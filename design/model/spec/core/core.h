@@ -4,6 +4,8 @@
 #include "base/def.h"
 
 #define HART_NUM       1u
+#define L2_SIZE        (128u * KiB)
+#define L2_WAY_NUM     4u
 
 #define BOOT_ROM_BASE  0x00000000u
 #define BOOT_ROM_SIZE  (2u * KiB)
