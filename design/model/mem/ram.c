@@ -39,34 +39,28 @@ void ram_load(ram_t *ram, const void *data, u32 addr, u32 size)
     memcpy(ram->data + addr, data, size);
 }
 
-static bool ram_read(ram_t *ram, u32 addr, u32 *data)
+static bool ram_read(ram_t *ram, u32 addr, u32 byte_num, u32 *data)
 {
-    if (addr >= ram->size) {
+    if (byte_num > sizeof(*data) || addr >= ram->size || byte_num > ram->size - addr) {
         return false;
     }
-    *data = *((u32*)(ram->data + addr));
+    *data = 0;
+    memcpy(data, ram->data + addr, byte_num);
     return true;
 }
 
-static bool ram_write(ram_t *ram, u32 addr, u32 data, u8 strobe)
+static bool ram_write(ram_t *ram, u32 addr, u32 byte_num, u32 data, u8 strobe)
 {
-    if (addr >= ram->size) {
+    if (byte_num > sizeof(data) || addr >= ram->size || byte_num > ram->size - addr) {
         return false;
     }
 
     u8 *dst = (ram->data + addr);
 
-    if (strobe & 0b0001) {
-        dst[0] = (data & 0xff);
-    }
-    if (strobe & 0b0010) {
-        dst[1] = ((data >> 8) & 0xff);
-    }
-    if (strobe & 0b0100) {
-        dst[2] = ((data >> 16) & 0xff);
-    }
-    if (strobe & 0b1000) {
-        dst[3] = ((data >> 24) & 0xff);
+    for (u32 i = 0; i < byte_num; i++) {
+        if (strobe & (1u << i)) {
+            dst[i] = (u8)(data >> (i * 8u));
+        }
     }
 
     return true;
@@ -115,7 +109,8 @@ static void ram_proc_axi_r(ram_t *ram)
 
     u32 addr = ram->rd_burst_addr;
     u32 data = 0;
-    bool ok = ram_read(ram, addr, &data);
+    u32 byte_num = 1u << ram->rd_burst_size;
+    bool ok = ram_read(ram, addr, byte_num, &data);
     axi4_r_resp_t resp = ok ? AXI4_R_RESP_OKAY : AXI4_R_RESP_SLVERR;
 
     bool last = (ram->rd_burst_cnt == ram->rd_burst_len);
@@ -181,7 +176,8 @@ static void ram_proc_axi_w(ram_t *ram)
     itf_fifo_pop_front(ram->axi4_w_slv);
 
     u32 addr = ram->wr_burst_addr;
-    ram_write(ram, addr, w.data, w.strb);
+    u32 byte_num = 1u << ram->wr_burst_size;
+    ram_write(ram, addr, byte_num, w.data, w.strb);
 
     if (w.last) {
         ram->wr_active = false;
@@ -234,15 +230,22 @@ static void ram_proc_port(ram_t *ram, u32 port_idx)
     itf_read(ram->bti_req_slvs[port_idx], &bti_req);
     DBG_CHECK(bti_req.addr >= ram->base_addr);
 
-    bti_rsp_if_t bti_rsp;
-    bti_rsp.trans_id = bti_req.trans_id;
+    bti_rsp_if_t bti_rsp = {
+        .trans_id = bti_req.trans_id,
+        .data = 0,
+        .ok = false
+    };
     u32 addr = bti_req.addr - ram->base_addr;
+    u32 byte_num = 1u << bti_req.size;
 
-    if (bti_req.cmd == BTI_REQ_CMD_READ) {
-        bti_rsp.ok = ram_read(ram, addr, &bti_rsp.data);
+    if (bti_req.size > BTI_REQ_SIZE_B4) {
+        bti_rsp.data = 0;
+        bti_rsp.ok = false;
+    } else if (bti_req.cmd == BTI_REQ_CMD_READ) {
+        bti_rsp.ok = ram_read(ram, addr, byte_num, &bti_rsp.data);
     } else if (bti_req.cmd == BTI_REQ_CMD_WRITE) {
         bti_rsp.data = 0;
-        bti_rsp.ok = ram_write(ram, addr, bti_req.data, bti_req.strobe);
+        bti_rsp.ok = ram_write(ram, addr, byte_num, bti_req.data, bti_req.strobe);
     } else {
         bti_rsp.data = 0;
         bti_rsp.ok = false;

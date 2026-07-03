@@ -32,6 +32,7 @@ DECL_AMO_EX_REQ_HANDLER(lr)
     u32 rs1 = ex_req->inst.r.rs1;
 
     ldst_req->st = false;
+    ldst_req->size = LDST_REQ_SIZE_B4;
     ldst_req->addr = get_gpr(exu, rs1);
     ldst_req->strobe = 0b1111;
 
@@ -87,6 +88,7 @@ DECL_AMO_EX_REQ_HANDLER(sc)
     }
 
     ldst_req->st = true;
+    ldst_req->size = LDST_REQ_SIZE_B4;
     ldst_req->addr = store_addr;
     ldst_req->data = get_gpr(exu, rs2);
     ldst_req->strobe = 0b1111;
@@ -118,6 +120,7 @@ DECL_AMO_BIU_RSP_HANDLER(sc)
     u32 rs2 = ex_req->inst.r.rs2; \
     \
     ldst_req->st = false; \
+    ldst_req->size = LDST_REQ_SIZE_B4; \
     ldst_req->addr = get_gpr(exu, rs1); \
     ldst_req->strobe = 0b1111; \
     \
@@ -142,6 +145,7 @@ DECL_AMO_BIU_RSP_HANDLER(sc)
         expr; \
         \
         st_req->st = true; \
+        st_req->size = LDST_REQ_SIZE_B4; \
         st_req->addr = exu->amo_addr; \
         st_req->data = new_val.u; \
         st_req->strobe = 0b1111; \

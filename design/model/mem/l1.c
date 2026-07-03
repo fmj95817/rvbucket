@@ -23,11 +23,6 @@ static u32 l1_req_line_addr(u32 addr)
     return addr & ~(L1_LINE_SIZE - 1u);
 }
 
-static u32 l1_req_word_idx(u32 addr)
-{
-    return (addr & (L1_LINE_SIZE - 1u)) / L1_WORD_SIZE;
-}
-
 static u32 l1_req_set(const l1_t *l1, u32 addr)
 {
     return (l1_req_line_addr(addr) / L1_LINE_SIZE) % l1->set_num;
@@ -63,16 +58,23 @@ static void l1_invalidate(l1_t *l1)
     }
 }
 
-static void l1_write_word(l1_t *l1, u32 line_idx, u32 word_idx, u32 data, u8 strobe)
+static u32 l1_req_size(const l1_t *l1)
 {
-    u32 *word = &l1->data[line_idx * L1_WORD_NUM + word_idx];
-    u32 mask = 0;
-    for (u32 i = 0; i < L1_WORD_SIZE; i++) {
-        if (strobe & (1u << i)) {
-            mask |= 0xffu << (i * 8u);
-        }
-    }
-    *word = (*word & ~mask) | (data & mask);
+    DBG_CHECK(l1->req.size <= BTI_REQ_SIZE_B4);
+    return 1u << l1->req.size;
+}
+
+static u8 l1_read_byte(const l1_t *l1, u32 line_idx, u32 line_offset)
+{
+    u32 word = l1->data[line_idx * L1_WORD_NUM + line_offset / L1_WORD_SIZE];
+    return (u8)(word >> ((line_offset % L1_WORD_SIZE) * 8u));
+}
+
+static void l1_write_byte(l1_t *l1, u32 line_idx, u32 line_offset, u8 data)
+{
+    u32 *word = &l1->data[line_idx * L1_WORD_NUM + line_offset / L1_WORD_SIZE];
+    u32 shift = (line_offset % L1_WORD_SIZE) * 8u;
+    *word = (*word & ~(0xffu << shift)) | ((u32)data << shift);
 }
 
 static void l1_send_rsp(l1_t *l1, bool ok, u32 data)
@@ -127,6 +129,8 @@ void l1_reset(l1_t *l1)
     l1->state = L1_STATE_IDLE;
     l1->beat_idx = 0;
     l1->op_ok = true;
+    l1->req_byte_idx = 0;
+    l1->req_data = 0;
     for (u32 i = 0; i < l1->line_num; i++) {
         l1->valids[i] = false;
         l1->dirtys[i] = false;
@@ -167,36 +171,35 @@ static void l1_select_victim(l1_t *l1)
     l1->replace_ways[l1->req_set] = (l1->req_way + 1u) % l1->conf.way_num;
 }
 
-static bool l1_try_cached_hit(l1_t *l1)
+static void l1_setup_fragment(l1_t *l1)
+{
+    u32 addr = l1->req.addr + l1->req_byte_idx;
+    l1->req_line_addr = l1_req_line_addr(addr);
+    l1->req_set = l1_req_set(l1, addr);
+    l1->req_tag = l1_req_tag(l1, addr);
+}
+
+static void l1_start_cached_fragment(l1_t *l1)
 {
     u32 way;
     u32 line_idx;
-    if (!l1_lookup(l1, &way, &line_idx)) {
-        return false;
+    l1_setup_fragment(l1);
+    if (l1_lookup(l1, &way, &line_idx)) {
+        l1->req_way = way;
+        l1->req_line_idx = line_idx;
+        l1->state = L1_STATE_SERVE_MISS;
+        return;
     }
 
-    if (itf_fifo_full(l1->bti_rsp_mst)) {
-        return true;
-    }
-
-    itf_fifo_pop_front(l1->bti_req_slv);
-    l1->req_way = way;
-    l1->req_line_idx = line_idx;
-    u32 *word = &l1->data[line_idx * L1_WORD_NUM + l1->req_word_idx];
-
-    if (l1->req.cmd == BTI_REQ_CMD_WRITE) {
-        if (l1->conf.ro) {
-            l1_send_rsp(l1, false, 0);
-        } else {
-            l1_write_word(l1, line_idx, l1->req_word_idx, l1->req.data, l1->req.strobe);
-            l1->dirtys[line_idx] = true;
-            l1_send_rsp(l1, true, 0);
-        }
+    l1_select_victim(l1);
+    if (l1->valids[l1->req_line_idx] && l1->dirtys[l1->req_line_idx]) {
+        l1->wb_line_addr = l1_line_addr(l1, l1->tags[l1->req_line_idx], l1->req_set);
+        l1->beat_idx = 0;
+        l1->state = L1_STATE_WB_AW;
     } else {
-        l1_send_rsp(l1, true, *word);
+        l1->beat_idx = 0;
+        l1->state = L1_STATE_REFILL_AR;
     }
-
-    return true;
 }
 
 static bool l1_try_bypass_req(l1_t *l1)
@@ -210,7 +213,7 @@ static bool l1_try_bypass_req(l1_t *l1)
             .id = 0,
             .addr = l1->req.addr,
             .len = 0,
-            .size = AXI4_AR_SIZE_B4,
+            .size = (axi4_ar_size_t)l1->req.size,
             .burst = AXI4_AR_BURST_FIXED,
             .lock = false,
             .cache = 0,
@@ -240,7 +243,7 @@ static bool l1_try_bypass_req(l1_t *l1)
         .id = 0,
         .addr = l1->req.addr,
         .len = 0,
-        .size = AXI4_AW_SIZE_B4,
+        .size = (axi4_aw_size_t)l1->req.size,
         .burst = AXI4_AW_BURST_FIXED,
         .lock = false,
         .cache = 0,
@@ -266,18 +269,12 @@ static void l1_proc_idle(l1_t *l1)
     }
 
     itf_fifo_get_front(l1->bti_req_slv, &l1->req);
-    l1->req_line_addr = l1_req_line_addr(l1->req.addr);
-    l1->req_word_idx = l1_req_word_idx(l1->req.addr);
-    l1->req_set = l1_req_set(l1, l1->req.addr);
-    l1->req_tag = l1_req_tag(l1, l1->req.addr);
     l1->op_ok = true;
+    l1->req_byte_idx = 0;
+    l1->req_data = 0;
 
     if (l1_bypass(l1, l1->req.addr)) {
         (void)l1_try_bypass_req(l1);
-        return;
-    }
-
-    if (l1_try_cached_hit(l1)) {
         return;
     }
 
@@ -291,15 +288,7 @@ static void l1_proc_idle(l1_t *l1)
     }
 
     itf_fifo_pop_front(l1->bti_req_slv);
-    l1_select_victim(l1);
-    if (l1->valids[l1->req_line_idx] && l1->dirtys[l1->req_line_idx]) {
-        l1->wb_line_addr = l1_line_addr(l1, l1->tags[l1->req_line_idx], l1->req_set);
-        l1->beat_idx = 0;
-        l1->state = L1_STATE_WB_AW;
-    } else {
-        l1->beat_idx = 0;
-        l1->state = L1_STATE_REFILL_AR;
-    }
+    l1_start_cached_fragment(l1);
 }
 
 static void l1_proc_flush(l1_t *l1)
@@ -450,25 +439,48 @@ static void l1_proc_refill_r(l1_t *l1)
 
 static void l1_proc_serve_miss(l1_t *l1)
 {
-    if (l1->state != L1_STATE_SERVE_MISS || itf_fifo_full(l1->bti_rsp_mst)) {
+    if (l1->state != L1_STATE_SERVE_MISS) {
         return;
     }
 
     if (!l1->op_ok) {
+        if (itf_fifo_full(l1->bti_rsp_mst)) {
+            return;
+        }
         l1->valids[l1->req_line_idx] = false;
         l1_send_rsp(l1, false, 0);
         l1->state = L1_STATE_IDLE;
         return;
     }
 
-    if (l1->req.cmd == BTI_REQ_CMD_WRITE) {
-        l1_write_word(l1, l1->req_line_idx, l1->req_word_idx, l1->req.data, l1->req.strobe);
-        l1->dirtys[l1->req_line_idx] = true;
-        l1_send_rsp(l1, true, 0);
-    } else {
-        u32 data = l1->data[l1->req_line_idx * L1_WORD_NUM + l1->req_word_idx];
-        l1_send_rsp(l1, true, data);
+    u32 req_size = l1_req_size(l1);
+    u32 addr = l1->req.addr + l1->req_byte_idx;
+    u32 line_offset = addr & (L1_LINE_SIZE - 1u);
+    u32 byte_num = MIN(req_size - l1->req_byte_idx, L1_LINE_SIZE - line_offset);
+    for (u32 i = 0; i < byte_num; i++) {
+        u32 req_byte = l1->req_byte_idx + i;
+        if (l1->req.cmd == BTI_REQ_CMD_WRITE) {
+            if (l1->req.strobe & (1u << req_byte)) {
+                l1_write_byte(l1, l1->req_line_idx, line_offset + i,
+                    (u8)(l1->req.data >> (req_byte * 8u)));
+                l1->dirtys[l1->req_line_idx] = true;
+            }
+        } else {
+            l1->req_data |= (u32)l1_read_byte(l1, l1->req_line_idx, line_offset + i)
+                << (req_byte * 8u);
+        }
     }
+    l1->req_byte_idx += byte_num;
+
+    if (l1->req_byte_idx < req_size) {
+        l1_start_cached_fragment(l1);
+        return;
+    }
+
+    if (itf_fifo_full(l1->bti_rsp_mst)) {
+        return;
+    }
+    l1_send_rsp(l1, true, l1->req.cmd == BTI_REQ_CMD_READ ? l1->req_data : 0);
     l1->state = L1_STATE_IDLE;
 }
 

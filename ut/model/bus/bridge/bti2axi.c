@@ -26,8 +26,10 @@ typedef struct bti2axi_tb {
 
     bool mock_saw_ar;
     u32 mock_ar_addr;
+    u8 mock_ar_size;
     bool mock_saw_aw;
     u32 mock_aw_addr;
+    u8 mock_aw_size;
     bool mock_saw_w;
     u32 mock_w_data;
     u8  mock_w_strb;
@@ -75,6 +77,7 @@ static void tb_mock_axi4_slave(bti2axi_tb_t *tb)
         itf_read(&tb->axi4_ar_itf, &ar);
         tb->mock_saw_ar = true;
         tb->mock_ar_addr = ar.addr;
+        tb->mock_ar_size = ar.size;
 
         axi4_r_if_t r = {
             .id = 0,
@@ -91,6 +94,7 @@ static void tb_mock_axi4_slave(bti2axi_tb_t *tb)
         itf_read(&tb->axi4_aw_itf, &aw);
         tb->mock_saw_aw = true;
         tb->mock_aw_addr = aw.addr;
+        tb->mock_aw_size = aw.size;
 
         axi4_w_if_t w;
         itf_read(&tb->axi4_w_itf, &w);
@@ -136,24 +140,28 @@ static void tb_free(bti2axi_tb_t *tb)
     itf_free(&tb->axi4_r_itf);
 }
 
-static void tb_bti_write_read_req(bti2axi_tb_t *tb, u16 trans_id, u32 addr)
+static void tb_bti_write_read_req(bti2axi_tb_t *tb, u16 trans_id, u32 addr,
+    bti_req_size_t size)
 {
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_READ,
         .addr = addr,
+        .size = size,
         .data = 0,
         .strobe = 0
     };
     itf_write(&tb->bti_req_itf, &req);
 }
 
-static void tb_bti_write_write_req(bti2axi_tb_t *tb, u16 trans_id, u32 addr, u32 data, u8 strobe)
+static void tb_bti_write_write_req(bti2axi_tb_t *tb, u16 trans_id, u32 addr,
+    u32 data, u8 strobe, bti_req_size_t size)
 {
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_WRITE,
         .addr = addr,
+        .size = size,
         .data = data,
         .strobe = strobe
     };
@@ -195,11 +203,12 @@ TEST_CASE(bti2axi_tb_t, read)
     tb->mock_rd_data = 0xdeadbeef;
     tb->mock_saw_ar = false;
 
-    tb_bti_write_read_req(tb, 0x0001, 0x12345678);
+    tb_bti_write_read_req(tb, 0x0001, 0x12345678, BTI_REQ_SIZE_B1);
 
     bool got_ar = RUN_POLL_UNTIL(tb_cond_mock_saw_ar, UT_TIMEOUT);
     REQUIRE(got_ar, "mock saw AR on AXI4 bus");
     REQUIRE(tb->mock_ar_addr == 0x12345678, "AR addr = 0x12345678");
+    REQUIRE(tb->mock_ar_size == AXI4_AR_SIZE_B1, "AR size preserves BTI byte access");
 
     bool got_rsp = RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
     REQUIRE(got_rsp, "BTI rsp received");
@@ -216,7 +225,7 @@ TEST_CASE(bti2axi_tb_t, read_slverr)
     tb->mock_rd_resp = 2;
     tb->mock_saw_ar = false;
 
-    tb_bti_write_read_req(tb, 0x0002, 0xa0000000);
+    tb_bti_write_read_req(tb, 0x0002, 0xa0000000, BTI_REQ_SIZE_B4);
     RUN_POLL_UNTIL(tb_cond_mock_saw_ar, UT_TIMEOUT);
     RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
     REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0002, 0, false),
@@ -231,14 +240,16 @@ TEST_CASE(bti2axi_tb_t, write)
     tb->mock_saw_aw = false;
     tb->mock_saw_w = false;
 
-    tb_bti_write_write_req(tb, 0x0003, 0x20001000, 0xcafebabe, 0x0f);
+    tb_bti_write_write_req(tb, 0x0003, 0x20001000, 0xcafebabe, 0x03,
+        BTI_REQ_SIZE_B2);
 
     bool got_aw = RUN_POLL_UNTIL(tb_cond_mock_saw_aw, UT_TIMEOUT);
     REQUIRE(got_aw, "mock saw AW on AXI4 bus");
     REQUIRE(tb->mock_aw_addr == 0x20001000, "AW addr = 0x20001000");
+    REQUIRE(tb->mock_aw_size == AXI4_AW_SIZE_B2, "AW size preserves BTI halfword access");
     REQUIRE(tb->mock_saw_w, "mock also saw W in same cycle");
     REQUIRE(tb->mock_w_data == 0xcafebabe, "W data = 0xcafebabe");
-    REQUIRE(tb->mock_w_strb == 0x0f, "W strb = 0x0f");
+    REQUIRE(tb->mock_w_strb == 0x03, "W strb = 0x03");
 
     bool got_rsp = RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
     REQUIRE(got_rsp, "BTI rsp received");
@@ -254,7 +265,8 @@ TEST_CASE(bti2axi_tb_t, write_slverr)
     tb->mock_saw_aw = false;
     tb->mock_wr_resp = 2;
 
-    tb_bti_write_write_req(tb, 0x0030, 0x50000000, 0x11111111, 0x0f);
+    tb_bti_write_write_req(tb, 0x0030, 0x50000000, 0x11111111, 0x0f,
+        BTI_REQ_SIZE_B4);
     RUN_POLL_UNTIL(tb_cond_mock_saw_aw, UT_TIMEOUT);
     RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
     REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0030, 0, false),
@@ -270,7 +282,8 @@ TEST_CASE(bti2axi_tb_t, strobe_mask)
     tb->mock_saw_aw = false;
     tb->mock_saw_w = false;
 
-    tb_bti_write_write_req(tb, 0x0020, 0x40000000, 0x12345678, 0xff);
+    tb_bti_write_write_req(tb, 0x0020, 0x40000000, 0x12345678, 0xff,
+        BTI_REQ_SIZE_B4);
     RUN_POLL_UNTIL(tb_cond_mock_saw_aw, UT_TIMEOUT);
     REQUIRE(tb->mock_w_strb == 0x0f, "BTI strobe 0xff masked to AXI4 strb 0x0f");
 
@@ -287,12 +300,12 @@ TEST_CASE(bti2axi_tb_t, back_to_back)
     tb->mock_rd_resp = 0;
     tb->mock_saw_ar = false;
 
-    tb_bti_write_read_req(tb, 0x0010, 0x10000000);
+    tb_bti_write_read_req(tb, 0x0010, 0x10000000, BTI_REQ_SIZE_B4);
 
     RUN_POLL_UNTIL(tb_cond_mock_saw_ar, UT_TIMEOUT);
     REQUIRE(tb->mock_ar_addr == 0x10000000, "1st read: AR addr=0x10000000");
 
-    tb_bti_write_read_req(tb, 0x0011, 0x20000000);
+    tb_bti_write_read_req(tb, 0x0011, 0x20000000, BTI_REQ_SIZE_B4);
     REQUIRE(!itf_fifo_empty(&tb->bti_req_itf),
               "2nd read: BTI req queued in FIFO (DUT busy with 1st outstanding)");
 
@@ -327,7 +340,7 @@ TEST_CASE(bti2axi_tb_t, sequential_reads)
         tb->mock_rd_resp = 0;
         tb->mock_saw_ar = false;
 
-        tb_bti_write_read_req(tb, tid, addr);
+        tb_bti_write_read_req(tb, tid, addr, BTI_REQ_SIZE_B4);
 
         bool got_ar = RUN_POLL_UNTIL(tb_cond_mock_saw_ar, UT_TIMEOUT);
         if (!got_ar) {

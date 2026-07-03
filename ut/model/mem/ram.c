@@ -101,11 +101,13 @@ static void tb_free(ram_tb_t *tb)
     itf_free(&tb->axi4_r_itf);
 }
 
-static void tb_bti_write_read_req(ram_tb_t *tb, u16 trans_id, u32 addr)
+static void tb_bti_write_read_req_size(ram_tb_t *tb, u16 trans_id, u32 addr,
+    bti_req_size_t size)
 {
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_READ,
+        .size = size,
         .addr = addr,
         .data = 0,
         .strobe = 0
@@ -113,17 +115,29 @@ static void tb_bti_write_read_req(ram_tb_t *tb, u16 trans_id, u32 addr)
     itf_write(&tb->bti_req_itf, &req);
 }
 
-static void tb_bti_write_write_req(ram_tb_t *tb, u16 trans_id, u32 addr,
-                                    u32 data, u8 strobe)
+static void tb_bti_write_read_req(ram_tb_t *tb, u16 trans_id, u32 addr)
+{
+    tb_bti_write_read_req_size(tb, trans_id, addr, BTI_REQ_SIZE_B4);
+}
+
+static void tb_bti_write_write_req_size(ram_tb_t *tb, u16 trans_id, u32 addr,
+    u32 data, u8 strobe, bti_req_size_t size)
 {
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_WRITE,
+        .size = size,
         .addr = addr,
         .data = data,
         .strobe = strobe
     };
     itf_write(&tb->bti_req_itf, &req);
+}
+
+static void tb_bti_write_write_req(ram_tb_t *tb, u16 trans_id, u32 addr,
+    u32 data, u8 strobe)
+{
+    tb_bti_write_write_req_size(tb, trans_id, addr, data, strobe, BTI_REQ_SIZE_B4);
 }
 
 static bool tb_cond_bti_rsp_ready(ram_tb_t *tb)
@@ -246,6 +260,52 @@ TEST_CASE(ram_tb_t, bti_write_strobe)
     RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
     REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0014, 0xffff5678, true),
               "partial strobe (0x03): only low 2 bytes changed");
+
+    tb_free_dut(tb);
+    TEST_END();
+}
+
+TEST_CASE(ram_tb_t, bti_size_and_boundary)
+{
+    TEST_BEGIN("BTI Size and Boundary");
+
+    tb_construct_bti(tb);
+    tb_dut_reset(tb);
+
+    tb_bti_write_write_req(tb, 0x0020, RAM_BASE + 0x100, 0x44332211, 0xf);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0020, 0, true), "initialize test word");
+
+    tb_bti_write_read_req_size(tb, 0x0021, RAM_BASE + 0x101, BTI_REQ_SIZE_B1);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0021, 0x22, true),
+        "byte read is returned in low bits");
+
+    tb_bti_write_read_req_size(tb, 0x0022, RAM_BASE + 0x101, BTI_REQ_SIZE_B2);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0022, 0x3322, true),
+        "halfword read is returned in low bits");
+
+    tb_bti_write_write_req_size(tb, 0x0023, RAM_BASE + 0x101, 0x0000aabb, 0xf,
+        BTI_REQ_SIZE_B1);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0023, 0, true), "byte write accepted");
+    tb_bti_write_read_req(tb, 0x0024, RAM_BASE + 0x100);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0024, 0x4433bb11, true),
+        "byte write ignores strobes outside request size");
+
+    tb_bti_write_write_req_size(tb, 0x0025, RAM_BASE + RAM_SIZE - 1, 0x5a, 0x1,
+        BTI_REQ_SIZE_B1);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0025, 0, true), "last byte is writable");
+    tb_bti_write_read_req_size(tb, 0x0026, RAM_BASE + RAM_SIZE - 1, BTI_REQ_SIZE_B1);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0026, 0x5a, true), "last byte is readable");
+    tb_bti_write_read_req_size(tb, 0x0027, RAM_BASE + RAM_SIZE - 1, BTI_REQ_SIZE_B2);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0027, 0, false),
+        "access crossing RAM boundary is rejected");
 
     tb_free_dut(tb);
     TEST_END();
@@ -421,6 +481,7 @@ int main()
 
     TEST_RUN(bti_read);
     TEST_RUN(bti_write_strobe);
+    TEST_RUN(bti_size_and_boundary);
     TEST_RUN(axi_single_read);
     TEST_RUN(axi_burst_read_incr);
     TEST_RUN(axi_burst_write_incr);

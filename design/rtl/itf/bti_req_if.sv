@@ -8,6 +8,7 @@ interface bti_req_if_t;
         logic [15:0] trans_id;
         bti_req_cmd_t cmd;
         logic [31:0] addr;
+        bti_req_size_t size;
         logic [31:0] data;
         logic [3:0] strobe;
     } pkt;

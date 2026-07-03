@@ -28,6 +28,7 @@ DECL_LDST_EX_REQ_HANDLER(lb)
     i32 imm = i_imm_decode(&ex_req->inst);
 
     ldst_req->st = false;
+    ldst_req->size = LDST_REQ_SIZE_B1;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
 
     DBG_LOG(LOG_TRACE, "lb %s, %d(%s) # 0x%08x\n",
@@ -46,6 +47,7 @@ DECL_LDST_EX_REQ_HANDLER(lh)
     i32 imm = i_imm_decode(&ex_req->inst);
 
     ldst_req->st = false;
+    ldst_req->size = LDST_REQ_SIZE_B2;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
 
     DBG_LOG(LOG_TRACE, "lh %s, %d(%s) # 0x%08x\n",
@@ -64,6 +66,7 @@ DECL_LDST_EX_REQ_HANDLER(lw)
     i32 imm = i_imm_decode(&ex_req->inst);
 
     ldst_req->st = false;
+    ldst_req->size = LDST_REQ_SIZE_B4;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
 
     DBG_LOG(LOG_TRACE, "lw %s, %d(%s) # 0x%08x\n",
@@ -82,6 +85,7 @@ DECL_LDST_EX_REQ_HANDLER(lbu)
     i32 imm = i_imm_decode(&ex_req->inst);
 
     ldst_req->st = false;
+    ldst_req->size = LDST_REQ_SIZE_B1;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
 
     DBG_LOG(LOG_TRACE, "lbu %s, %d(%s) # 0x%08x\n",
@@ -100,6 +104,7 @@ DECL_LDST_EX_REQ_HANDLER(lhu)
     i32 imm = i_imm_decode(&ex_req->inst);
 
     ldst_req->st = false;
+    ldst_req->size = LDST_REQ_SIZE_B2;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
 
     DBG_LOG(LOG_TRACE, "lbu %s, %d(%s) # 0x%08x\n",
@@ -154,6 +159,7 @@ DECL_LDST_EX_REQ_HANDLER(sb)
     i32 imm = s_imm_decode(&ex_req->inst);
 
     ldst_req->st = true;
+    ldst_req->size = LDST_REQ_SIZE_B1;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
     ldst_req->data = get_gpr(exu, rs2);
     ldst_req->strobe = 0b0001;
@@ -169,6 +175,7 @@ DECL_LDST_EX_REQ_HANDLER(sh)
     i32 imm = s_imm_decode(&ex_req->inst);
 
     ldst_req->st = true;
+    ldst_req->size = LDST_REQ_SIZE_B2;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
     ldst_req->data = get_gpr(exu, rs2);
     ldst_req->strobe = 0b0011;
@@ -184,6 +191,7 @@ DECL_LDST_EX_REQ_HANDLER(sw)
     i32 imm = s_imm_decode(&ex_req->inst);
 
     ldst_req->st = true;
+    ldst_req->size = LDST_REQ_SIZE_B4;
     ldst_req->addr = get_gpr(exu, rs1) + imm.u;
     ldst_req->data = get_gpr(exu, rs2);
     ldst_req->strobe = 0b1111;

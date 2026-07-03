@@ -1,3 +1,5 @@
+`include "itf/ldst_req_if.svh"
+
 interface ldst_req_if_t;
     logic vld;
     logic rdy;
@@ -5,6 +7,7 @@ interface ldst_req_if_t;
     struct packed {
         logic [31:0] addr;
         logic st;
+        ldst_req_size_t size;
         logic [31:0] data;
         logic [3:0] strobe;
     } pkt;

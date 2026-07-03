@@ -84,9 +84,17 @@
 
         "ldst_req": {
             "type": "vld-rdy",
+            "enums": {
+                "size": {
+                    "b1": 0,
+                    "b2": 1,
+                    "b4": 2
+                }
+            },
             "payloads": [
                 { "name": "addr", "width": 32 },
                 { "name": "st", "width": 1 },
+                { "name": "size", "type": "size" },
                 { "name": "data", "width": 32 },
                 { "name": "strobe", "width": 4 }
             ]
@@ -105,12 +113,18 @@
                 "cmd": {
                     "read": 0,
                     "write": 1
+                },
+                "size": {
+                    "b1": 0,
+                    "b2": 1,
+                    "b4": 2
                 }
             },
             "payloads": [
                 { "name": "trans_id", "width": 16 },
                 { "name": "cmd", "type": "cmd" },
                 { "name": "addr", "width": 32 },
+                { "name": "size", "type": "size" },
                 { "name": "data", "width": 32 },
                 { "name": "strobe", "width": 4 }
             ]

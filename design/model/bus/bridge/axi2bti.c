@@ -75,6 +75,7 @@ static void axi2bti_proc_idle(axi2bti_t *br)
             .trans_id = br->next_bti_trans_id++,
             .cmd = BTI_REQ_CMD_READ,
             .addr = ar.addr,
+            .size = (bti_req_size_t)ar.size,
             .data = 0,
             .strobe = 0
         };
@@ -157,6 +158,7 @@ static void axi2bti_proc_rd_burst(axi2bti_t *br)
             .trans_id = br->next_bti_trans_id++,
             .cmd = BTI_REQ_CMD_READ,
             .addr = addr,
+            .size = (bti_req_size_t)br->axsize,
             .data = 0,
             .strobe = 0
         };
@@ -208,6 +210,7 @@ static void axi2bti_proc_wr_burst(axi2bti_t *br)
             .trans_id = br->next_bti_trans_id++,
             .cmd = BTI_REQ_CMD_WRITE,
             .addr = addr,
+            .size = (bti_req_size_t)br->axsize,
             .data = w.data,
             .strobe = w.strb
         };

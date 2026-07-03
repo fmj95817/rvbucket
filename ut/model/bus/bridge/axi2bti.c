@@ -26,6 +26,7 @@ typedef struct axi2bti_tb {
     u32 mock_last_addr;
     u32 mock_last_data;
     bool mock_last_write;
+    bti_req_size_t mock_last_size;
 
     ut_sbd_t sbd;
 } axi2bti_tb_t;
@@ -68,6 +69,7 @@ static void tb_reset(axi2bti_tb_t *tb)
     tb->mock_last_addr = 0;
     tb->mock_last_data = 0;
     tb->mock_last_write = false;
+    tb->mock_last_size = BTI_REQ_SIZE_B1;
 }
 
 static void tb_drain_fifos(axi2bti_tb_t *tb)
@@ -94,6 +96,7 @@ static void tb_mock_bti_slave(axi2bti_tb_t *tb)
     tb->mock_last_addr = req.addr;
     tb->mock_last_data = req.data;
     tb->mock_last_write = (req.cmd == BTI_REQ_CMD_WRITE);
+    tb->mock_last_size = req.size;
 
     bool ok = (tb->mock_err_on_req == 0) || (tb->mock_req_count != tb->mock_err_on_req);
 
@@ -202,7 +205,7 @@ TEST_CASE(axi2bti_tb_t, single_read)
     tb->mock_err_on_req = 0;
     tb->mock_req_count = 0;
 
-    tb_axi4_write_ar(tb, 0x05, 0x80001000, 0, 2, 1);
+    tb_axi4_write_ar(tb, 0x05, 0x80001000, 0, AXI4_AR_SIZE_B1, 1);
 
     RUN_POLL_UNTIL(tb_cond_r_ready, UT_TIMEOUT);
     REQUIRE(tb_check_and_pop_r(tb, 0x05, 0x80001000 + 0x1000, 0, true),
@@ -210,6 +213,7 @@ TEST_CASE(axi2bti_tb_t, single_read)
     REQUIRE(tb->mock_req_count == 1, "exactly 1 BTI read");
     REQUIRE(!tb->mock_last_write && tb->mock_last_addr == 0x80001000,
             "BTI read at correct addr");
+    REQUIRE(tb->mock_last_size == BTI_REQ_SIZE_B1, "BTI read preserves AXI byte size");
 
     tb_drain_fifos(tb);
     TEST_END();
@@ -222,14 +226,15 @@ TEST_CASE(axi2bti_tb_t, single_write)
     tb->mock_err_on_req = 0;
     tb->mock_req_count = 0;
 
-    tb_axi4_write_aw(tb, 0x03, 0x90000000, 0, 2, 1);
-    tb_axi4_write_w(tb, 0x12345678, 0x0f, true);
+    tb_axi4_write_aw(tb, 0x03, 0x90000000, 0, AXI4_AW_SIZE_B2, 1);
+    tb_axi4_write_w(tb, 0x12345678, 0x03, true);
 
     RUN_POLL_UNTIL(tb_cond_b_ready, UT_TIMEOUT);
     REQUIRE(tb_check_and_pop_b(tb, 0x03, 0), "B: id=0x03 resp=OKAY");
     REQUIRE(tb->mock_req_count == 1, "exactly 1 BTI write");
     REQUIRE(tb->mock_last_write && tb->mock_last_data == 0x12345678,
             "BTI write with correct data");
+    REQUIRE(tb->mock_last_size == BTI_REQ_SIZE_B2, "BTI write preserves AXI halfword size");
 
     tb_drain_fifos(tb);
     TEST_END();

@@ -199,28 +199,51 @@ static bool tb_cond_bti_rsp(l1_tb_t *tb)
     return !itf_fifo_empty(&tb->bti_rsp);
 }
 
-static void tb_bti_read(l1_tb_t *tb, u16 trans_id, u32 addr)
+static void tb_bti_read_size(l1_tb_t *tb, u16 trans_id, u32 addr, bti_req_size_t size)
 {
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_READ,
         .addr = addr,
+        .size = size,
         .data = 0,
         .strobe = 0xf
     };
     itf_write(&tb->bti_req, &req);
 }
 
-static void tb_bti_write(l1_tb_t *tb, u16 trans_id, u32 addr, u32 data, u8 strobe)
+static void tb_bti_read(l1_tb_t *tb, u16 trans_id, u32 addr)
+{
+    tb_bti_read_size(tb, trans_id, addr, BTI_REQ_SIZE_B4);
+}
+
+static void tb_bti_write_size(l1_tb_t *tb, u16 trans_id, u32 addr, u32 data,
+    u8 strobe, bti_req_size_t size)
 {
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_WRITE,
         .addr = addr,
+        .size = size,
         .data = data,
         .strobe = strobe
     };
     itf_write(&tb->bti_req, &req);
+}
+
+static void tb_bti_write(l1_tb_t *tb, u16 trans_id, u32 addr, u32 data, u8 strobe)
+{
+    tb_bti_write_size(tb, trans_id, addr, data, strobe, BTI_REQ_SIZE_B4);
+}
+
+static u32 tb_read_bytes(const l1_tb_t *tb, u32 addr, u32 size)
+{
+    const u8 *mem = (const u8 *)tb->mem;
+    u32 data = 0;
+    for (u32 i = 0; i < size; i++) {
+        data |= (u32)mem[addr + i] << (i * 8u);
+    }
+    return data;
 }
 
 static bool tb_pop_rsp(l1_tb_t *tb, u16 trans_id, u32 data, bool ok)
@@ -286,6 +309,53 @@ TEST_CASE(l1_tb_t, writeback_on_dirty_evict)
     TEST_END();
 }
 
+TEST_CASE(l1_tb_t, unaligned_reads)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Unaligned Reads");
+
+    tb_bti_read_size(tb, 1, 0x21, BTI_REQ_SIZE_B1);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb_read_bytes(tb, 0x21, 1), true),
+        "byte read is aligned to response bit 0");
+
+    tb_bti_read_size(tb, 2, 0x23, BTI_REQ_SIZE_B2);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, tb_read_bytes(tb, 0x23, 2), true),
+        "halfword read crosses a cache word");
+
+    tb_bti_read_size(tb, 3, 0x25, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, tb_read_bytes(tb, 0x25, 4), true),
+        "word read crosses cache words");
+    REQUIRE(tb->ar_count == 1, "unaligned reads in one line share one refill");
+
+    TEST_END();
+}
+
+TEST_CASE(l1_tb_t, cross_line_read_write)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Cross-line Read and Write");
+
+    tb_bti_read_size(tb, 1, 0x3f, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb_read_bytes(tb, 0x3f, 4), true),
+        "word read is assembled from two cache lines");
+    REQUIRE(tb->ar_count == 2, "cross-line read refills both lines");
+
+    tb_bti_write_size(tb, 2, 0x3f, 0x78563412, 0xf, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, 0, true), "cross-line write completes once");
+
+    tb_bti_read_size(tb, 3, 0x3f, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, 0x78563412, true),
+        "cross-line write updates bytes in both lines");
+
+    TEST_END();
+}
+
 TEST_CASE(l1_tb_t, bypass_range)
 {
     tb_reset(tb);
@@ -337,6 +407,8 @@ int main(void)
     tb_setup(&tb, &cached_conf);
     TEST_RUN(read_miss_then_hit);
     TEST_RUN(writeback_on_dirty_evict);
+    TEST_RUN(unaligned_reads);
+    TEST_RUN(cross_line_read_write);
     TEST_RUN(flush_invalidates);
     int ret = ut_sbd_ret(&tb.sbd);
     ut_sbd_summary(&tb.sbd);

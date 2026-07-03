@@ -503,10 +503,11 @@ static void mmu_send_pte_req(mmu_t *mmu)
         return;
     }
 
-    bti_req_if_t req;
+    bti_req_if_t req = {};
     req.trans_id = MMU_PTE_TRANS_ID;
     req.cmd = BTI_REQ_CMD_READ;
     req.addr = mmu_pte_addr(mmu);
+    req.size = BTI_REQ_SIZE_B4;
     req.data = 0;
     req.strobe = 0xf;
     itf_write(mmu->ptw_bti_req_mst, &req);

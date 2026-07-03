@@ -109,7 +109,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     l1_construct(&s->l1i, "u_l1i", &l1i_conf);
 
     l1_conf_t l1d_conf = {
-        .full_bypass = true,
+        .full_bypass = false,
         .ro = false,
         .size = L1D_SIZE,
         .way_num = L1D_WAY_NUM,

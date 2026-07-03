@@ -58,9 +58,10 @@ typedef struct l1 {
     u32 req_set;
     u32 req_way;
     u32 req_line_idx;
-    u32 req_word_idx;
     u32 req_tag;
     u32 req_line_addr;
+    u32 req_byte_idx;
+    u32 req_data;
     u32 wb_line_addr;
     u32 beat_idx;
     bool op_ok;

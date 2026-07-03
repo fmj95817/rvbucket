@@ -39,12 +39,13 @@ void rom_burn(rom_t *rom, const void *data, u32 addr, u32 size)
     memcpy(rom->data + addr, data, size);
 }
 
-static bool rom_read(rom_t *rom, u32 addr, u32 *data)
+static bool rom_read(rom_t *rom, u32 addr, u32 byte_num, u32 *data)
 {
-    if (addr >= rom->size) {
+    if (byte_num > sizeof(*data) || addr >= rom->size || byte_num > rom->size - addr) {
         return false;
     }
-    *data = *((u32*)(rom->data + addr));
+    *data = 0;
+    memcpy(data, rom->data + addr, byte_num);
     return true;
 }
 
@@ -91,7 +92,8 @@ static void rom_proc_axi_r(rom_t *rom)
 
     u32 addr = rom->rd_burst_addr;
     u32 data = 0;
-    bool ok = rom_read(rom, addr, &data);
+    u32 byte_num = 1u << rom->rd_burst_size;
+    bool ok = rom_read(rom, addr, byte_num, &data);
     axi4_r_resp_t resp = ok ? AXI4_R_RESP_OKAY : AXI4_R_RESP_SLVERR;
 
     bool last = (rom->rd_burst_cnt == rom->rd_burst_len);
@@ -132,12 +134,19 @@ static void rom_proc_bti(rom_t *rom)
     itf_read(rom->bti_req_slv, &bti_req);
     DBG_CHECK(bti_req.addr >= rom->base_addr);
 
-    bti_rsp_if_t bti_rsp;
-    bti_rsp.trans_id = bti_req.trans_id;
+    bti_rsp_if_t bti_rsp = {
+        .trans_id = bti_req.trans_id,
+        .data = 0,
+        .ok = false
+    };
     u32 addr = bti_req.addr - rom->base_addr;
+    u32 byte_num = 1u << bti_req.size;
 
-    if (bti_req.cmd == BTI_REQ_CMD_READ) {
-        bti_rsp.ok = rom_read(rom, addr, &bti_rsp.data);
+    if (bti_req.size > BTI_REQ_SIZE_B4) {
+        bti_rsp.data = 0;
+        bti_rsp.ok = false;
+    } else if (bti_req.cmd == BTI_REQ_CMD_READ) {
+        bti_rsp.ok = rom_read(rom, addr, byte_num, &bti_rsp.data);
     } else {
         bti_rsp.data = 0;
         bti_rsp.ok = false;

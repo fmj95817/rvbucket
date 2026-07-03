@@ -28,10 +28,11 @@ static void hbi_proc_i_req(hbi_t *hbi)
     fch_req_if_t fch_req;
     itf_read(hbi->fch_req_slv, &fch_req);
 
-    bti_req_if_t bti_req;
+    bti_req_if_t bti_req = {};
     bti_req.trans_id = FCH_TRANS_ID;
     bti_req.cmd = BTI_REQ_CMD_READ;
     bti_req.addr = fch_req.pc;
+    bti_req.size = BTI_REQ_SIZE_B4;
     itf_write(hbi->i_bti_req_mst, &bti_req);
 }
 
@@ -51,10 +52,11 @@ static void hbi_proc_d_req(hbi_t *hbi)
     ldst_req_if_t ldst_req;
     itf_read(hbi->ldst_req_slv, &ldst_req);
 
-    bti_req_if_t bti_req;
+    bti_req_if_t bti_req = {};
     bti_req.trans_id = LDST_TRANS_ID;
     bti_req.cmd = ldst_req.st ? BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
     bti_req.addr = ldst_req.addr;
+    bti_req.size = (bti_req_size_t)ldst_req.size;
     bti_req.data = ldst_req.data;
     bti_req.strobe = ldst_req.strobe;
     itf_write(hbi->d_bti_req_mst, &bti_req);

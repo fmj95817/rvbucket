@@ -107,16 +107,23 @@ static void tb_free(rom_tb_t *tb)
     itf_free(&tb->axi4_r_itf);
 }
 
-static void tb_bti_write_read_req(rom_tb_t *tb, u16 trans_id, u32 addr)
+static void tb_bti_write_read_req_size(rom_tb_t *tb, u16 trans_id, u32 addr,
+    bti_req_size_t size)
 {
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_READ,
+        .size = size,
         .addr = addr,
         .data = 0,
         .strobe = 0
     };
     itf_write(&tb->bti_req_itf, &req);
+}
+
+static void tb_bti_write_read_req(rom_tb_t *tb, u16 trans_id, u32 addr)
+{
+    tb_bti_write_read_req_size(tb, trans_id, addr, BTI_REQ_SIZE_B4);
 }
 
 static void tb_bti_write_write_req(rom_tb_t *tb, u16 trans_id, u32 addr,
@@ -125,6 +132,7 @@ static void tb_bti_write_write_req(rom_tb_t *tb, u16 trans_id, u32 addr,
     bti_req_if_t req = {
         .trans_id = trans_id,
         .cmd = BTI_REQ_CMD_WRITE,
+        .size = BTI_REQ_SIZE_B4,
         .addr = addr,
         .data = data,
         .strobe = strobe
@@ -213,6 +221,39 @@ TEST_CASE(rom_tb_t, bti_write_rejected)
     TEST_END();
 }
 
+TEST_CASE(rom_tb_t, bti_size_and_boundary)
+{
+    TEST_BEGIN("BTI Size and Boundary");
+
+    tb_construct_bti(tb, 0);
+    tb_dut_reset(tb);
+    u32 data = 0x44332211;
+    u8 last = 0x5a;
+    rom_burn(&tb->dut, &data, 0x40, sizeof(data));
+    rom_burn(&tb->dut, &last, ROM_SIZE - 1, sizeof(last));
+
+    tb_bti_write_read_req_size(tb, 0x0020, ROM_BASE + 0x41, BTI_REQ_SIZE_B1);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0020, 0x22, true),
+        "byte read is returned in low bits");
+
+    tb_bti_write_read_req_size(tb, 0x0021, ROM_BASE + 0x41, BTI_REQ_SIZE_B2);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0021, 0x3322, true),
+        "halfword read is returned in low bits");
+
+    tb_bti_write_read_req_size(tb, 0x0022, ROM_BASE + ROM_SIZE - 1, BTI_REQ_SIZE_B1);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0022, 0x5a, true), "last byte is readable");
+    tb_bti_write_read_req_size(tb, 0x0023, ROM_BASE + ROM_SIZE - 1, BTI_REQ_SIZE_B2);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x0023, 0, false),
+        "access crossing ROM boundary is rejected");
+
+    tb_free_dut(tb);
+    TEST_END();
+}
+
 TEST_CASE(rom_tb_t, axi_read)
 {
     TEST_BEGIN("AXI Single Beat Read");
@@ -260,6 +301,7 @@ int main()
 
     TEST_RUN(bti_read);
     TEST_RUN(bti_write_rejected);
+    TEST_RUN(bti_size_and_boundary);
     TEST_RUN(axi_read);
     TEST_RUN(axi_burst_read);
 
