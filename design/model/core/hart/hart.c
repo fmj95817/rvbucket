@@ -22,20 +22,28 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     BTI_IF_CONSTRUCT(s, l1d_, 1);
     TLB_FLUSH_IF_CONSTRUCT(s, tlb_flush_itf, 1);
     L1_FLUSH_IF_CONSTRUCT(s, l1i_flush_itf, 1);
-    HART_EXPT_IF_CONSTRUCT(s, i_hart_expt_itf, 1);
-    HART_EXPT_IF_CONSTRUCT(s, hart_expt_itf, 1);
+    HART_EXPT_IF_CONSTRUCT(s, mmu_fch_expt_itf, 1);
+    HART_EXPT_IF_CONSTRUCT(s, fch_expt_itf, 1);
+    HART_EXPT_IF_CONSTRUCT(s, ex_expt_itf, 1);
+    HART_EXPT_IF_CONSTRUCT(s, ldst_expt_itf, 1);
     TRAP_SEND_IF_CONSTRUCT(s, trap_send_itf, 1);
     EXU_CSR_READ_REQ_SIGNAL_IF_CONSTRUCT(s, exu_csr_read_req_sig_itf, false, false);
     CSR_EXU_READ_RSP_SIGNAL_IF_CONSTRUCT(s, csr_exu_read_rsp_sig_itf, false, false);
     EXU_CSR_WRITE_REQ_SIGNAL_IF_CONSTRUCT(s, exu_csr_write_req_sig_itf, false, false);
     CSR_EXU_WRITE_RSP_SIGNAL_IF_CONSTRUCT(s, csr_exu_write_rsp_sig_itf, false, false);
+    EXU_STATE_SIGNAL_IF_CONSTRUCT(s, exu_state_sig_itf, false, false);
+    TRAP_EXU_CTRL_SIGNAL_IF_CONSTRUCT(s, trap_exu_ctrl_sig_itf, false, false);
+    CSR_MMU_STATE_SIGNAL_IF_CONSTRUCT(s, csr_mmu_state_sig_itf, false, false);
+    CSR_TRAP_STATE_SIGNAL_IF_CONSTRUCT(s, csr_trap_state_sig_itf, false, false);
+    TRAP_CSR_WRITE_REQ_SIGNAL_IF_CONSTRUCT(s, trap_csr_write_req_sig_itf, false, false);
+    CSR_TRAP_WRITE_RSP_SIGNAL_IF_CONSTRUCT(s, csr_trap_write_rsp_sig_itf, false, false);
 
     s->ifu.fch_req_mst = &s->fch_req_itf;
     s->ifu.fch_rsp_slv = &s->fch_rsp_itf;
     s->ifu.ex_req_mst = &s->ex_req_itf;
     s->ifu.ex_rsp_slv = &s->ex_rsp_itf;
     s->ifu.fl_req_mst = &s->fl_req_itf;
-    s->ifu.hart_expt_mst = &s->hart_expt_itf;
+    s->ifu.fch_expt_mst = &s->fch_expt_itf;
     s->ifu.trap_send_slv = &s->trap_send_itf;
     ifu_construct(&s->ifu, "u_ifu", conf->boot_rom_base, conf->boot_rom_base, conf->boot_rom_size);
 
@@ -44,13 +52,15 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->exu.ex_rsp_mst = &s->ex_rsp_itf;
     s->exu.ldst_req_mst = &s->ldst_req_itf;
     s->exu.ldst_rsp_slv = &s->ldst_rsp_itf;
-    s->exu.hart_expt_mst = &s->hart_expt_itf;
+    s->exu.ex_expt_mst = &s->ex_expt_itf;
     s->exu.exu_csr_read_req_out = &s->exu_csr_read_req_sig_itf;
     s->exu.csr_exu_read_rsp_in = &s->csr_exu_read_rsp_sig_itf;
     s->exu.exu_csr_write_req_out = &s->exu_csr_write_req_sig_itf;
     s->exu.csr_exu_write_rsp_in = &s->csr_exu_write_rsp_sig_itf;
     s->exu.tlb_flush_mst = &s->tlb_flush_itf;
     s->exu.l1i_flush_mst = &s->l1i_flush_itf;
+    s->exu.exu_state_out = &s->exu_state_sig_itf;
+    s->exu.trap_exu_ctrl_in = &s->trap_exu_ctrl_sig_itf;
     exu_construct(&s->exu, "u_exu");
 
     s->csr.cycle = s->cycle;
@@ -58,34 +68,36 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->csr.core_timer_in = s->core_timer_in;
     s->csr.core_m_irq_in = s->core_m_irq_in;
     s->csr.core_swi_pend_out = s->core_swi_pend_out;
+    s->csr.ext_irq_in = s->ext_irq_in;
     s->csr.exu_csr_read_req_in = &s->exu_csr_read_req_sig_itf;
     s->csr.csr_exu_read_rsp_out = &s->csr_exu_read_rsp_sig_itf;
     s->csr.exu_csr_write_req_in = &s->exu_csr_write_req_sig_itf;
     s->csr.csr_exu_write_rsp_out = &s->csr_exu_write_rsp_sig_itf;
+    s->csr.trap_csr_write_req_in = &s->trap_csr_write_req_sig_itf;
+    s->csr.csr_trap_write_rsp_out = &s->csr_trap_write_rsp_sig_itf;
+    s->csr.csr_mmu_state_out = &s->csr_mmu_state_sig_itf;
+    s->csr.csr_trap_state_out = &s->csr_trap_state_sig_itf;
     csr_construct(&s->csr, "u_csr");
 
     BTI_MST_CONNECT(&s->hbi, i_, s, va_i_);
     BTI_MST_CONNECT(&s->hbi, d_, s, va_d_);
     s->hbi.fch_req_slv = &s->fch_req_itf;
     s->hbi.fch_rsp_mst = &s->fch_rsp_itf;
-    s->hbi.i_hart_expt_slv = &s->i_hart_expt_itf;
+    s->hbi.mmu_fch_expt_slv = &s->mmu_fch_expt_itf;
     s->hbi.ldst_req_slv = &s->ldst_req_itf;
     s->hbi.ldst_rsp_mst = &s->ldst_rsp_itf;
     hbi_construct(&s->hbi, "u_hbi");
 
     BTI_SLV_CONNECT(&s->mmu, va_i_, s, va_i_);
     BTI_SLV_CONNECT(&s->mmu, va_d_, s, va_d_);
-    s->mmu.i_hart_expt_mst = &s->i_hart_expt_itf;
-    s->mmu.hart_expt_mst = &s->hart_expt_itf;
+    s->mmu.mmu_fch_expt_mst = &s->mmu_fch_expt_itf;
+    s->mmu.ldst_expt_mst = &s->ldst_expt_itf;
     BTI_MST_CONNECT(&s->mmu, pa_i_, s, pa_i_);
     BTI_MST_CONNECT(&s->mmu, pa_d_, s, pa_d_);
     BTI_MST_CONNECT(&s->mmu, ptw_, s, pa_ptw_);
     s->mmu.tlb_flush_slv = &s->tlb_flush_itf;
-    s->mmu.priv = &s->exu.priv;
-    s->mmu.satp = &s->csr.regs.satp;
-    s->mmu.mstatus = &s->csr.regs.mstatus;
-    s->mmu.ifu_pc = &s->ifu.fch.pc;
-    s->mmu.exu_pc = &s->exu.cur_pc;
+    s->mmu.exu_state_in = &s->exu_state_sig_itf;
+    s->mmu.csr_mmu_state_in = &s->csr_mmu_state_sig_itf;
     mmu_conf_t mmu_conf = {};
     mmu_construct(&s->mmu, "u_mmu", &mmu_conf);
 
@@ -122,36 +134,27 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->l1d.flush_slv = NULL;
     l1_construct(&s->l1d, "u_l1d", &l1d_conf);
 
-    s->trap.hart_expt_slv = &s->hart_expt_itf;
+    s->trap.fch_expt_slv = &s->fch_expt_itf;
+    s->trap.ex_expt_slv = &s->ex_expt_itf;
+    s->trap.ldst_expt_slv = &s->ldst_expt_itf;
     s->trap.trap_send_mst = &s->trap_send_itf;
-    s->trap.core_m_irq_in = s->core_m_irq_in;
-    s->trap.ext_irq_in = s->ext_irq_in;
-    s->trap.priv = &s->exu.priv;
-    s->trap.mstatus = &s->csr.regs.mstatus;
-    s->trap.mcause = &s->csr.regs.mcause;
-    s->trap.mip = &s->csr.regs.mip;
-    s->trap.mie = &s->csr.regs.mie;
-    s->trap.mtvec = &s->csr.regs.mtvec;
-    s->trap.mepc = &s->csr.regs.mepc;
-    s->trap.mtval = &s->csr.regs.mtval;
-    s->trap.medeleg = &s->csr.regs.medeleg;
-    s->trap.mideleg = &s->csr.regs.mideleg;
-    s->trap.sstatus = &s->csr.regs.sstatus;
-    s->trap.scause = &s->csr.regs.scause;
-    s->trap.sip = &s->csr.regs.sip;
-    s->trap.sie = &s->csr.regs.sie;
-    s->trap.stvec = &s->csr.regs.stvec;
-    s->trap.sepc = &s->csr.regs.sepc;
-    s->trap.stval = &s->csr.regs.stval;
-    s->trap.irq_epc = &s->exu.irq_epc;
-    s->trap.irq_defer = &s->exu.irq_defer;
-    s->trap.exu_wfi = &s->exu.wfi;
-    s->trap.exu_wfi_resume_pc = &s->exu.wfi_resume_pc;
+    s->trap.exu_state_in = &s->exu_state_sig_itf;
+    s->trap.trap_exu_ctrl_out = &s->trap_exu_ctrl_sig_itf;
+    s->trap.csr_trap_state_in = &s->csr_trap_state_sig_itf;
+    s->trap.trap_csr_write_req_out = &s->trap_csr_write_req_sig_itf;
+    s->trap.csr_trap_write_rsp_in = &s->csr_trap_write_rsp_sig_itf;
     trap_construct(&s->trap, "u_trap");
 }
 
 void hart_reset(hart_t *s)
 {
+    itf_reset(&s->exu_state_sig_itf);
+    itf_reset(&s->trap_exu_ctrl_sig_itf);
+    itf_reset(&s->csr_mmu_state_sig_itf);
+    itf_reset(&s->csr_trap_state_sig_itf);
+    itf_reset(&s->trap_csr_write_req_sig_itf);
+    itf_reset(&s->csr_trap_write_rsp_sig_itf);
+
     ifu_reset(&s->ifu);
     exu_reset(&s->exu);
     csr_reset(&s->csr);
@@ -177,8 +180,10 @@ void hart_reset(hart_t *s)
     BTI_IF_RESET(s, l1d_);
     itf_reset(&s->tlb_flush_itf);
     itf_reset(&s->l1i_flush_itf);
-    itf_reset(&s->i_hart_expt_itf);
-    itf_reset(&s->hart_expt_itf);
+    itf_reset(&s->mmu_fch_expt_itf);
+    itf_reset(&s->fch_expt_itf);
+    itf_reset(&s->ex_expt_itf);
+    itf_reset(&s->ldst_expt_itf);
     itf_reset(&s->trap_send_itf);
     itf_reset(&s->exu_csr_read_req_sig_itf);
     itf_reset(&s->csr_exu_read_rsp_sig_itf);
@@ -213,13 +218,21 @@ void hart_free(hart_t *s)
     BTI_IF_FREE(s, l1d_);
     itf_free(&s->tlb_flush_itf);
     itf_free(&s->l1i_flush_itf);
-    itf_free(&s->i_hart_expt_itf);
-    itf_free(&s->hart_expt_itf);
+    itf_free(&s->mmu_fch_expt_itf);
+    itf_free(&s->fch_expt_itf);
+    itf_free(&s->ex_expt_itf);
+    itf_free(&s->ldst_expt_itf);
     itf_free(&s->trap_send_itf);
     itf_free(&s->exu_csr_read_req_sig_itf);
     itf_free(&s->csr_exu_read_rsp_sig_itf);
     itf_free(&s->exu_csr_write_req_sig_itf);
     itf_free(&s->csr_exu_write_rsp_sig_itf);
+    itf_free(&s->exu_state_sig_itf);
+    itf_free(&s->trap_exu_ctrl_sig_itf);
+    itf_free(&s->csr_mmu_state_sig_itf);
+    itf_free(&s->csr_trap_state_sig_itf);
+    itf_free(&s->trap_csr_write_req_sig_itf);
+    itf_free(&s->csr_trap_write_rsp_sig_itf);
 }
 
 void hart_clock(hart_t *s)
@@ -249,11 +262,19 @@ void hart_clock(hart_t *s)
     BTI_IF_DBG_CLOCK(s, l1d_);
     itf_dbg_clock(&s->tlb_flush_itf);
     itf_dbg_clock(&s->l1i_flush_itf);
-    itf_dbg_clock(&s->i_hart_expt_itf);
-    itf_dbg_clock(&s->hart_expt_itf);
+    itf_dbg_clock(&s->mmu_fch_expt_itf);
+    itf_dbg_clock(&s->fch_expt_itf);
+    itf_dbg_clock(&s->ex_expt_itf);
+    itf_dbg_clock(&s->ldst_expt_itf);
     itf_dbg_clock(&s->trap_send_itf);
     itf_dbg_clock(&s->exu_csr_read_req_sig_itf);
     itf_dbg_clock(&s->csr_exu_read_rsp_sig_itf);
     itf_dbg_clock(&s->exu_csr_write_req_sig_itf);
     itf_dbg_clock(&s->csr_exu_write_rsp_sig_itf);
+    itf_dbg_clock(&s->exu_state_sig_itf);
+    itf_dbg_clock(&s->trap_exu_ctrl_sig_itf);
+    itf_dbg_clock(&s->csr_mmu_state_sig_itf);
+    itf_dbg_clock(&s->csr_trap_state_sig_itf);
+    itf_dbg_clock(&s->trap_csr_write_req_sig_itf);
+    itf_dbg_clock(&s->csr_trap_write_rsp_sig_itf);
 }

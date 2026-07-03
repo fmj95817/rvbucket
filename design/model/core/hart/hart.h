@@ -59,13 +59,21 @@ typedef struct hart {
     BTI_IF_DECL(l1d_);
     itf_t tlb_flush_itf;
     itf_t l1i_flush_itf;
-    itf_t i_hart_expt_itf;
-    itf_t hart_expt_itf;
+    itf_t mmu_fch_expt_itf;
+    itf_t fch_expt_itf;
+    itf_t ex_expt_itf;
+    itf_t ldst_expt_itf;
     itf_t trap_send_itf;
     itf_t exu_csr_read_req_sig_itf;
     itf_t csr_exu_read_rsp_sig_itf;
     itf_t exu_csr_write_req_sig_itf;
     itf_t csr_exu_write_rsp_sig_itf;
+    itf_t exu_state_sig_itf;
+    itf_t trap_exu_ctrl_sig_itf;
+    itf_t csr_mmu_state_sig_itf;
+    itf_t csr_trap_state_sig_itf;
+    itf_t trap_csr_write_req_sig_itf;
+    itf_t csr_trap_write_rsp_sig_itf;
 } hart_t;
 
 extern void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf);

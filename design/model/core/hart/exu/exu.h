@@ -15,6 +15,8 @@
 #include "itf/csr_exu_write_rsp_if.h"
 #include "itf/tlb_flush_if.h"
 #include "itf/l1_flush_if.h"
+#include "itf/exu_state_if.h"
+#include "itf/trap_exu_ctrl_if.h"
 #include "spec/core/isa.h"
 
 typedef enum amo_stage {
@@ -29,18 +31,22 @@ typedef struct exu {
     itf_t *ex_rsp_mst;
     itf_t *ldst_req_mst;
     itf_t *ldst_rsp_slv;
-    itf_t *hart_expt_mst;
+    itf_t *ex_expt_mst;
     itf_t *exu_csr_read_req_out;
     itf_t *csr_exu_read_rsp_in;
     itf_t *exu_csr_write_req_out;
     itf_t *csr_exu_write_rsp_in;
     itf_t *tlb_flush_mst;
     itf_t *l1i_flush_mst;
+    itf_t *exu_state_out;
+    itf_t *trap_exu_ctrl_in;
 
     exu_csr_read_req_if_t *csr_read_req_o;
     const csr_exu_read_rsp_if_t *csr_read_rsp_i;
     exu_csr_write_req_if_t *csr_write_req_o;
     const csr_exu_write_rsp_if_t *csr_write_rsp_i;
+    exu_state_if_t *state_o;
+    const trap_exu_ctrl_if_t *trap_ctrl_i;
 
     rv32g_priv_t priv;
     u32 cur_pc;

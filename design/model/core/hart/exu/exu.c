@@ -7,6 +7,26 @@
 
 static u32 exu_heartbeat_cnt;
 
+static void exu_publish_state(exu_t *exu)
+{
+    exu->state_o->priv = exu->priv;
+    exu->state_o->pc = exu->cur_pc;
+    exu->state_o->irq_epc = exu->irq_epc;
+    exu->state_o->irq_defer = exu->irq_defer;
+    exu->state_o->wfi = exu->wfi;
+    exu->state_o->wfi_resume_pc = exu->wfi_resume_pc;
+    itf_signal_write_notify(exu->exu_state_out);
+}
+
+static void exu_trap_ctrl_cb(void *args)
+{
+    exu_t *exu = args;
+    exu->priv = (rv32g_priv_t)exu->trap_ctrl_i->priv;
+    exu->irq_epc = exu->trap_ctrl_i->irq_epc;
+    exu->wfi = exu->trap_ctrl_i->wfi;
+    exu_publish_state(exu);
+}
+
 static void exu_heartbeat(u32 pc, u32 inst, const exu_t *exu)
 {
     if (pc < 0x40000000u) {
@@ -145,6 +165,7 @@ void exu_clock(exu_t *exu)
 {
     exu_proc_ex_req(exu);
     exu_proc_biu_rsp(exu);
+    exu_publish_state(exu);
 }
 
 void exu_construct(exu_t *exu, const char *name)
@@ -184,6 +205,9 @@ void exu_construct(exu_t *exu, const char *name)
     exu->csr_read_rsp_i = itf_signal_get_src_and_chk(exu->csr_exu_read_rsp_in);
     exu->csr_write_req_o = itf_signal_get_src_and_chk(exu->exu_csr_write_req_out);
     exu->csr_write_rsp_i = itf_signal_get_src_and_chk(exu->csr_exu_write_rsp_in);
+    exu->state_o = itf_signal_get_src_and_chk(exu->exu_state_out);
+    exu->trap_ctrl_i = itf_signal_get_src_and_chk(exu->trap_exu_ctrl_in);
+    itf_signal_set_wcb(exu->trap_exu_ctrl_in, &exu_trap_ctrl_cb, exu);
 }
 
 void exu_reset(exu_t *exu)
@@ -209,6 +233,7 @@ void exu_reset(exu_t *exu)
     exu->priv = RV32G_PRIV_MACHINE;
     exu->cur_pc = 0;
     exu->irq_epc = 0;
+    exu_publish_state(exu);
 }
 
 void exu_free(exu_t *exu) {}

@@ -72,6 +72,68 @@
             ]
         },
 
+        "trap_csr_write_req": {
+            "type": "vld",
+            "payloads": [
+                { "name": "addr", "width": 12 },
+                { "name": "val", "width": 32 }
+            ]
+        },
+
+        "csr_trap_write_rsp": {
+            "type": "vld",
+            "payloads": [
+                { "name": "ok", "width": 1 }
+            ]
+        },
+
+        "exu_state": {
+            "type": "none",
+            "payloads": [
+                { "name": "priv", "width": 2 },
+                { "name": "pc", "width": 32 },
+                { "name": "irq_epc", "width": 32 },
+                { "name": "irq_defer", "width": 1 },
+                { "name": "wfi", "width": 1 },
+                { "name": "wfi_resume_pc", "width": 32 }
+            ]
+        },
+
+        "trap_exu_ctrl": {
+            "type": "vld",
+            "payloads": [
+                { "name": "priv", "width": 2 },
+                { "name": "irq_epc", "width": 32 },
+                { "name": "wfi", "width": 1 }
+            ]
+        },
+
+        "csr_mmu_state": {
+            "type": "none",
+            "payloads": [
+                { "name": "satp", "width": 32 },
+                { "name": "mstatus", "width": 32 }
+            ]
+        },
+
+        "csr_trap_state": {
+            "type": "none",
+            "payloads": [
+                { "name": "mstatus", "width": 32 },
+                { "name": "mip", "width": 32 },
+                { "name": "mie", "width": 32 },
+                { "name": "mtvec", "width": 32 },
+                { "name": "mepc", "width": 32 },
+                { "name": "medeleg", "width": 32 },
+                { "name": "mideleg", "width": 32 },
+                { "name": "sstatus", "width": 32 },
+                { "name": "sip", "width": 32 },
+                { "name": "sie", "width": 32 },
+                { "name": "stvec", "width": 32 },
+                { "name": "sepc", "width": 32 }
+            ]
+        },
+
         "fl_req": {
             "type": "vld",
             "payloads": []

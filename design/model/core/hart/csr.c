@@ -5,6 +5,27 @@
     RV32G_CSR_MIP_SSIP_BIT | RV32G_CSR_MIP_STIP_BIT | \
     RV32G_CSR_MIP_SEIP_BIT | RV32G_CSR_MIP_LCOFIP_BIT)
 
+static void csr_publish_state(csr_t *csr)
+{
+    csr->mmu_state_o->satp = csr->regs.satp.raw;
+    csr->mmu_state_o->mstatus = csr->regs.mstatus.raw;
+    itf_signal_write_notify(csr->csr_mmu_state_out);
+
+    csr->trap_state_o->mstatus = csr->regs.mstatus.raw;
+    csr->trap_state_o->mip = csr->regs.mip.raw;
+    csr->trap_state_o->mie = csr->regs.mie.raw;
+    csr->trap_state_o->mtvec = csr->regs.mtvec.raw;
+    csr->trap_state_o->mepc = csr->regs.mepc;
+    csr->trap_state_o->medeleg = csr->regs.medeleg.raw;
+    csr->trap_state_o->mideleg = csr->regs.mideleg.raw;
+    csr->trap_state_o->sstatus = csr->regs.sstatus.raw;
+    csr->trap_state_o->sip = csr->regs.sip.raw;
+    csr->trap_state_o->sie = csr->regs.sie.raw;
+    csr->trap_state_o->stvec = csr->regs.stvec.raw;
+    csr->trap_state_o->sepc = csr->regs.sepc;
+    itf_signal_write_notify(csr->csr_trap_state_out);
+}
+
 static void sync_sstatus_from_mstatus(csr_t *csr)
 {
     csr->regs.sstatus.reg.sie = csr->regs.mstatus.reg.sie;
@@ -80,6 +101,16 @@ static void m_irq_cb(void *args)
     csr->regs.mip.reg.mtip = csr->core_m_irq_i->mtimer ? 1u : 0u;
     csr->regs.mip.reg.msip = csr->core_m_irq_i->msw ? 1u : 0u;
     sync_s_irq_from_m_irq(csr);
+    csr_publish_state(csr);
+}
+
+static void ext_irq_cb(void *args)
+{
+    csr_t *csr = args;
+    csr->regs.mip.reg.meip = csr->ext_irq_i->irq ? 1u : 0u;
+    csr->regs.mip.reg.seip = csr->ext_irq_i->irq ? 1u : 0u;
+    sync_s_irq_from_m_irq(csr);
+    csr_publish_state(csr);
 }
 
 static void csr_read_cb(void *args)
@@ -109,6 +140,19 @@ static void csr_write_cb(void *args)
     itf_signal_write_notify(csr->csr_exu_write_rsp_out);
 
     csr->core_swi_pend_o->msip = (csr->regs.mip.reg.msip != 0u);
+    csr_publish_state(csr);
+}
+
+static void csr_trap_write_cb(void *args)
+{
+    csr_t *csr = args;
+    csr->trap_write_rsp_o->ok = rv32g_csr_write(&csr->regs, RV32G_PRIV_MACHINE,
+        csr->trap_write_req_i->addr, csr->trap_write_req_i->val);
+    if (csr->trap_write_rsp_o->ok) {
+        csr_sync_supervisor_aliases(csr, csr->trap_write_req_i->addr);
+    }
+    itf_signal_write_notify(csr->csr_trap_write_rsp_out);
+    csr_publish_state(csr);
 }
 
 void csr_construct(csr_t *csr, const char *name)
@@ -139,10 +183,17 @@ void csr_construct(csr_t *csr, const char *name)
     csr->read_rsp_o = itf_signal_get_src_and_chk(csr->csr_exu_read_rsp_out);
     csr->write_req_i = itf_signal_get_src_and_chk(csr->exu_csr_write_req_in);
     csr->write_rsp_o = itf_signal_get_src_and_chk(csr->csr_exu_write_rsp_out);
+    csr->ext_irq_i = itf_signal_get_src_and_chk(csr->ext_irq_in);
+    csr->trap_write_req_i = itf_signal_get_src_and_chk(csr->trap_csr_write_req_in);
+    csr->trap_write_rsp_o = itf_signal_get_src_and_chk(csr->csr_trap_write_rsp_out);
+    csr->mmu_state_o = itf_signal_get_src_and_chk(csr->csr_mmu_state_out);
+    csr->trap_state_o = itf_signal_get_src_and_chk(csr->csr_trap_state_out);
 
     itf_signal_set_wcb(csr->exu_csr_read_req_in, &csr_read_cb, csr);
     itf_signal_set_wcb(csr->exu_csr_write_req_in, &csr_write_cb, csr);
     itf_signal_set_wcb(csr->core_m_irq_in, &m_irq_cb, csr);
+    itf_signal_set_wcb(csr->ext_irq_in, &ext_irq_cb, csr);
+    itf_signal_set_wcb(csr->trap_csr_write_req_in, &csr_trap_write_cb, csr);
 }
 
 void csr_reset(csr_t *csr)
@@ -153,6 +204,7 @@ void csr_reset(csr_t *csr)
     sync_sstatus_from_mstatus(csr);
     sync_s_irq_from_m_irq(csr);
     csr->core_swi_pend_o->msip = (csr->regs.mip.reg.msip != 0u);
+    csr_publish_state(csr);
 }
 
 static void csr_update_proc(csr_t *csr)
@@ -189,6 +241,7 @@ void csr_clock(csr_t *csr)
 {
     csr_update_proc(csr);
     csr_core_s_irq_proc(csr);
+    csr_publish_state(csr);
 }
 
 void csr_free(csr_t *csr)

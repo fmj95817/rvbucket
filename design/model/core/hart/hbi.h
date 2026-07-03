@@ -18,7 +18,7 @@ typedef struct hbi {
 
     itf_t *fch_req_slv;
     itf_t *fch_rsp_mst;
-    itf_t *i_hart_expt_slv;
+    itf_t *mmu_fch_expt_slv;
     itf_t *ldst_req_slv;
     itf_t *ldst_rsp_mst;
 } hbi_t;

@@ -18,7 +18,7 @@ static void exu_send_expt(exu_t *exu, hart_expt_type_t type, hart_expt_cause_t c
     pkt.priv = exu->priv;
     pkt.pc = pc;
     pkt.tval = tval;
-    itf_write(exu->hart_expt_mst, &pkt);
+    itf_write(exu->ex_expt_mst, &pkt);
 }
 
 DECL_SYS_HANDLER(ecall)

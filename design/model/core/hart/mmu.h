@@ -6,6 +6,8 @@
 #include "itf/bti_if.h"
 #include "itf/hart_expt_if.h"
 #include "itf/tlb_flush_if.h"
+#include "itf/exu_state_if.h"
+#include "itf/csr_mmu_state_if.h"
 #include "spec/core/csr.h"
 #include "spec/core/hart.h"
 
@@ -30,8 +32,8 @@ typedef struct mmu {
     itf_t *va_i_bti_rsp_mst;
     itf_t *va_d_bti_req_slv;
     itf_t *va_d_bti_rsp_mst;
-    itf_t *i_hart_expt_mst;
-    itf_t *hart_expt_mst;
+    itf_t *mmu_fch_expt_mst;
+    itf_t *ldst_expt_mst;
 
     itf_t *pa_i_bti_req_mst;
     itf_t *pa_i_bti_rsp_slv;
@@ -41,11 +43,10 @@ typedef struct mmu {
     itf_t *ptw_bti_rsp_slv;
     itf_t *tlb_flush_slv;
 
-    const rv32g_priv_t *priv;
-    const rv32g_csr_satp_t *satp;
-    const rv32g_csr_mstatus_t *mstatus;
-    const u32 *ifu_pc;
-    const u32 *exu_pc;
+    itf_t *exu_state_in;
+    itf_t *csr_mmu_state_in;
+    const exu_state_if_t *exu_state_i;
+    const csr_mmu_state_if_t *csr_state_i;
 
     bool busy;
     bool is_inst;

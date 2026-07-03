@@ -39,7 +39,7 @@ typedef struct ifu {
     itf_t *ex_req_mst;
     itf_t *ex_rsp_slv;
     itf_t *fl_req_mst;
-    itf_t *hart_expt_mst;
+    itf_t *fch_expt_mst;
     itf_t *trap_send_slv;
 
     u32 reset_pc;

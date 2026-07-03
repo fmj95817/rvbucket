@@ -28,10 +28,22 @@ typedef enum mmu_access {
 static bool mmu_pte_permits(const mmu_t *mmu, u32 pte);
 static bool mmu_pte_ad_ok(const mmu_t *mmu, u32 pte);
 
+static rv32g_csr_mstatus_t mmu_mstatus(const mmu_t *mmu)
+{
+    return (rv32g_csr_mstatus_t){ .raw = mmu->csr_state_i->mstatus };
+}
+
+static rv32g_csr_satp_t mmu_satp(const mmu_t *mmu)
+{
+    return (rv32g_csr_satp_t){ .raw = mmu->csr_state_i->satp };
+}
+
 void mmu_construct(mmu_t *mmu, const char *name, const mmu_conf_t *conf)
 {
     (void)conf;
     DBG_VCD_MODULE_SCOPE(name);
+    mmu->exu_state_i = itf_signal_get_src_and_chk(mmu->exu_state_in);
+    mmu->csr_state_i = itf_signal_get_src_and_chk(mmu->csr_mmu_state_in);
 
     dbg_vcd_add_sig("busy", DBG_SIG_TYPE_REG, 1, &mmu->busy);
     dbg_vcd_add_sig("is_inst", DBG_SIG_TYPE_REG, 1, &mmu->is_inst);
@@ -82,10 +94,11 @@ void mmu_reset(mmu_t *mmu)
 
 static rv32g_priv_t mmu_effective_priv(const mmu_t *mmu, mmu_access_t access)
 {
-    rv32g_priv_t priv = *mmu->priv;
+    rv32g_csr_mstatus_t mstatus = mmu_mstatus(mmu);
+    rv32g_priv_t priv = (rv32g_priv_t)mmu->exu_state_i->priv;
     if (access != MMU_ACCESS_INST && priv == RV32G_PRIV_MACHINE &&
-        mmu->mstatus->reg.mprv) {
-        return (rv32g_priv_t)mmu->mstatus->reg.mpp;
+        mstatus.reg.mprv) {
+        return (rv32g_priv_t)mstatus.reg.mpp;
     }
     return priv;
 }
@@ -94,7 +107,7 @@ static bool mmu_translation_enabled(const mmu_t *mmu, mmu_access_t access)
 {
     rv32g_priv_t priv = mmu_effective_priv(mmu, access);
     return priv != RV32G_PRIV_MACHINE &&
-        mmu->satp->reg.mode == MMU_SATP_MODE_SV32;
+        mmu_satp(mmu).reg.mode == MMU_SATP_MODE_SV32;
 }
 
 static void mmu_send_expt(mmu_t *mmu, hart_expt_cause_t cause, u32 pc, u32 tval)
@@ -105,7 +118,7 @@ static void mmu_send_expt(mmu_t *mmu, hart_expt_cause_t cause, u32 pc, u32 tval)
     pkt.priv = mmu->req_priv;
     pkt.pc = pc;
     pkt.tval = tval;
-    itf_write(mmu->is_inst ? mmu->i_hart_expt_mst : mmu->hart_expt_mst, &pkt);
+    itf_write(mmu->is_inst ? mmu->mmu_fch_expt_mst : mmu->ldst_expt_mst, &pkt);
 }
 
 static void mmu_send_fault_rsp(mmu_t *mmu)
@@ -165,11 +178,11 @@ static void mmu_start_req(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
     mmu->is_inst = is_inst;
     mmu->req = *req;
     mmu->req_priv = mmu_effective_priv(mmu, access);
-    mmu->req_sum = mmu->mstatus->reg.sum;
-    mmu->req_mxr = mmu->mstatus->reg.mxr;
-    mmu->fault_pc = is_inst ? req->addr : *mmu->exu_pc;
+    mmu->req_sum = mmu_mstatus(mmu).reg.sum;
+    mmu->req_mxr = mmu_mstatus(mmu).reg.mxr;
+    mmu->fault_pc = is_inst ? req->addr : mmu->exu_state_i->pc;
     mmu->va = req->addr;
-    mmu->root_base = mmu->satp->reg.ppn << MMU_PGSHIFT;
+    mmu->root_base = mmu_satp(mmu).reg.ppn << MMU_PGSHIFT;
     mmu->level = 1;
     mmu->pte_req_pending = false;
     mmu->final_req_pending = false;
@@ -240,16 +253,17 @@ static bool mmu_tlb_lookup(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
     mmu_access_t access = is_inst ? MMU_ACCESS_INST :
         (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
     rv32g_priv_t req_priv = mmu_effective_priv(mmu, access);
-    bool req_sum = mmu->mstatus->reg.sum;
-    bool req_mxr = mmu->mstatus->reg.mxr;
+    bool req_sum = mmu_mstatus(mmu).reg.sum;
+    bool req_mxr = mmu_mstatus(mmu).reg.mxr;
+    rv32g_csr_satp_t satp = mmu_satp(mmu);
 
     for (u32 i = 0; i < num; i++) {
         mmu_tlb_entry_t *entry = entries + i;
         if (!entry->vld) {
             continue;
         }
-        if (entry->satp_ppn != mmu->satp->reg.ppn ||
-            entry->satp_asid != mmu->satp->reg.asid ||
+        if (entry->satp_ppn != satp.reg.ppn ||
+            entry->satp_asid != satp.reg.asid ||
             entry->priv != req_priv ||
             entry->sum != req_sum ||
             entry->mxr != req_mxr ||
@@ -263,7 +277,7 @@ static bool mmu_tlb_lookup(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
         mmu->req_priv = req_priv;
         mmu->req_sum = req_sum;
         mmu->req_mxr = req_mxr;
-        mmu->fault_pc = is_inst ? req->addr : *mmu->exu_pc;
+        mmu->fault_pc = is_inst ? req->addr : mmu->exu_state_i->pc;
         mmu->va = req->addr;
         mmu->pte = entry->pte;
         if (!mmu_pte_permits(mmu, entry->pte) || !mmu_pte_ad_ok(mmu, entry->pte)) {
@@ -300,8 +314,9 @@ static void mmu_tlb_fill(mmu_t *mmu)
 
     entry->vld = true;
     entry->tag = mmu_tlb_tag(mmu->va, mmu->level);
-    entry->satp_ppn = mmu->satp->reg.ppn;
-    entry->satp_asid = mmu->satp->reg.asid;
+    rv32g_csr_satp_t satp = mmu_satp(mmu);
+    entry->satp_ppn = satp.reg.ppn;
+    entry->satp_asid = satp.reg.asid;
     entry->priv = mmu->req_priv;
     entry->sum = mmu->req_sum;
     entry->mxr = mmu->req_mxr;

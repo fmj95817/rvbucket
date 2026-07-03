@@ -91,13 +91,13 @@ static void hbi_proc_i_rsp(hbi_t *hbi)
 
 static void hbi_proc_i_expt(hbi_t *hbi)
 {
-    if (itf_fifo_empty(hbi->i_hart_expt_slv) ||
+    if (itf_fifo_empty(hbi->mmu_fch_expt_slv) ||
         itf_fifo_full(hbi->fch_rsp_mst)) {
         return;
     }
 
     hart_expt_if_t expt;
-    itf_read(hbi->i_hart_expt_slv, &expt);
+    itf_read(hbi->mmu_fch_expt_slv, &expt);
     DBG_CHECK(expt.type == HART_EXPT_TYPE_EXCEPTION);
 
     fch_rsp_if_t fch_rsp = {};

@@ -180,7 +180,7 @@ static void ifu_proc_fch_rsp(ifu_t *ifu)
     }
 
     if (fch_rsp.expt) {
-        if (itf_fifo_full(ifu->hart_expt_mst)) {
+        if (itf_fifo_full(ifu->fch_expt_mst)) {
             return;
         }
 
@@ -191,7 +191,7 @@ static void ifu_proc_fch_rsp(ifu_t *ifu)
         expt.priv = fch_rsp.priv;
         expt.pc = ifu->fch.pc;
         expt.tval = fch_rsp.tval;
-        itf_write(ifu->hart_expt_mst, &expt);
+        itf_write(ifu->fch_expt_mst, &expt);
         ifu->fch.state = IFU_FCH_STATE_FAULT;
         return;
     }

@@ -12,6 +12,11 @@
 #include "itf/exu_csr_read_req_if.h"
 #include "itf/csr_exu_read_rsp_if.h"
 #include "itf/core_swi_pend_if.h"
+#include "itf/ext_irq_if.h"
+#include "itf/trap_csr_write_req_if.h"
+#include "itf/csr_trap_write_rsp_if.h"
+#include "itf/csr_mmu_state_if.h"
+#include "itf/csr_trap_state_if.h"
 
 typedef struct csr {
     const u64 *cycle;
@@ -19,10 +24,15 @@ typedef struct csr {
     itf_t *core_timer_in;
     itf_t *core_m_irq_in;
     itf_t *core_swi_pend_out;
+    itf_t *ext_irq_in;
     itf_t *exu_csr_read_req_in;
     itf_t *csr_exu_read_rsp_out;
     itf_t *exu_csr_write_req_in;
     itf_t *csr_exu_write_rsp_out;
+    itf_t *trap_csr_write_req_in;
+    itf_t *csr_trap_write_rsp_out;
+    itf_t *csr_mmu_state_out;
+    itf_t *csr_trap_state_out;
 
     const core_timer_if_t *core_timer_i;
     const core_m_irq_if_t *core_m_irq_i;
@@ -31,6 +41,11 @@ typedef struct csr {
     csr_exu_read_rsp_if_t *read_rsp_o;
     const exu_csr_write_req_if_t *write_req_i;
     csr_exu_write_rsp_if_t *write_rsp_o;
+    const ext_irq_if_t *ext_irq_i;
+    const trap_csr_write_req_if_t *trap_write_req_i;
+    csr_trap_write_rsp_if_t *trap_write_rsp_o;
+    csr_mmu_state_if_t *mmu_state_o;
+    csr_trap_state_if_t *trap_state_o;
 
     rv32g_csr_t regs;
 } csr_t;
