@@ -8,7 +8,8 @@
 
 #define GPIO_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
     itf_conf_t conf = { \
-        .cycle = module->cycle, \
+        .cycle = module->mod.cycle, \
+        .hier_name = module->mod.hier_name, \
         .mode = ITF_MODE_SIGNAL, \
         .pkt_size = sizeof(gpio_if_t), \
         .pkt2str = &gpio_if_to_str, \

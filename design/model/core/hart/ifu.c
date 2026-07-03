@@ -6,8 +6,9 @@
 #include "dbg/pcm.h"
 #include "dbg/env.h"
 
-void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
+void ifu_construct(ifu_t *ifu, const char *parent, const char *name, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size)
 {
+    mod_construct(&ifu->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     ifu->reset_pc = reset_pc;
@@ -18,8 +19,8 @@ void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base
 
     ifu->bpu.enable = !dbg_get_bool_env("BP_OFF");
 
-    ifu->perf.branch = dbg_pcm_reg_perf_cnt("ifu_branch");
-    ifu->perf.pred_true = dbg_pcm_reg_perf_cnt("ifu_pred_true");
+    ifu->perf.branch = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "branch");
+    ifu->perf.pred_true = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "pred_true");
 
     dbg_vcd_add_sig("fch_pc", DBG_SIG_TYPE_REG, 32, &ifu->fch.pc);
     dbg_vcd_add_sig("fch_state", DBG_SIG_TYPE_REG, 2, &ifu->fch.state);
@@ -32,6 +33,7 @@ void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base
 
 void ifu_reset(ifu_t *ifu)
 {
+    mod_reset(&ifu->mod);
     ifu->fch.state = IFU_FCH_STATE_REQ;
     ifu->fch.pc = ifu->reset_pc;
     ifu->fch.ir = 0;
@@ -63,6 +65,7 @@ void ifu_reset(ifu_t *ifu)
 
 void ifu_free(ifu_t *ifu)
 {
+    mod_free(&ifu->mod);
     fifo_free(&ifu->ctrlq);
 }
 
@@ -449,6 +452,7 @@ static void ifu_proc_trap_send(ifu_t *ifu)
 
 void ifu_clock(ifu_t *ifu)
 {
+    mod_clock(&ifu->mod);
     ifu_proc_ex_rsp(ifu);
     ifu_proc_trap_send(ifu);
 

@@ -259,8 +259,9 @@ static void trap_proc_interrupt(trap_t *trap)
     trap_take(trap, (rv32g_priv_t)trap->exu_state_i->priv, (u32)irq, true, epc, 0);
 }
 
-void trap_construct(trap_t *trap, const char *name)
+void trap_construct(trap_t *trap, const char *parent, const char *name)
 {
+    mod_construct(&trap->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
     trap->exu_state_i = itf_signal_get_src_and_chk(trap->exu_state_in);
     trap->exu_ctrl_o = itf_signal_get_src_and_chk(trap->trap_exu_ctrl_out);
@@ -271,11 +272,13 @@ void trap_construct(trap_t *trap, const char *name)
 
 void trap_reset(trap_t *trap)
 {
+    mod_reset(&trap->mod);
     (void)trap;
 }
 
 void trap_clock(trap_t *trap)
 {
+    mod_clock(&trap->mod);
     if (!trap_proc_exception(trap)) {
         trap_proc_interrupt(trap);
     }
@@ -283,5 +286,6 @@ void trap_clock(trap_t *trap)
 
 void trap_free(trap_t *trap)
 {
+    mod_free(&trap->mod);
     (void)trap;
 }

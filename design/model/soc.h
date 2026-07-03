@@ -2,6 +2,7 @@
 #define SOC_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "core/rv32g.h"
 #include "mem/ram.h"
 #include "mem/rom.h"
@@ -10,7 +11,7 @@
 #include "bus/demux.h"
 
 typedef struct soc {
-    const u64 *cycle;
+    mod_t mod;
     AXI4_MST_DECL(ddr_);
     itf_t *uart_tx_mst;
     itf_t *uart_rx_slv;
@@ -38,7 +39,7 @@ typedef struct soc {
     itf_t peri_gtimer_irq_itf;
 } soc_t;
 
-extern void soc_construct(soc_t *soc, const char *name);
+extern void soc_construct(soc_t *soc, const char *parent, const char *name);
 extern void soc_reset(soc_t *soc);
 extern void soc_clock(soc_t *soc);
 extern void soc_free(soc_t *soc);

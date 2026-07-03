@@ -2,6 +2,7 @@
 #define PERI_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/apb_if.h"
 #include "itf/uart_if.h"
@@ -13,7 +14,7 @@
 #include "peri/gtimer.h"
 
 typedef struct peri {
-    const u64 *cycle;
+    mod_t mod;
     itf_t *apb_req_slv;
     itf_t *apb_rsp_mst;
     itf_t *uart_tx_mst;
@@ -36,7 +37,7 @@ typedef struct peri {
     APB_IF_DECL(gtimer_);
 } peri_t;
 
-extern void peri_construct(peri_t *peri, const char *name, u32 base, u32 size);
+extern void peri_construct(peri_t *peri, const char *parent, const char *name, u32 base, u32 size);
 extern void peri_reset(peri_t *peri);
 extern void peri_clock(peri_t *peri);
 extern void peri_free(peri_t *peri);

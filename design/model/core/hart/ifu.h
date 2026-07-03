@@ -2,6 +2,7 @@
 #define IFU_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "base/fifo.h"
 #include "itf/ex_req_if.h"
@@ -34,6 +35,7 @@ typedef enum ifu_redirect_state {
 } ifu_redirect_state_t;
 
 typedef struct ifu {
+    mod_t mod;
     itf_t *fch_req_mst;
     itf_t *fch_rsp_slv;
     itf_t *ex_req_mst;
@@ -89,7 +91,7 @@ typedef struct ifu {
     } perf;
 } ifu_t;
 
-extern void ifu_construct(ifu_t *ifu, const char *name, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
+extern void ifu_construct(ifu_t *ifu, const char *parent, const char *name, u32 reset_pc, u32 boot_rom_base, u32 boot_rom_size);
 extern void ifu_reset(ifu_t *ifu);
 extern void ifu_clock(ifu_t *ifu);
 extern void ifu_free(ifu_t *ifu);

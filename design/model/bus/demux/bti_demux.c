@@ -3,9 +3,10 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void bti_demux_construct(bti_demux_t *bti_demux, const char *name,
+void bti_demux_construct(bti_demux_t *bti_demux, const char *parent, const char *name,
     u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
 {
+    mod_construct(&bti_demux->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(gst_num <= BTI_DEMUX_GST_NUM_MAX);
@@ -17,7 +18,10 @@ void bti_demux_construct(bti_demux_t *bti_demux, const char *name,
     }
 }
 
-void bti_demux_reset(bti_demux_t *bti_demux) {}
+void bti_demux_reset(bti_demux_t *bti_demux)
+{
+    mod_reset(&bti_demux->mod);
+}
 
 static void bti_demux_proc_req(bti_demux_t *bti_demux)
 {
@@ -73,8 +77,12 @@ static void bti_demux_proc_rsp(bti_demux_t *bti_demux)
 
 void bti_demux_clock(bti_demux_t *bti_demux)
 {
+    mod_clock(&bti_demux->mod);
     bti_demux_proc_req(bti_demux);
     bti_demux_proc_rsp(bti_demux);
 }
 
-void bti_demux_free(bti_demux_t *bti_demux) {}
+void bti_demux_free(bti_demux_t *bti_demux)
+{
+    mod_free(&bti_demux->mod);
+}

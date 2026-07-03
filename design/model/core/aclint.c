@@ -10,8 +10,9 @@
 #define MSIP(hart_id)      ((hart_id) * 4u)
 #define SETSSIP(hart_id)   ((hart_id) * 4u)
 
-void aclint_construct(aclint_t *aclint, const char *name, const aclint_conf_t *conf)
+void aclint_construct(aclint_t *aclint, const char *parent, const char *name, const aclint_conf_t *conf)
 {
+    mod_construct(&aclint->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
     aclint->conf = *conf;
     dbg_vcd_add_sig("mtime", DBG_SIG_TYPE_REG, 64, &aclint->mtime.raw);
@@ -26,6 +27,7 @@ void aclint_construct(aclint_t *aclint, const char *name, const aclint_conf_t *c
 
 void aclint_reset(aclint_t *aclint)
 {
+    mod_reset(&aclint->mod);
     aclint->mtime.raw = 0ull;
     aclint->mtime_cycle_cnt = 0u;
     for (u32 i = 0; i < HART_NUM; i++) {
@@ -204,6 +206,7 @@ static void core_irq_proc(aclint_t *aclint)
 
 void aclint_clock(aclint_t *aclint)
 {
+    mod_clock(&aclint->mod);
     timer_proc(aclint);
     apb_cfg_proc(aclint);
     core_irq_proc(aclint);
@@ -211,4 +214,5 @@ void aclint_clock(aclint_t *aclint)
 
 void aclint_free(aclint_t *aclint)
 {
+    mod_free(&aclint->mod);
 }

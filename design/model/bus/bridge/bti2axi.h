@@ -2,6 +2,7 @@
 #define BTI2AXI4_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/bti_if.h"
 #include "itf/axi4_if.h"
@@ -13,6 +14,7 @@ typedef enum bti2axi_state {
 } bti2axi_state_t;
 
 typedef struct bti2axi {
+    mod_t mod;
     itf_t *bti_req_slv;
     itf_t *bti_rsp_mst;
     itf_t *axi4_aw_mst;
@@ -24,7 +26,7 @@ typedef struct bti2axi {
     u16 bti_trans_id;
 } bti2axi_t;
 
-extern void bti2axi_construct(bti2axi_t *br, const char *name);
+extern void bti2axi_construct(bti2axi_t *br, const char *parent, const char *name);
 extern void bti2axi_reset(bti2axi_t *br);
 extern void bti2axi_clock(bti2axi_t *br);
 extern void bti2axi_free(bti2axi_t *br);

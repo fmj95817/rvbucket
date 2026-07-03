@@ -2,6 +2,7 @@
 #define AXI_DEMUX_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/axi4_if.h"
 
@@ -14,6 +15,7 @@
 #define AXI_DEMUX_STATE_WR_DECERR 4
 
 typedef struct axi_demux {
+    mod_t mod;
     itf_t *host_axi4_aw_slv;
     itf_t *host_axi4_w_slv;
     itf_t *host_axi4_b_mst;
@@ -38,7 +40,7 @@ typedef struct axi_demux {
     u8 wr_decerr_id;
 } axi_demux_t;
 
-extern void axi_demux_construct(axi_demux_t *axi_demux, const char *name,
+extern void axi_demux_construct(axi_demux_t *axi_demux, const char *parent, const char *name,
     u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes);
 extern void axi_demux_reset(axi_demux_t *axi_demux);
 extern void axi_demux_clock(axi_demux_t *axi_demux);

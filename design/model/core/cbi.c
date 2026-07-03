@@ -1,8 +1,9 @@
 #include "cbi.h"
 #include "dbg/vcd.h"
 
-void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf)
+void cbi_construct(cbi_t *cbi, const char *parent, const char *name, const cbi_conf_t *conf)
 {
+    mod_construct(&cbi->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     AXI4_IF_CONSTRUCT(cbi, boot_rom_i_, 1);
@@ -22,7 +23,9 @@ void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf)
     AXI4_MST_ARR_IMPORT(&cbi->i_axi_demux, gst_, 2, cbi, mm_i_);
     const u32 i_axi_gst_bases[] = { conf->boot_rom_base, conf->itcm_base, conf->mm_base };
     const u32 i_axi_gst_sizes[] = { conf->boot_rom_size, conf->itcm_size, conf->mm_size };
-    axi_demux_construct(&cbi->i_axi_demux, "u_i_axi_demux", 3, i_axi_gst_bases, i_axi_gst_sizes);
+    cbi->i_axi_demux.mod.cycle = cbi->mod.cycle;
+    axi_demux_construct(&cbi->i_axi_demux, cbi->mod.hier_name, "u_i_axi_demux",
+        3, i_axi_gst_bases, i_axi_gst_sizes);
 
     AXI4_SLV_IMPORT(&cbi->d_axi_demux, host_, cbi, hart_d_);
     AXI4_MST_ARR_CONNECT(&cbi->d_axi_demux, gst_, 0, cbi, boot_rom_d_);
@@ -32,40 +35,55 @@ void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf)
     AXI4_MST_ARR_CONNECT(&cbi->d_axi_demux, gst_, 4, cbi, cfg_);
     const u32 d_axi_gst_bases[] = { conf->boot_rom_base, conf->itcm_base, conf->dtcm_base, conf->mm_base, conf->cfg_base };
     const u32 d_axi_gst_sizes[] = { conf->boot_rom_size, conf->itcm_size, conf->dtcm_size, conf->mm_size, conf->cfg_size };
-    axi_demux_construct(&cbi->d_axi_demux, "u_d_axi_demux", 5, d_axi_gst_bases, d_axi_gst_sizes);
+    cbi->d_axi_demux.mod.cycle = cbi->mod.cycle;
+    axi_demux_construct(&cbi->d_axi_demux, cbi->mod.hier_name, "u_d_axi_demux",
+        5, d_axi_gst_bases, d_axi_gst_sizes);
 
     AXI4_SLV_CONNECT(&cbi->boot_rom_i_axi2bti, , cbi, boot_rom_i_);
     BTI_MST_CONNECT(&cbi->boot_rom_i_axi2bti, , cbi, boot_rom_i_);
-    axi2bti_construct(&cbi->boot_rom_i_axi2bti, "u_boot_rom_i_axi2bti");
+    cbi->boot_rom_i_axi2bti.mod.cycle = cbi->mod.cycle;
+    axi2bti_construct(&cbi->boot_rom_i_axi2bti, cbi->mod.hier_name,
+        "u_boot_rom_i_axi2bti");
 
     AXI4_SLV_CONNECT(&cbi->boot_rom_d_axi2bti, , cbi, boot_rom_d_);
     BTI_MST_CONNECT(&cbi->boot_rom_d_axi2bti, , cbi, boot_rom_d_);
-    axi2bti_construct(&cbi->boot_rom_d_axi2bti, "u_boot_rom_d_axi2bti");
+    cbi->boot_rom_d_axi2bti.mod.cycle = cbi->mod.cycle;
+    axi2bti_construct(&cbi->boot_rom_d_axi2bti, cbi->mod.hier_name,
+        "u_boot_rom_d_axi2bti");
 
     BTI_SLV_ARR_CONNECT(&cbi->boot_rom_bti_mux, host_, 0, cbi, boot_rom_i_);
     BTI_SLV_ARR_CONNECT(&cbi->boot_rom_bti_mux, host_, 1, cbi, boot_rom_d_);
     BTI_MST_IMPORT(&cbi->boot_rom_bti_mux, gst_, cbi, boot_rom_);
-    bti_mux_construct(&cbi->boot_rom_bti_mux, "u_boot_rom_bti_mux", 2);
+    cbi->boot_rom_bti_mux.mod.cycle = cbi->mod.cycle;
+    bti_mux_construct(&cbi->boot_rom_bti_mux, cbi->mod.hier_name,
+        "u_boot_rom_bti_mux", 2);
 
     AXI4_SLV_CONNECT(&cbi->itcm_i_axi2bti, , cbi, itcm_i_);
     BTI_MST_IMPORT(&cbi->itcm_i_axi2bti, , cbi, itcm_i_);
-    axi2bti_construct(&cbi->itcm_i_axi2bti, "u_itcm_i_axi2bti");
+    cbi->itcm_i_axi2bti.mod.cycle = cbi->mod.cycle;
+    axi2bti_construct(&cbi->itcm_i_axi2bti, cbi->mod.hier_name,
+        "u_itcm_i_axi2bti");
 
     AXI4_SLV_CONNECT(&cbi->itcm_d_axi2bti, , cbi, itcm_d_);
     BTI_MST_IMPORT(&cbi->itcm_d_axi2bti, , cbi, itcm_d_);
-    axi2bti_construct(&cbi->itcm_d_axi2bti, "u_itcm_d_axi2bti");
+    cbi->itcm_d_axi2bti.mod.cycle = cbi->mod.cycle;
+    axi2bti_construct(&cbi->itcm_d_axi2bti, cbi->mod.hier_name,
+        "u_itcm_d_axi2bti");
 
     AXI4_SLV_CONNECT(&cbi->dtcm_axi2bti, , cbi, dtcm_);
     BTI_MST_IMPORT(&cbi->dtcm_axi2bti, , cbi, dtcm_);
-    axi2bti_construct(&cbi->dtcm_axi2bti, "u_dtcm_axi2bti");
+    cbi->dtcm_axi2bti.mod.cycle = cbi->mod.cycle;
+    axi2bti_construct(&cbi->dtcm_axi2bti, cbi->mod.hier_name, "u_dtcm_axi2bti");
 
     AXI4_SLV_CONNECT(&cbi->cfg_axi2bti, , cbi, cfg_);
     BTI_MST_CONNECT(&cbi->cfg_axi2bti, , cbi, cfg_);
-    axi2bti_construct(&cbi->cfg_axi2bti, "u_cfg_axi2bti");
+    cbi->cfg_axi2bti.mod.cycle = cbi->mod.cycle;
+    axi2bti_construct(&cbi->cfg_axi2bti, cbi->mod.hier_name, "u_cfg_axi2bti");
 
     BTI_SLV_CONNECT(&cbi->cfg_bti2apb, , cbi, cfg_);
     APB_MST_CONNECT(&cbi->cfg_bti2apb, , cbi, cfg_);
-    bti2apb_construct(&cbi->cfg_bti2apb, "u_cfg_bti2apb");
+    cbi->cfg_bti2apb.mod.cycle = cbi->mod.cycle;
+    bti2apb_construct(&cbi->cfg_bti2apb, cbi->mod.hier_name, "u_cfg_bti2apb");
 
     APB_SLV_CONNECT(&cbi->cfg_apb_demux, host_, cbi, cfg_);
     APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 0, cbi, peri_);
@@ -73,11 +91,14 @@ void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf)
     APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 2, cbi, plic_cfg_);
     const u32 cfg_apb_gst_bases[] = { conf->peri_base, conf->aclint_base, conf->plic_base };
     const u32 cfg_apb_gst_sizes[] = { conf->peri_size, conf->aclint_size, conf->plic_size };
-    apb_demux_construct(&cbi->cfg_apb_demux, "u_cfg_apb_demux", 3, cfg_apb_gst_bases, cfg_apb_gst_sizes);
+    cbi->cfg_apb_demux.mod.cycle = cbi->mod.cycle;
+    apb_demux_construct(&cbi->cfg_apb_demux, cbi->mod.hier_name,
+        "u_cfg_apb_demux", 3, cfg_apb_gst_bases, cfg_apb_gst_sizes);
 }
 
 void cbi_reset(cbi_t *cbi)
 {
+    mod_reset(&cbi->mod);
     axi_demux_reset(&cbi->i_axi_demux);
     axi_demux_reset(&cbi->d_axi_demux);
     axi2bti_reset(&cbi->boot_rom_i_axi2bti);
@@ -104,6 +125,7 @@ void cbi_reset(cbi_t *cbi)
 
 void cbi_free(cbi_t *cbi)
 {
+    mod_free(&cbi->mod);
     axi_demux_free(&cbi->i_axi_demux);
     axi_demux_free(&cbi->d_axi_demux);
     axi2bti_free(&cbi->boot_rom_i_axi2bti);
@@ -130,6 +152,7 @@ void cbi_free(cbi_t *cbi)
 
 void cbi_clock(cbi_t *cbi)
 {
+    mod_clock(&cbi->mod);
     axi_demux_clock(&cbi->i_axi_demux);
     axi_demux_clock(&cbi->d_axi_demux);
     axi2bti_clock(&cbi->boot_rom_i_axi2bti);

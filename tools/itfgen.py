@@ -21,7 +21,8 @@ def gen_c_itf(itf_name, desc):
 
     f.write("#define {}_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do {{ \\\n".format(itf_name.upper()))
     f.write("    itf_conf_t conf = { \\\n")
-    f.write("        .cycle = module->cycle, \\\n")
+    f.write("        .cycle = module->mod.cycle, \\\n")
+    f.write("        .hier_name = module->mod.hier_name, \\\n")
     f.write("        .mode = ITF_MODE_SIGNAL, \\\n")
     f.write("        .pkt_size = sizeof({}_if_t), \\\n".format(itf_name))
     f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))
@@ -34,7 +35,8 @@ def gen_c_itf(itf_name, desc):
 
     f.write("#define {}_IF_CONSTRUCT(module, itf, depth) do {{ \\\n".format(itf_name.upper()))
     f.write("    itf_conf_t conf = { \\\n")
-    f.write("        .cycle = module->cycle, \\\n")
+    f.write("        .cycle = module->mod.cycle, \\\n")
+    f.write("        .hier_name = module->mod.hier_name, \\\n")
     f.write("        .mode = ITF_MODE_FIFO, \\\n")
     f.write("        .pkt_size = sizeof({}_if_t), \\\n".format(itf_name))
     f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))

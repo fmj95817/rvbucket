@@ -3,6 +3,7 @@
 #include <string.h>
 #include "base/def.h"
 #include "dbg/chk.h"
+#include "dbg/pcm.h"
 #include "dbg/vcd.h"
 
 #define L1_WORD_SIZE 4u
@@ -87,8 +88,9 @@ static void l1_send_rsp(l1_t *l1, bool ok, u32 data)
     itf_write(l1->bti_rsp_mst, &rsp);
 }
 
-void l1_construct(l1_t *l1, const char *name, const l1_conf_t *conf)
+void l1_construct(l1_t *l1, const char *parent, const char *name, const l1_conf_t *conf)
 {
+    mod_construct(&l1->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(l1->bti_req_slv);
@@ -117,6 +119,11 @@ void l1_construct(l1_t *l1, const char *name, const l1_conf_t *conf)
     DBG_CHECK(l1->valids);
     DBG_CHECK(l1->dirtys);
 
+    l1->perf_hit = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "hit");
+    l1->perf_miss = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "miss");
+    l1->perf_bypass = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "bypass");
+    l1->perf_writeback = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "writeback");
+
     dbg_vcd_add_sig("state", DBG_SIG_TYPE_REG, 4, &l1->state);
     dbg_vcd_add_sig("req_addr", DBG_SIG_TYPE_REG, 32, &l1->req.addr);
     dbg_vcd_add_sig("req_set", DBG_SIG_TYPE_REG, 32, &l1->req_set);
@@ -126,11 +133,16 @@ void l1_construct(l1_t *l1, const char *name, const l1_conf_t *conf)
 
 void l1_reset(l1_t *l1)
 {
+    mod_reset(&l1->mod);
     l1->state = L1_STATE_IDLE;
     l1->beat_idx = 0;
     l1->op_ok = true;
     l1->req_byte_idx = 0;
     l1->req_data = 0;
+    *l1->perf_hit = 0;
+    *l1->perf_miss = 0;
+    *l1->perf_bypass = 0;
+    *l1->perf_writeback = 0;
     for (u32 i = 0; i < l1->line_num; i++) {
         l1->valids[i] = false;
         l1->dirtys[i] = false;
@@ -185,14 +197,17 @@ static void l1_start_cached_fragment(l1_t *l1)
     u32 line_idx;
     l1_setup_fragment(l1);
     if (l1_lookup(l1, &way, &line_idx)) {
+        (*l1->perf_hit)++;
         l1->req_way = way;
         l1->req_line_idx = line_idx;
         l1->state = L1_STATE_SERVE_MISS;
         return;
     }
 
+    (*l1->perf_miss)++;
     l1_select_victim(l1);
     if (l1->valids[l1->req_line_idx] && l1->dirtys[l1->req_line_idx]) {
+        (*l1->perf_writeback)++;
         l1->wb_line_addr = l1_line_addr(l1, l1->tags[l1->req_line_idx], l1->req_set);
         l1->beat_idx = 0;
         l1->state = L1_STATE_WB_AW;
@@ -274,6 +289,7 @@ static void l1_proc_idle(l1_t *l1)
     l1->req_data = 0;
 
     if (l1_bypass(l1, l1->req.addr)) {
+        (*l1->perf_bypass)++;
         (void)l1_try_bypass_req(l1);
         return;
     }
@@ -486,6 +502,7 @@ static void l1_proc_serve_miss(l1_t *l1)
 
 void l1_clock(l1_t *l1)
 {
+    mod_clock(&l1->mod);
     if (l1->state == L1_STATE_IDLE) {
         l1_proc_flush(l1);
     }
@@ -502,6 +519,7 @@ void l1_clock(l1_t *l1)
 
 void l1_free(l1_t *l1)
 {
+    mod_free(&l1->mod);
     free(l1->tags);
     free(l1->data);
     free(l1->replace_ways);

@@ -13,8 +13,9 @@ static inline u32 gpio_pin_mode(const gpio_t *gpio, u32 pin)
     return (reg >> shift) & 0x3u;
 }
 
-void gpio_construct(gpio_t *gpio, const char *name, u32 base_addr, u32 size)
+void gpio_construct(gpio_t *gpio, const char *parent, const char *name, u32 base_addr, u32 size)
 {
+    mod_construct(&gpio->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     gpio->base_addr = base_addr;
@@ -29,6 +30,7 @@ void gpio_construct(gpio_t *gpio, const char *name, u32 base_addr, u32 size)
 
 void gpio_reset(gpio_t *gpio)
 {
+    mod_reset(&gpio->mod);
     gpio->output_val = 0;
     gpio->mode_lo = 0;
     gpio->mode_hi = 0;
@@ -127,11 +129,13 @@ static void gpio_irq_proc(gpio_t *gpio)
 
 void gpio_clock(gpio_t *gpio)
 {
+    mod_clock(&gpio->mod);
     gpio_apb_proc(gpio);
     gpio_irq_proc(gpio);
 }
 
 void gpio_free(gpio_t *gpio)
 {
+    mod_free(&gpio->mod);
     (void)gpio;
 }

@@ -2,6 +2,7 @@
 #define AXI_MUX_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/axi4_if.h"
 
@@ -13,6 +14,7 @@
 #define AXI_MUX_STATE_WR_RESP 3
 
 typedef struct axi_mux {
+    mod_t mod;
     itf_t *host_axi4_aw_slvs[AXI_MUX_HOST_NUM_MAX];
     itf_t *host_axi4_w_slvs[AXI_MUX_HOST_NUM_MAX];
     itf_t *host_axi4_b_msts[AXI_MUX_HOST_NUM_MAX];
@@ -37,7 +39,7 @@ typedef struct axi_mux {
     bool wr_w_done;
 } axi_mux_t;
 
-extern void axi_mux_construct(axi_mux_t *axi_mux, const char *name, u32 host_num);
+extern void axi_mux_construct(axi_mux_t *axi_mux, const char *parent, const char *name, u32 host_num);
 extern void axi_mux_reset(axi_mux_t *axi_mux);
 extern void axi_mux_clock(axi_mux_t *axi_mux);
 extern void axi_mux_free(axi_mux_t *axi_mux);

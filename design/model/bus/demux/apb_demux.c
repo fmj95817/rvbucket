@@ -3,9 +3,10 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void apb_demux_construct(apb_demux_t *apb_demux, const char *name,
+void apb_demux_construct(apb_demux_t *apb_demux, const char *parent, const char *name,
     u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
 {
+    mod_construct(&apb_demux->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(gst_num <= APB_DEMUX_GST_NUM_MAX);
@@ -17,7 +18,10 @@ void apb_demux_construct(apb_demux_t *apb_demux, const char *name,
     }
 }
 
-void apb_demux_reset(apb_demux_t *apb_demux) {}
+void apb_demux_reset(apb_demux_t *apb_demux)
+{
+    mod_reset(&apb_demux->mod);
+}
 
 static void apb_demux_proc_req(apb_demux_t *apb_demux)
 {
@@ -73,8 +77,12 @@ static void apb_demux_proc_rsp(apb_demux_t *apb_demux)
 
 void apb_demux_clock(apb_demux_t *apb_demux)
 {
+    mod_clock(&apb_demux->mod);
     apb_demux_proc_req(apb_demux);
     apb_demux_proc_rsp(apb_demux);
 }
 
-void apb_demux_free(apb_demux_t *apb_demux) {}
+void apb_demux_free(apb_demux_t *apb_demux)
+{
+    mod_free(&apb_demux->mod);
+}

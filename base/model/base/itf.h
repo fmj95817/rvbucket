@@ -18,6 +18,7 @@ typedef enum itf_mode {
 
 typedef struct itf_conf {
     const u64 *cycle;
+    const char *hier_name;
     itf_mode_t mode;
     u32 pkt_size;
     pkt2str_t pkt2str;
@@ -59,6 +60,7 @@ typedef struct fifo_itf_ctx {
 
 typedef struct itf {
     const u64 *cycle;
+    const char *hier_name;
     const char *name;
     itf_mode_t mode;
     u32 pkt_size;

@@ -2,8 +2,9 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void bti2apb_construct(bti2apb_t *br, const char *name)
+void bti2apb_construct(bti2apb_t *br, const char *parent, const char *name)
 {
+    mod_construct(&br->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(br->bti_req_slv);
@@ -14,6 +15,7 @@ void bti2apb_construct(bti2apb_t *br, const char *name)
 
 void bti2apb_reset(bti2apb_t *br)
 {
+    mod_reset(&br->mod);
     br->bti_trans_id = 0;
 }
 
@@ -63,8 +65,12 @@ static void bti2apb_proc_rsp(bti2apb_t *br)
 
 void bti2apb_clock(bti2apb_t *br)
 {
+    mod_clock(&br->mod);
     bti2apb_proc_req(br);
     bti2apb_proc_rsp(br);
 }
 
-void bti2apb_free(bti2apb_t *br) {}
+void bti2apb_free(bti2apb_t *br)
+{
+    mod_free(&br->mod);
+}

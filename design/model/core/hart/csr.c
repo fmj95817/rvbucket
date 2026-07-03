@@ -155,8 +155,9 @@ static void csr_trap_write_cb(void *args)
     csr_publish_state(csr);
 }
 
-void csr_construct(csr_t *csr, const char *name)
+void csr_construct(csr_t *csr, const char *parent, const char *name)
 {
+    mod_construct(&csr->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     dbg_vcd_add_sig("mstatus", DBG_SIG_TYPE_REG, 32, &csr->regs.mstatus.raw);
@@ -198,6 +199,7 @@ void csr_construct(csr_t *csr, const char *name)
 
 void csr_reset(csr_t *csr)
 {
+    mod_reset(&csr->mod);
     rv32g_csr_reset(&csr->regs);
     csr->regs.stimecmp = 0xffffffffu;
     csr->regs.stimecmph = 0xffffffffu;
@@ -217,8 +219,8 @@ static void csr_update_proc(csr_t *csr)
     csr->regs.mip.reg.stip = (time >= stimecmp) ? 1u : 0u;
     sync_s_irq_from_m_irq(csr);
 
-    csr->regs.cycle = (u32)(*csr->cycle);
-    csr->regs.cycleh = (u32)(*csr->cycle >> 32u);
+    csr->regs.cycle = (u32)(*csr->mod.cycle);
+    csr->regs.cycleh = (u32)(*csr->mod.cycle >> 32u);
 }
 
 static void csr_core_s_irq_proc(csr_t *csr)
@@ -239,6 +241,7 @@ static void csr_core_s_irq_proc(csr_t *csr)
 
 void csr_clock(csr_t *csr)
 {
+    mod_clock(&csr->mod);
     csr_update_proc(csr);
     csr_core_s_irq_proc(csr);
     csr_publish_state(csr);
@@ -246,4 +249,5 @@ void csr_clock(csr_t *csr)
 
 void csr_free(csr_t *csr)
 {
+    mod_free(&csr->mod);
 }

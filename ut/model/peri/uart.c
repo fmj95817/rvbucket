@@ -7,6 +7,7 @@
 #include "utils.h"
 
 typedef struct uart_tb {
+    mod_t mod;
     u64 *cycle;
     u64 cycle_val;
     itf_t apb_req_itf, apb_rsp_itf, uart_tx_itf, uart_rx_itf, irq_out_itf;
@@ -21,6 +22,8 @@ static void tb_construct(uart_tb_t *tb, const char *name)
 
     tb->cycle_val = 0;
     tb->cycle = &tb->cycle_val;
+    tb->mod.cycle = tb->cycle;
+    mod_construct(&tb->mod, NULL, name);
     APB_REQ_IF_CONSTRUCT(tb, apb_req_itf, 1);
     APB_RSP_IF_CONSTRUCT(tb, apb_rsp_itf, 1);
     UART_IF_CONSTRUCT(tb, uart_tx_itf, 1);
@@ -34,7 +37,8 @@ static void tb_construct(uart_tb_t *tb, const char *name)
     tb->dut.uart_rx_slv = &tb->uart_rx_itf;
     tb->dut.irq_out = &tb->irq_out_itf;
 
-    uart_construct(&tb->dut, "u_dut", 0x10000000, 0x1000);
+    tb->dut.mod.cycle = tb->mod.cycle;
+    uart_construct(&tb->dut, tb->mod.hier_name, "u_dut", 0x10000000, 0x1000);
     ut_sbd_init(&tb->sbd);
 }
 

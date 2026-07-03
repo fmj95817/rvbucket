@@ -6,6 +6,7 @@
 #include "utils.h"
 
 typedef struct axi_demux_tb {
+    mod_t mod;
     u64 *cycle;
     u64 cycle_val;
 
@@ -36,6 +37,8 @@ static void tb_construct(axi_demux_tb_t *tb, const char *name)
 
     tb->cycle_val = 0;
     tb->cycle = &tb->cycle_val;
+    tb->mod.cycle = tb->cycle;
+    mod_construct(&tb->mod, NULL, name);
 
     AXI4_AW_IF_CONSTRUCT(tb, host_aw, 2);
     AXI4_W_IF_CONSTRUCT(tb, host_w, 8);
@@ -70,7 +73,8 @@ static void tb_construct(axi_demux_tb_t *tb, const char *name)
     tb->dut.gst_axi4_r_slvs[1] = &tb->gst1_r;
     const u32 bases[] = { 0x10000000, 0x20000000 };
     const u32 sizes[] = { 0x1000, 0x1000 };
-    axi_demux_construct(&tb->dut, "u_dut", 2, bases, sizes);
+    tb->dut.mod.cycle = tb->mod.cycle;
+    axi_demux_construct(&tb->dut, tb->mod.hier_name, "u_dut", 2, bases, sizes);
 
     ut_sbd_init(&tb->sbd);
 }

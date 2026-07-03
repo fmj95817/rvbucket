@@ -14,8 +14,9 @@ static u32 axi2bti_next_addr(u32 addr, u8 size, u8 burst)
     }
 }
 
-void axi2bti_construct(axi2bti_t *br, const char *name)
+void axi2bti_construct(axi2bti_t *br, const char *parent, const char *name)
 {
+    mod_construct(&br->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(br->axi4_ar_slv);
@@ -29,6 +30,7 @@ void axi2bti_construct(axi2bti_t *br, const char *name)
 
 void axi2bti_reset(axi2bti_t *br)
 {
+    mod_reset(&br->mod);
     br->state = AXI2BTI_STATE_IDLE;
     br->beat_idx = 0;
     br->bti_rsp_pending = false;
@@ -228,9 +230,13 @@ static void axi2bti_proc_wr_burst(axi2bti_t *br)
 
 void axi2bti_clock(axi2bti_t *br)
 {
+    mod_clock(&br->mod);
     axi2bti_proc_idle(br);
     axi2bti_proc_rd_burst(br);
     axi2bti_proc_wr_burst(br);
 }
 
-void axi2bti_free(axi2bti_t *br) {}
+void axi2bti_free(axi2bti_t *br)
+{
+    mod_free(&br->mod);
+}

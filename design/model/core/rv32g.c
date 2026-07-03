@@ -1,8 +1,9 @@
 #include "rv32g.h"
 #include "dbg/vcd.h"
 
-void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
+void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv32g_conf_t *conf)
 {
+    mod_construct(&s->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     BTI_IF_CONSTRUCT(s, boot_rom_, 1);
@@ -19,7 +20,7 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     CORE_S_IRQ_IF_CONSTRUCT(s, core_s_irq_itf, 1);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(s, conv_ext_irq_sig_itf, false, false);
 
-    s->hart.cycle = s->cycle;
+    s->hart.mod.cycle = s->mod.cycle;
     AXI4_MST_CONNECT(&s->hart, i_, s, hart_i_);
     AXI4_MST_CONNECT(&s->hart, d_, s, hart_d_);
     s->hart.core_timer_in = &s->core_timer_sig_itf;
@@ -37,9 +38,9 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
         .cfg_base = conf->cfg_base,
         .cfg_size = conf->cfg_size
     };
-    hart_construct(&s->hart, "u_hart", &hart_conf);
+    hart_construct(&s->hart, s->mod.hier_name, "u_hart", &hart_conf);
 
-    s->cbi.cycle = s->cycle;
+    s->cbi.mod.cycle = s->mod.cycle;
     AXI4_MST_IMPORT(&s->cbi, mm_i_, s, mm_i_);
     AXI4_MST_IMPORT(&s->cbi, mm_d_, s, mm_d_);
     APB_MST_IMPORT(&s->cbi, peri_, s, peri_);
@@ -69,21 +70,27 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
         .plic_base = conf->plic_base,
         .plic_size = conf->plic_size
     };
-    cbi_construct(&s->cbi, "u_cbi", &cbi_conf);
+    cbi_construct(&s->cbi, s->mod.hier_name, "u_cbi", &cbi_conf);
 
     BTI_SLV_CONNECT(&s->boot_rom, , s, boot_rom_);
     extern u32 g_boot_code_size;
     extern u8 g_boot_code[];
-    rom_construct(&s->boot_rom, "u_boot_rom", ROM_MODE_BTI, conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base);
+    s->boot_rom.mod.cycle = s->mod.cycle;
+    rom_construct(&s->boot_rom, s->mod.hier_name, "u_boot_rom", ROM_MODE_BTI,
+        conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base);
 
     BTI_SLV_ARR_CONNECT(&s->itcm, , 0, s, itcm_i_);
     BTI_SLV_ARR_CONNECT(&s->itcm, , 1, s, itcm_d_);
-    ram_construct(&s->itcm, "u_itcm", 2, RAM_MODE_BTI, conf->itcm_size, conf->itcm_base);
+    s->itcm.mod.cycle = s->mod.cycle;
+    ram_construct(&s->itcm, s->mod.hier_name, "u_itcm", 2, RAM_MODE_BTI,
+        conf->itcm_size, conf->itcm_base);
 
     BTI_SLV_ARR_CONNECT(&s->dtcm, , 0, s, dtcm_);
-    ram_construct(&s->dtcm, "u_dtcm", 1, RAM_MODE_BTI, conf->dtcm_size, conf->dtcm_base);
+    s->dtcm.mod.cycle = s->mod.cycle;
+    ram_construct(&s->dtcm, s->mod.hier_name, "u_dtcm", 1, RAM_MODE_BTI,
+        conf->dtcm_size, conf->dtcm_base);
 
-    s->aclint.cycle= s->cycle;
+    s->aclint.mod.cycle = s->mod.cycle;
     APB_SLV_CONNECT(&s->aclint, cfg_, s, aclint_cfg_);
     s->aclint.core_timer_out = &s->core_timer_sig_itf;
     s->aclint.core_m_irq_outs[0] = &s->core_m_irq_sig_itf;
@@ -100,7 +107,7 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
         .sswi_base = conf->aclint_sswi_base,
         .sswi_size = conf->aclint_sswi_size
     };
-    aclint_construct(&s->aclint, "u_aclint", &aclint_conf);
+    aclint_construct(&s->aclint, s->mod.hier_name, "u_aclint", &aclint_conf);
 
     APB_SLV_CONNECT(&s->plic, cfg_, s, plic_cfg_);
     for (u32 i = 0; i < PLIC_MAX_IRQ_NUM; i++) {
@@ -108,11 +115,13 @@ void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf)
     }
     s->plic.conv_ext_irq_out = &s->conv_ext_irq_sig_itf;
     plic_conf_t plic_conf = {};
-    plic_construct(&s->plic, "u_plic", &plic_conf);
+    s->plic.mod.cycle = s->mod.cycle;
+    plic_construct(&s->plic, s->mod.hier_name, "u_plic", &plic_conf);
 }
 
 void rv32g_reset(rv32g_t *s)
 {
+    mod_reset(&s->mod);
     hart_reset(&s->hart);
     cbi_reset(&s->cbi);
     rom_reset(&s->boot_rom);
@@ -138,6 +147,7 @@ void rv32g_reset(rv32g_t *s)
 
 void rv32g_free(rv32g_t *s)
 {
+    mod_free(&s->mod);
     hart_free(&s->hart);
     cbi_free(&s->cbi);
     rom_free(&s->boot_rom);
@@ -163,6 +173,7 @@ void rv32g_free(rv32g_t *s)
 
 void rv32g_clock(rv32g_t *s)
 {
+    mod_clock(&s->mod);
     hart_clock(&s->hart);
     cbi_clock(&s->cbi);
     rom_clock(&s->boot_rom);

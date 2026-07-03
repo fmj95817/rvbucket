@@ -2,6 +2,7 @@
 #define CSR_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "spec/core/csr.h"
 #include "itf/core_timer_if.h"
@@ -19,7 +20,7 @@
 #include "itf/csr_trap_state_if.h"
 
 typedef struct csr {
-    const u64 *cycle;
+    mod_t mod;
     itf_t *core_s_irq_slv;
     itf_t *core_timer_in;
     itf_t *core_m_irq_in;
@@ -50,7 +51,7 @@ typedef struct csr {
     rv32g_csr_t regs;
 } csr_t;
 
-extern void csr_construct(csr_t *csr, const char *name);
+extern void csr_construct(csr_t *csr, const char *parent, const char *name);
 extern void csr_reset(csr_t *csr);
 extern void csr_clock(csr_t *csr);
 extern void csr_free(csr_t *csrs);

@@ -3,9 +3,10 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void axi_demux_construct(axi_demux_t *axi_demux, const char *name,
+void axi_demux_construct(axi_demux_t *axi_demux, const char *parent, const char *name,
     u32 gst_num, const u32 *gst_bases, const u32 *gst_sizes)
 {
+    mod_construct(&axi_demux->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(gst_num <= AXI_DEMUX_GST_NUM_MAX);
@@ -19,6 +20,7 @@ void axi_demux_construct(axi_demux_t *axi_demux, const char *name,
 
 void axi_demux_reset(axi_demux_t *axi_demux)
 {
+    mod_reset(&axi_demux->mod);
     axi_demux->rd_state = AXI_DEMUX_STATE_IDLE;
     axi_demux->rd_active_gst_idx = 0;
     axi_demux->wr_state = AXI_DEMUX_STATE_IDLE;
@@ -188,6 +190,7 @@ static void axi_demux_proc_ar(axi_demux_t *axi_demux)
 
 void axi_demux_clock(axi_demux_t *axi_demux)
 {
+    mod_clock(&axi_demux->mod);
     axi_demux_proc_b(axi_demux);
     axi_demux_proc_r(axi_demux);
     axi_demux_proc_w(axi_demux);
@@ -197,5 +200,6 @@ void axi_demux_clock(axi_demux_t *axi_demux)
 
 void axi_demux_free(axi_demux_t *axi_demux)
 {
+    mod_free(&axi_demux->mod);
     (void)axi_demux;
 }

@@ -3,14 +3,21 @@
 #include "dbg/vcd.h"
 #include "spec/core/hart.h"
 
-void hbi_construct(hbi_t *hbi, const char *name)
+void hbi_construct(hbi_t *hbi, const char *parent, const char *name)
 {
+    mod_construct(&hbi->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 }
 
-void hbi_reset(hbi_t *hbi) {}
+void hbi_reset(hbi_t *hbi)
+{
+    mod_reset(&hbi->mod);
+}
 
-void hbi_free(hbi_t *hbi) {}
+void hbi_free(hbi_t *hbi)
+{
+    mod_free(&hbi->mod);
+}
 
 static void hbi_proc_i_req(hbi_t *hbi)
 {
@@ -134,6 +141,7 @@ static void hbi_proc_d_rsp(hbi_t *hbi)
 
 void hbi_clock(hbi_t *hbi)
 {
+    mod_clock(&hbi->mod);
     hbi_proc_i_req(hbi);
     hbi_proc_d_req(hbi);
     hbi_proc_i_expt(hbi);

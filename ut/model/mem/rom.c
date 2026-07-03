@@ -12,6 +12,7 @@
 static u8 g_init_data[256];
 
 typedef struct rom_tb {
+    mod_t mod;
     u64 *cycle;
     u64 cycle_val;
 
@@ -35,6 +36,8 @@ static void tb_construct(rom_tb_t *tb, const char *name)
 
     tb->cycle_val = 0;
     tb->cycle = &tb->cycle_val;
+    tb->mod.cycle = tb->cycle;
+    mod_construct(&tb->mod, NULL, name);
 
     BTI_REQ_IF_CONSTRUCT(tb, bti_req_itf, 4);
     BTI_RSP_IF_CONSTRUCT(tb, bti_rsp_itf, 4);
@@ -53,7 +56,8 @@ static void tb_construct_bti(rom_tb_t *tb, u8 init_val)
     memset(g_init_data, init_val, sizeof(g_init_data));
     tb->dut.bti_req_slv = &tb->bti_req_itf;
     tb->dut.bti_rsp_mst = &tb->bti_rsp_itf;
-    rom_construct(&tb->dut, "u_rom", ROM_MODE_BTI, ROM_SIZE,
+    tb->dut.mod.cycle = tb->mod.cycle;
+    rom_construct(&tb->dut, tb->mod.hier_name, "u_rom", ROM_MODE_BTI, ROM_SIZE,
                   g_init_data, sizeof(g_init_data), ROM_BASE);
 }
 
@@ -65,7 +69,8 @@ static void tb_construct_axi(rom_tb_t *tb, u8 init_val)
     tb->dut.axi4_b_mst = &tb->axi4_b_itf;
     tb->dut.axi4_ar_slv = &tb->axi4_ar_itf;
     tb->dut.axi4_r_mst = &tb->axi4_r_itf;
-    rom_construct(&tb->dut, "u_rom", ROM_MODE_AXI, ROM_SIZE,
+    tb->dut.mod.cycle = tb->mod.cycle;
+    rom_construct(&tb->dut, tb->mod.hier_name, "u_rom", ROM_MODE_AXI, ROM_SIZE,
                   g_init_data, sizeof(g_init_data), ROM_BASE);
 }
 

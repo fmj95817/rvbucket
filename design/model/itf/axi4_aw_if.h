@@ -8,7 +8,8 @@
 
 #define AXI4_AW_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
     itf_conf_t conf = { \
-        .cycle = module->cycle, \
+        .cycle = module->mod.cycle, \
+        .hier_name = module->mod.hier_name, \
         .mode = ITF_MODE_SIGNAL, \
         .pkt_size = sizeof(axi4_aw_if_t), \
         .pkt2str = &axi4_aw_if_to_str, \
@@ -21,7 +22,8 @@
 
 #define AXI4_AW_IF_CONSTRUCT(module, itf, depth) do { \
     itf_conf_t conf = { \
-        .cycle = module->cycle, \
+        .cycle = module->mod.cycle, \
+        .hier_name = module->mod.hier_name, \
         .mode = ITF_MODE_FIFO, \
         .pkt_size = sizeof(axi4_aw_if_t), \
         .pkt2str = &axi4_aw_if_to_str, \

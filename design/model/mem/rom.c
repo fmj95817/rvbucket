@@ -4,9 +4,10 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void rom_construct(rom_t *rom, const char *name, rom_mode_t mode,
+void rom_construct(rom_t *rom, const char *parent, const char *name, rom_mode_t mode,
     u32 size, const void *data, u32 data_size, u32 base_addr)
 {
+    mod_construct(&rom->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     rom->mode = mode;
@@ -24,11 +25,13 @@ void rom_construct(rom_t *rom, const char *name, rom_mode_t mode,
 
 void rom_reset(rom_t *rom)
 {
+    mod_reset(&rom->mod);
     rom->rd_active = false;
 }
 
 void rom_free(rom_t *rom)
 {
+    mod_free(&rom->mod);
     free(rom->data);
 }
 
@@ -157,6 +160,7 @@ static void rom_proc_bti(rom_t *rom)
 
 void rom_clock(rom_t *rom)
 {
+    mod_clock(&rom->mod);
     if (rom->mode == ROM_MODE_AXI) {
         rom_proc_axi(rom);
     } else {

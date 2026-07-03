@@ -2,6 +2,7 @@
 #define EXU_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/ex_req_if.h"
 #include "itf/ex_rsp_if.h"
@@ -26,6 +27,7 @@ typedef enum amo_stage {
 } amo_stage_t;
 
 typedef struct exu {
+    mod_t mod;
     itf_t *fl_req_slv;
     itf_t *ex_req_slv;
     itf_t *ex_rsp_mst;
@@ -73,7 +75,7 @@ typedef struct exu {
     u32 gpr[RV32G_GPR_NUM];
 } exu_t;
 
-extern void exu_construct(exu_t *exu, const char *name);
+extern void exu_construct(exu_t *exu, const char *parent, const char *name);
 extern void exu_reset(exu_t *exu);
 extern void exu_clock(exu_t *exu);
 extern void exu_free(exu_t *exu);

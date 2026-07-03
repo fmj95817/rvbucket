@@ -2,11 +2,13 @@
 #define TIMER_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/apb_if.h"
 #include "itf/ext_irq_if.h"
 
 typedef struct gtimer {
+    mod_t mod;
     itf_t *apb_req_slv;
     itf_t *apb_rsp_mst;
     itf_t *irq_out;
@@ -21,7 +23,7 @@ typedef struct gtimer {
     bool irq_pend;  /* interrupt pending */
 } gtimer_t;
 
-extern void gtimer_construct(gtimer_t *t, const char *name, u32 base, u32 size);
+extern void gtimer_construct(gtimer_t *t, const char *parent, const char *name, u32 base, u32 size);
 extern void gtimer_reset(gtimer_t *t);
 extern void gtimer_clock(gtimer_t *t);
 extern void gtimer_free(gtimer_t *t);

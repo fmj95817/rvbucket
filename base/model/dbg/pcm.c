@@ -2,13 +2,15 @@
 #include <string.h>
 #include <stdio.h>
 #include "base/def.h"
+#include "base/mod.h"
 #include "dbg/chk.h"
 #include "dbg/env.h"
 
 #define DBG_PERF_CNT_MAX 128
+#define DBG_PERF_CNT_NAME_MAX (HIER_NAME_MAX + 128u)
 
 typedef struct perf_cnt {
-    const char *name;
+    char name[DBG_PERF_CNT_NAME_MAX];
     u64 val;
 } perf_cnt_t;
 
@@ -65,12 +67,24 @@ __attribute__((destructor)) void dbg_pcm_destructor()
     }
 }
 
-u64 *dbg_pcm_reg_perf_cnt(const char *name)
+u64 *dbg_pcm_reg_perf_cnt(const char *hier_name, const char *name)
 {
+    DBG_CHECK(hier_name != NULL);
+    DBG_CHECK(name != NULL);
+    char full_name[DBG_PERF_CNT_NAME_MAX];
+    int ret = snprintf(full_name, sizeof(full_name),
+        "%s.%s", hier_name, name);
+    DBG_CHECK(ret >= 0 && (u32)ret < sizeof(full_name));
+
+    for (u32 i = 0; i < g_pcm.nxt_entry_idx; i++) {
+        if (strcmp(g_pcm.perf_cnts[i].name, full_name) == 0) {
+            return &g_pcm.perf_cnts[i].val;
+        }
+    }
+
     u32 idx = g_pcm.nxt_entry_idx;
     DBG_CHECK(idx < DBG_PERF_CNT_MAX);
-
-    g_pcm.perf_cnts[idx].name = name;
+    strcpy(g_pcm.perf_cnts[idx].name, full_name);
     g_pcm.perf_cnts[idx].val = 0;
     u64 *val = &g_pcm.perf_cnts[idx].val;
     g_pcm.nxt_entry_idx++;

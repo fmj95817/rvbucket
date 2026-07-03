@@ -2,6 +2,7 @@
 #define ACLINT_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/apb_if.h"
 #include "itf/core_timer_if.h"
@@ -31,7 +32,7 @@ typedef union aclint_reg64 {
 } aclint_reg64_t;
 
 typedef struct aclint {
-    const u64 *cycle;
+    mod_t mod;
     itf_t *cfg_apb_req_slv;
     itf_t *cfg_apb_rsp_mst;
     itf_t *core_timer_out;
@@ -51,7 +52,7 @@ typedef struct aclint {
     bool mtime_exceed_old[HART_NUM];
 } aclint_t;
 
-extern void aclint_construct(aclint_t *aclint, const char *name, const aclint_conf_t *conf);
+extern void aclint_construct(aclint_t *aclint, const char *parent, const char *name, const aclint_conf_t *conf);
 extern void aclint_reset(aclint_t *aclint);
 extern void aclint_clock(aclint_t *aclint);
 extern void aclint_free(aclint_t *aclint);

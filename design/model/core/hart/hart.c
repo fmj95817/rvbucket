@@ -3,8 +3,9 @@
 #include "dbg/chk.h"
 #include "spec/core/hart.h"
 
-void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
+void hart_construct(hart_t *s, const char *parent, const char *name, const hart_conf_t *conf)
 {
+    mod_construct(&s->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     EX_REQ_IF_CONSTRUCT(s, ex_req_itf, 1);
@@ -45,7 +46,9 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->ifu.fl_req_mst = &s->fl_req_itf;
     s->ifu.fch_expt_mst = &s->fch_expt_itf;
     s->ifu.trap_send_slv = &s->trap_send_itf;
-    ifu_construct(&s->ifu, "u_ifu", conf->boot_rom_base, conf->boot_rom_base, conf->boot_rom_size);
+    s->ifu.mod.cycle = s->mod.cycle;
+    ifu_construct(&s->ifu, s->mod.hier_name, "u_ifu", conf->boot_rom_base,
+        conf->boot_rom_base, conf->boot_rom_size);
 
     s->exu.fl_req_slv = &s->fl_req_itf;
     s->exu.ex_req_slv = &s->ex_req_itf;
@@ -61,9 +64,10 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->exu.l1i_flush_mst = &s->l1i_flush_itf;
     s->exu.exu_state_out = &s->exu_state_sig_itf;
     s->exu.trap_exu_ctrl_in = &s->trap_exu_ctrl_sig_itf;
-    exu_construct(&s->exu, "u_exu");
+    s->exu.mod.cycle = s->mod.cycle;
+    exu_construct(&s->exu, s->mod.hier_name, "u_exu");
 
-    s->csr.cycle = s->cycle;
+    s->csr.mod.cycle = s->mod.cycle;
     s->csr.core_s_irq_slv = s->core_s_irq_slv;
     s->csr.core_timer_in = s->core_timer_in;
     s->csr.core_m_irq_in = s->core_m_irq_in;
@@ -77,7 +81,7 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->csr.csr_trap_write_rsp_out = &s->csr_trap_write_rsp_sig_itf;
     s->csr.csr_mmu_state_out = &s->csr_mmu_state_sig_itf;
     s->csr.csr_trap_state_out = &s->csr_trap_state_sig_itf;
-    csr_construct(&s->csr, "u_csr");
+    csr_construct(&s->csr, s->mod.hier_name, "u_csr");
 
     BTI_MST_CONNECT(&s->hbi, i_, s, va_i_);
     BTI_MST_CONNECT(&s->hbi, d_, s, va_d_);
@@ -86,7 +90,8 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->hbi.mmu_fch_expt_slv = &s->mmu_fch_expt_itf;
     s->hbi.ldst_req_slv = &s->ldst_req_itf;
     s->hbi.ldst_rsp_mst = &s->ldst_rsp_itf;
-    hbi_construct(&s->hbi, "u_hbi");
+    s->hbi.mod.cycle = s->mod.cycle;
+    hbi_construct(&s->hbi, s->mod.hier_name, "u_hbi");
 
     BTI_SLV_CONNECT(&s->mmu, va_i_, s, va_i_);
     BTI_SLV_CONNECT(&s->mmu, va_d_, s, va_d_);
@@ -99,12 +104,14 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->mmu.exu_state_in = &s->exu_state_sig_itf;
     s->mmu.csr_mmu_state_in = &s->csr_mmu_state_sig_itf;
     mmu_conf_t mmu_conf = {};
-    mmu_construct(&s->mmu, "u_mmu", &mmu_conf);
+    s->mmu.mod.cycle = s->mod.cycle;
+    mmu_construct(&s->mmu, s->mod.hier_name, "u_mmu", &mmu_conf);
 
     BTI_SLV_ARR_CONNECT(&s->l1d_bti_mux, host_, 0, s, pa_d_);
     BTI_SLV_ARR_CONNECT(&s->l1d_bti_mux, host_, 1, s, pa_ptw_);
     BTI_MST_CONNECT(&s->l1d_bti_mux, gst_, s, l1d_);
-    bti_mux_construct(&s->l1d_bti_mux, "u_l1d_bti_mux", 2);
+    s->l1d_bti_mux.mod.cycle = s->mod.cycle;
+    bti_mux_construct(&s->l1d_bti_mux, s->mod.hier_name, "u_l1d_bti_mux", 2);
 
     l1_conf_t l1i_conf = {
         .full_bypass = false,
@@ -114,11 +121,11 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
         .bypass_bases = { conf->boot_rom_base, conf->itcm_base },
         .bypass_sizes = { conf->boot_rom_size, conf->itcm_size }
     };
-    s->l1i.cycle = s->cycle;
+    s->l1i.mod.cycle = s->mod.cycle;
     BTI_SLV_CONNECT(&s->l1i, , s, pa_i_);
     AXI4_MST_IMPORT(&s->l1i, , s, i_);
     s->l1i.flush_slv = &s->l1i_flush_itf;
-    l1_construct(&s->l1i, "u_l1i", &l1i_conf);
+    l1_construct(&s->l1i, s->mod.hier_name, "u_l1i", &l1i_conf);
 
     l1_conf_t l1d_conf = {
         .full_bypass = false,
@@ -128,11 +135,11 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
         .bypass_bases = { conf->boot_rom_base, conf->itcm_base, conf->dtcm_base, conf->cfg_base },
         .bypass_sizes = { conf->boot_rom_size, conf->itcm_size, conf->dtcm_size, conf->cfg_size }
     };
-    s->l1d.cycle = s->cycle;
+    s->l1d.mod.cycle = s->mod.cycle;
     BTI_SLV_CONNECT(&s->l1d, , s, l1d_);
     AXI4_MST_IMPORT(&s->l1d, , s, d_);
     s->l1d.flush_slv = NULL;
-    l1_construct(&s->l1d, "u_l1d", &l1d_conf);
+    l1_construct(&s->l1d, s->mod.hier_name, "u_l1d", &l1d_conf);
 
     s->trap.fch_expt_slv = &s->fch_expt_itf;
     s->trap.ex_expt_slv = &s->ex_expt_itf;
@@ -143,11 +150,13 @@ void hart_construct(hart_t *s, const char *name, const hart_conf_t *conf)
     s->trap.csr_trap_state_in = &s->csr_trap_state_sig_itf;
     s->trap.trap_csr_write_req_out = &s->trap_csr_write_req_sig_itf;
     s->trap.csr_trap_write_rsp_in = &s->csr_trap_write_rsp_sig_itf;
-    trap_construct(&s->trap, "u_trap");
+    s->trap.mod.cycle = s->mod.cycle;
+    trap_construct(&s->trap, s->mod.hier_name, "u_trap");
 }
 
 void hart_reset(hart_t *s)
 {
+    mod_reset(&s->mod);
     itf_reset(&s->exu_state_sig_itf);
     itf_reset(&s->trap_exu_ctrl_sig_itf);
     itf_reset(&s->csr_mmu_state_sig_itf);
@@ -193,6 +202,7 @@ void hart_reset(hart_t *s)
 
 void hart_free(hart_t *s)
 {
+    mod_free(&s->mod);
     ifu_free(&s->ifu);
     exu_free(&s->exu);
     csr_free(&s->csr);
@@ -237,6 +247,7 @@ void hart_free(hart_t *s)
 
 void hart_clock(hart_t *s)
 {
+    mod_clock(&s->mod);
     exu_clock(&s->exu);
     csr_clock(&s->csr);
     trap_clock(&s->trap);

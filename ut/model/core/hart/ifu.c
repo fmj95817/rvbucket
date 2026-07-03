@@ -6,6 +6,7 @@
 #include "utils.h"
 
 typedef struct ifu_tb {
+    mod_t mod;
     u64 *cycle;
     u64 cycle_val;
 
@@ -27,6 +28,8 @@ static void tb_construct(ifu_tb_t *tb, const char *name)
 
     tb->cycle_val = 0;
     tb->cycle = &tb->cycle_val;
+    tb->mod.cycle = tb->cycle;
+    mod_construct(&tb->mod, NULL, name);
 
     FCH_REQ_IF_CONSTRUCT(tb, fch_req_itf, 1);
     FCH_RSP_IF_CONSTRUCT(tb, fch_rsp_itf, 1);
@@ -42,7 +45,8 @@ static void tb_construct(ifu_tb_t *tb, const char *name)
     tb->dut.fl_req_mst = &tb->fl_req_itf;
     tb->dut.trap_send_slv = &tb->trap_send_itf;
 
-    ifu_construct(&tb->dut, "u_dut", 0x80000000, 0x40000000, 0x10000);
+    tb->dut.mod.cycle = tb->mod.cycle;
+    ifu_construct(&tb->dut, tb->mod.hier_name, "u_dut", 0x80000000, 0x40000000, 0x10000);
 
     ut_sbd_init(&tb->sbd);
 }

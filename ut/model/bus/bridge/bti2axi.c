@@ -7,6 +7,7 @@
 #include "utils.h"
 
 typedef struct bti2axi_tb {
+    mod_t mod;
     u64 *cycle;
     u64 cycle_val;
 
@@ -43,6 +44,8 @@ static void tb_construct(bti2axi_tb_t *tb, const char *name)
 
     tb->cycle_val = 0;
     tb->cycle = &tb->cycle_val;
+    tb->mod.cycle = tb->cycle;
+    mod_construct(&tb->mod, NULL, name);
 
     BTI_REQ_IF_CONSTRUCT(tb, bti_req_itf, 1);
     BTI_RSP_IF_CONSTRUCT(tb, bti_rsp_itf, 1);
@@ -59,7 +62,8 @@ static void tb_construct(bti2axi_tb_t *tb, const char *name)
     tb->dut.axi4_b_slv = &tb->axi4_b_itf;
     tb->dut.axi4_ar_mst = &tb->axi4_ar_itf;
     tb->dut.axi4_r_slv = &tb->axi4_r_itf;
-    bti2axi_construct(&tb->dut, "u_dut");
+    tb->dut.mod.cycle = tb->mod.cycle;
+    bti2axi_construct(&tb->dut, tb->mod.hier_name, "u_dut");
 
     ut_sbd_init(&tb->sbd);
 }

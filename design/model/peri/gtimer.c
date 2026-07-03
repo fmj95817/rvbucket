@@ -7,8 +7,9 @@
 #define REG_RELOAD  2u
 #define REG_IRQ     3u
 
-void gtimer_construct(gtimer_t *t, const char *name, u32 base, u32 size)
+void gtimer_construct(gtimer_t *t, const char *parent, const char *name, u32 base, u32 size)
 {
+    mod_construct(&t->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
     t->base_addr = base;
     t->size = size;
@@ -18,6 +19,7 @@ void gtimer_construct(gtimer_t *t, const char *name, u32 base, u32 size)
 
 void gtimer_reset(gtimer_t *t)
 {
+    mod_reset(&t->mod);
     t->ctrl = 0;
     t->count = 0;
     t->reload = 0;
@@ -101,11 +103,13 @@ static void gtimer_count_proc(gtimer_t *t)
 
 void gtimer_clock(gtimer_t *t)
 {
+    mod_clock(&t->mod);
     gtimer_count_proc(t);
     gtimer_apb_proc(t);
 }
 
 void gtimer_free(gtimer_t *t)
 {
+    mod_free(&t->mod);
     (void)t;
 }

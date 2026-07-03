@@ -4,9 +4,10 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void ram_construct(ram_t *ram, const char *name, u32 port_num, ram_mode_t mode,
+void ram_construct(ram_t *ram, const char *parent, const char *name, u32 port_num, ram_mode_t mode,
                    u32 size, u32 base_addr)
 {
+    mod_construct(&ram->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(port_num > 0);
@@ -22,6 +23,7 @@ void ram_construct(ram_t *ram, const char *name, u32 port_num, ram_mode_t mode,
 
 void ram_reset(ram_t *ram)
 {
+    mod_reset(&ram->mod);
     ram->rd_active = false;
     ram->wr_active = false;
     ram->wr_b_pending = false;
@@ -29,6 +31,7 @@ void ram_reset(ram_t *ram)
 
 void ram_free(ram_t *ram)
 {
+    mod_free(&ram->mod);
     free(ram->data);
 }
 
@@ -256,6 +259,7 @@ static void ram_proc_port(ram_t *ram, u32 port_idx)
 
 void ram_clock(ram_t *ram)
 {
+    mod_clock(&ram->mod);
     if (ram->mode == RAM_MODE_AXI) {
         ram_proc_axi(ram);
     } else {

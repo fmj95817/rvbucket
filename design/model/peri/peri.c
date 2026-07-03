@@ -3,8 +3,9 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void peri_construct(peri_t *peri, const char *name, u32 base, u32 size)
+void peri_construct(peri_t *peri, const char *parent, const char *name, u32 base, u32 size)
 {
+    mod_construct(&peri->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     peri->base = base;
@@ -24,26 +25,35 @@ void peri_construct(peri_t *peri, const char *name, u32 base, u32 size)
     APB_MST_ARR_CONNECT(&peri->apb_demux, gst_, 2, peri, gtimer_);
     const u32 gst_bases[] = { uart_base, gpio_base, gtimer_base };
     const u32 gst_sizes[] = { PERI_UART_SIZE, PERI_GPIO_SIZE, PERI_GTIMER_SIZE };
-    apb_demux_construct(&peri->apb_demux, "u_peri_apb_demux", 3, gst_bases, gst_sizes);
+    peri->apb_demux.mod.cycle = peri->mod.cycle;
+    apb_demux_construct(&peri->apb_demux, peri->mod.hier_name,
+        "u_peri_apb_demux", 3, gst_bases, gst_sizes);
 
     APB_SLV_CONNECT(&peri->uart, , peri, uart_);
     peri->uart.uart_tx_mst = peri->uart_tx_mst;
     peri->uart.uart_rx_slv = peri->uart_rx_slv;
     peri->uart.irq_out = peri->uart_irq_out;
-    uart_construct(&peri->uart, "u_uart", uart_base, PERI_UART_SIZE);
+    peri->uart.mod.cycle = peri->mod.cycle;
+    uart_construct(&peri->uart, peri->mod.hier_name, "u_uart", uart_base,
+        PERI_UART_SIZE);
 
     APB_SLV_CONNECT(&peri->gpio, , peri, gpio_);
     peri->gpio.inout_sig = peri->gpio_inout;
     peri->gpio.irq_out = peri->gpio_irq_out;
-    gpio_construct(&peri->gpio, "u_gpio", gpio_base, PERI_GPIO_SIZE);
+    peri->gpio.mod.cycle = peri->mod.cycle;
+    gpio_construct(&peri->gpio, peri->mod.hier_name, "u_gpio", gpio_base,
+        PERI_GPIO_SIZE);
 
     APB_SLV_CONNECT(&peri->gtimer, , peri, gtimer_);
     peri->gtimer.irq_out = peri->gtimer_irq_out;
-    gtimer_construct(&peri->gtimer, "u_gtimer", gtimer_base, PERI_GTIMER_SIZE);
+    peri->gtimer.mod.cycle = peri->mod.cycle;
+    gtimer_construct(&peri->gtimer, peri->mod.hier_name, "u_gtimer", gtimer_base,
+        PERI_GTIMER_SIZE);
 }
 
 void peri_reset(peri_t *peri)
 {
+    mod_reset(&peri->mod);
     uart_reset(&peri->uart);
     gpio_reset(&peri->gpio);
     gtimer_reset(&peri->gtimer);
@@ -56,6 +66,7 @@ void peri_reset(peri_t *peri)
 
 void peri_clock(peri_t *peri)
 {
+    mod_clock(&peri->mod);
     uart_clock(&peri->uart);
     gpio_clock(&peri->gpio);
     gtimer_clock(&peri->gtimer);
@@ -68,6 +79,7 @@ void peri_clock(peri_t *peri)
 
 void peri_free(peri_t *peri)
 {
+    mod_free(&peri->mod);
     uart_free(&peri->uart);
     gpio_free(&peri->gpio);
     gtimer_free(&peri->gtimer);

@@ -2,8 +2,9 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void bti_mux_construct(bti_mux_t *bti_mux, const char *name, u32 host_num)
+void bti_mux_construct(bti_mux_t *bti_mux, const char *parent, const char *name, u32 host_num)
 {
+    mod_construct(&bti_mux->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
     DBG_CHECK(host_num <= BTI_MUX_HOST_NUM_MAX);
     bti_mux->host_num = host_num;
@@ -11,6 +12,7 @@ void bti_mux_construct(bti_mux_t *bti_mux, const char *name, u32 host_num)
 
 void bti_mux_reset(bti_mux_t *bti_mux)
 {
+    mod_reset(&bti_mux->mod);
     bti_mux->rsp_pending = false;
     bti_mux->rsp_host_idx = 0;
     bti_mux->req_rr_idx = 0;
@@ -65,11 +67,13 @@ static void bti_mux_proc_rsp(bti_mux_t *bti_mux)
 
 void bti_mux_clock(bti_mux_t *bti_mux)
 {
+    mod_clock(&bti_mux->mod);
     bti_mux_proc_rsp(bti_mux);
     bti_mux_proc_req(bti_mux);
 }
 
 void bti_mux_free(bti_mux_t *bti_mux)
 {
+    mod_free(&bti_mux->mod);
     (void)bti_mux;
 }

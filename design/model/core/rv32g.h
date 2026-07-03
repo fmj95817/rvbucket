@@ -2,6 +2,7 @@
 #define RV32G_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "mem/rom.h"
 #include "mem/ram.h"
@@ -39,7 +40,7 @@ typedef struct rv32g_conf {
 } rv32g_conf_t;
 
 typedef struct rv32g {
-    const u64 *cycle;
+    mod_t mod;
     AXI4_MST_DECL(mm_i_);
     AXI4_MST_DECL(mm_d_);
     APB_MST_DECL(peri_);
@@ -68,7 +69,7 @@ typedef struct rv32g {
     AXI4_IF_DECL(hart_d_);
 } rv32g_t;
 
-extern void rv32g_construct(rv32g_t *s, const char *name, const rv32g_conf_t *conf);
+extern void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv32g_conf_t *conf);
 extern void rv32g_reset(rv32g_t *s);
 extern void rv32g_clock(rv32g_t *s);
 extern void rv32g_free(rv32g_t *s);

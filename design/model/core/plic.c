@@ -222,8 +222,9 @@ static void plic_sample_inputs(plic_t *plic)
     }
 }
 
-void plic_construct(plic_t *plic, const char *name, const plic_conf_t *conf)
+void plic_construct(plic_t *plic, const char *parent, const char *name, const plic_conf_t *conf)
 {
+    mod_construct(&plic->mod, parent, name);
     (void)conf;
     DBG_VCD_MODULE_SCOPE(name);
 
@@ -237,6 +238,7 @@ void plic_construct(plic_t *plic, const char *name, const plic_conf_t *conf)
 
 void plic_reset(plic_t *plic)
 {
+    mod_reset(&plic->mod);
     for (u32 i = 0; i < PLIC_SOURCE_NUM; i++) {
         plic->priority[i] = 0u;
     }
@@ -253,6 +255,7 @@ void plic_reset(plic_t *plic)
 
 void plic_clock(plic_t *plic)
 {
+    mod_clock(&plic->mod);
     plic_apb_proc(plic);
     plic_sample_inputs(plic);
     plic_update_irq(plic);
@@ -260,5 +263,6 @@ void plic_clock(plic_t *plic)
 
 void plic_free(plic_t *plic)
 {
+    mod_free(&plic->mod);
     (void)plic;
 }

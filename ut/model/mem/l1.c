@@ -8,6 +8,7 @@
 #define TB_MEM_WORDS 256
 
 typedef struct l1_tb {
+    mod_t mod;
     u64 *cycle;
     u64 cycle_val;
 
@@ -55,6 +56,8 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
 
     tb->cycle_val = 0;
     tb->cycle = &tb->cycle_val;
+    tb->mod.cycle = tb->cycle;
+    mod_construct(&tb->mod, NULL, name);
 
     BTI_REQ_IF_CONSTRUCT(tb, bti_req, 2);
     BTI_RSP_IF_CONSTRUCT(tb, bti_rsp, 2);
@@ -65,7 +68,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     AXI4_R_IF_CONSTRUCT(tb, axi_r, 16);
     L1_FLUSH_IF_CONSTRUCT(tb, flush, 1);
 
-    tb->dut.cycle = tb->cycle;
+    tb->dut.mod.cycle = tb->mod.cycle;
     tb->dut.bti_req_slv = &tb->bti_req;
     tb->dut.bti_rsp_mst = &tb->bti_rsp;
     tb->dut.axi4_aw_mst = &tb->axi_aw;
@@ -74,7 +77,8 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     tb->dut.axi4_ar_mst = &tb->axi_ar;
     tb->dut.axi4_r_slv = &tb->axi_r;
     tb->dut.flush_slv = &tb->flush;
-    l1_construct(&tb->dut, "u_dut", conf);
+    tb->dut.mod.cycle = tb->mod.cycle;
+    l1_construct(&tb->dut, tb->mod.hier_name, "u_dut", conf);
 
     ut_sbd_init(&tb->sbd);
 }

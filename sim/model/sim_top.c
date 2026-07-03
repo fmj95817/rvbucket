@@ -42,7 +42,7 @@ typedef struct program_header {
 } program_header_t;
 
 typedef struct sim_top {
-    u64 *cycle;
+    mod_t mod;
     itf_t uart_rx_itf;
     itf_t uart_tx_itf;
     AXI4_IF_DECL(ddr_);
@@ -147,12 +147,13 @@ static void sim_top_burn_program(sim_top_t *sim_top)
     free(program.code);
 }
 
-static void sim_top_construct(sim_top_t *sim_top, const char *name,
+static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char *name,
     const char *prog_path, bool fast_load_linux, bool web_ui, bool no_end_detect,
     bool boot_prog)
 {
+    mod_construct(&sim_top->mod, parent, name);
+    sim_top->mod.cycle = dbg_pcm_reg_perf_cnt(sim_top->mod.hier_name, "cycles");
     DBG_VCD_MODULE_SCOPE(name);
-    sim_top->cycle = dbg_pcm_reg_perf_cnt("cycles");
 
     UART_IF_CONSTRUCT(sim_top, uart_rx_itf, 1);
     UART_IF_CONSTRUCT(sim_top, uart_tx_itf, 1);
@@ -162,7 +163,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
     sim_top->gpio_inout_io = itf_signal_get_src_and_chk(&sim_top->gpio_inout_itf);
     itf_signal_set_wcb(&sim_top->gpio_inout_itf, &sim_top_gpio_cb, sim_top);
 
-    sim_top->soc.cycle = sim_top->cycle;
+    sim_top->soc.mod.cycle = sim_top->mod.cycle;
     AXI4_MST_CONNECT(&sim_top->soc, ddr_, sim_top, ddr_);
     sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
     sim_top->soc.uart_rx_slv = &sim_top->uart_tx_itf;
@@ -170,13 +171,15 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
     for (u32 i = 0; i < PLIC_MAX_IRQ_NUM; i++) {
         sim_top->soc.ext_irq_ins[i] = NULL;
     }
-    soc_construct(&sim_top->soc, "u_soc");
+    soc_construct(&sim_top->soc, sim_top->mod.hier_name, "u_soc");
 
     AXI4_SLV_CONNECT(&sim_top->ddr, , sim_top, ddr_);
-    ram_construct(&sim_top->ddr, "u_ddr", 1, RAM_MODE_AXI, DDR_SIZE, DDR_BASE);
+    sim_top->ddr.mod.cycle = sim_top->mod.cycle;
+    ram_construct(&sim_top->ddr, sim_top->mod.hier_name, "u_ddr", 1,
+        RAM_MODE_AXI, DDR_SIZE, DDR_BASE);
 
-    dbg_vcd_set_clk(sim_top->cycle);
-    dbg_vcd_add_sig("cycle", DBG_SIG_TYPE_REG, 64, sim_top->cycle);
+    dbg_vcd_set_clk(sim_top->mod.cycle);
+    dbg_vcd_add_sig("cycle", DBG_SIG_TYPE_REG, 64, sim_top->mod.cycle);
 
     sim_top->prog_path = prog_path;
     sim_top->fast_load_linux = fast_load_linux;
@@ -195,6 +198,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *name,
 
 static void sim_top_reset(sim_top_t *sim_top)
 {
+    mod_reset(&sim_top->mod);
     sim_top->end_sim = false;
     sim_top->exit_code = 0;
     DBG_CHECK(sim_top->ui != NULL);
@@ -219,10 +223,11 @@ static void sim_top_reset(sim_top_t *sim_top)
 
 static void sim_top_clock(sim_top_t *sim_top)
 {
+    mod_clock(&sim_top->mod);
     DBG_CHECK(sim_top->ui != NULL);
 
     u32 gpio_in;
-    if (((*sim_top->cycle) % GPIO_IN_POLL_INTERVAL) == 0u) {
+    if (((*sim_top->mod.cycle) % GPIO_IN_POLL_INTERVAL) == 0u) {
         if (sim_top->ui->gpio_in_poll(sim_top->ui, &gpio_in)) {
             sim_top->gpio_inout_io->val =
                 (sim_top->gpio_inout_io->val & 0xFFFFu) | (gpio_in & 0xFF0000u);
@@ -230,7 +235,7 @@ static void sim_top_clock(sim_top_t *sim_top)
     }
 
     u8 ch_rx;
-    if (((*sim_top->cycle) % UART_IN_POLL_INTERVAL) == 0u) {
+    if (((*sim_top->mod.cycle) % UART_IN_POLL_INTERVAL) == 0u) {
         while (!itf_fifo_full(&sim_top->uart_tx_itf) &&
                sim_top->ui->uart_in(sim_top->ui, &ch_rx)) {
             uart_if_t pkt;
@@ -247,7 +252,7 @@ static void sim_top_clock(sim_top_t *sim_top)
     AXI4_IF_DBG_CLOCK(sim_top, ddr_);
     itf_dbg_clock(&sim_top->gpio_inout_itf);
 
-    (*sim_top->cycle)++;
+    (*(u64 *)sim_top->mod.cycle)++;
     dbg_vcd_clock();
 
     i32 ch_tx;
@@ -277,6 +282,7 @@ static void sim_top_clock(sim_top_t *sim_top)
 
 static void sim_top_free(sim_top_t *sim_top)
 {
+    mod_free(&sim_top->mod);
     DBG_CHECK(sim_top->ui != NULL);
     sim_top->ui->cleanup(sim_top->ui);
 
@@ -338,7 +344,7 @@ int main(int argc, char *argv[])
     }
 
     sim_top_t sim_top;
-    sim_top_construct(&sim_top, "sim_top", prog_path,
+    sim_top_construct(&sim_top, NULL, "sim_top", prog_path,
                       fast_load_linux, web_ui, no_end_detect, boot_prog);
     sim_top_reset(&sim_top);
 

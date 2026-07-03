@@ -163,13 +163,15 @@ static void exu_proc_biu_rsp(exu_t *exu)
 
 void exu_clock(exu_t *exu)
 {
+    mod_clock(&exu->mod);
     exu_proc_ex_req(exu);
     exu_proc_biu_rsp(exu);
     exu_publish_state(exu);
 }
 
-void exu_construct(exu_t *exu, const char *name)
+void exu_construct(exu_t *exu, const char *parent, const char *name)
 {
+    mod_construct(&exu->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     dbg_vcd_add_sig("priv", DBG_SIG_TYPE_REG, 2, &exu->priv);
@@ -212,6 +214,7 @@ void exu_construct(exu_t *exu, const char *name)
 
 void exu_reset(exu_t *exu)
 {
+    mod_reset(&exu->mod);
     exu->gpr[0] = 0;
     for (int i = 1; i < RV32G_GPR_NUM; i++) {
         exu->gpr[i] = (u32)rand();
@@ -236,4 +239,7 @@ void exu_reset(exu_t *exu)
     exu_publish_state(exu);
 }
 
-void exu_free(exu_t *exu) {}
+void exu_free(exu_t *exu)
+{
+    mod_free(&exu->mod);
+}

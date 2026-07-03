@@ -2,6 +2,7 @@
 #define ROM_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/bti_if.h"
 #include "itf/axi4_if.h"
@@ -12,6 +13,7 @@ typedef enum rom_mode {
 } rom_mode_t;
 
 typedef struct rom {
+    mod_t mod;
     itf_t *bti_req_slv;
     itf_t *bti_rsp_mst;
 
@@ -35,7 +37,7 @@ typedef struct rom {
     bool rd_active;
 } rom_t;
 
-extern void rom_construct(rom_t *rom, const char *name, rom_mode_t mode,
+extern void rom_construct(rom_t *rom, const char *parent, const char *name, rom_mode_t mode,
     u32 size, const void *data, u32 data_size, u32 base_addr);
 extern void rom_reset(rom_t *rom);
 extern void rom_clock(rom_t *rom);

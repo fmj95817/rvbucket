@@ -82,8 +82,9 @@ static void uart_apb_proc(uart_t *uart)
     itf_write(uart->apb_rsp_mst, &apb_rsp);
 }
 
-void uart_construct(uart_t *uart, const char *name, u32 base_addr, u32 size)
+void uart_construct(uart_t *uart, const char *parent, const char *name, u32 base_addr, u32 size)
 {
+    mod_construct(&uart->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     uart->base_addr = base_addr;
@@ -93,6 +94,7 @@ void uart_construct(uart_t *uart, const char *name, u32 base_addr, u32 size)
 
 void uart_reset(uart_t *uart)
 {
+    mod_reset(&uart->mod);
     uart->rx_data = 0;
     uart->rx_valid = false;
     uart->irq_o->irq = false;
@@ -101,6 +103,7 @@ void uart_reset(uart_t *uart)
 
 void uart_clock(uart_t *uart)
 {
+    mod_clock(&uart->mod);
     uart_rx_proc(uart);
     uart_apb_proc(uart);
     uart_update_irq(uart);
@@ -108,5 +111,6 @@ void uart_clock(uart_t *uart)
 
 void uart_free(uart_t *uart)
 {
+    mod_free(&uart->mod);
     (void)uart;
 }

@@ -2,6 +2,7 @@
 #define CBI_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/fch_req_if.h"
 #include "itf/fch_rsp_if.h"
@@ -33,7 +34,7 @@ typedef struct cbi_conf {
 } cbi_conf_t;
 
 typedef struct cbi {
-    const u64 *cycle;
+    mod_t mod;
     AXI4_MST_DECL(mm_i_);
     AXI4_MST_DECL(mm_d_);
     APB_MST_DECL(peri_);
@@ -70,7 +71,7 @@ typedef struct cbi {
     APB_IF_DECL(cfg_);
 } cbi_t;
 
-extern void cbi_construct(cbi_t *cbi, const char *name, const cbi_conf_t *conf);
+extern void cbi_construct(cbi_t *cbi, const char *parent, const char *name, const cbi_conf_t *conf);
 extern void cbi_reset(cbi_t *cbi);
 extern void cbi_clock(cbi_t *cbi);
 extern void cbi_free(cbi_t *cbi);

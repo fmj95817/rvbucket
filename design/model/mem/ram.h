@@ -2,6 +2,7 @@
 #define SRAM_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/bti_if.h"
 #include "itf/axi4_if.h"
@@ -14,6 +15,7 @@ typedef enum ram_mode {
 } ram_mode_t;
 
 typedef struct ram {
+    mod_t mod;
     itf_t *bti_req_slvs[RAM_MAX_PORT_NUM];
     itf_t *bti_rsp_msts[RAM_MAX_PORT_NUM];
 
@@ -47,7 +49,7 @@ typedef struct ram {
     bool wr_b_pending;
 } ram_t;
 
-extern void ram_construct(ram_t *ram, const char *name, u32 port_num, ram_mode_t mode,
+extern void ram_construct(ram_t *ram, const char *parent, const char *name, u32 port_num, ram_mode_t mode,
                           u32 size, u32 base_addr);
 extern void ram_reset(ram_t *ram);
 extern void ram_clock(ram_t *ram);

@@ -38,8 +38,9 @@ static rv32g_csr_satp_t mmu_satp(const mmu_t *mmu)
     return (rv32g_csr_satp_t){ .raw = mmu->csr_state_i->satp };
 }
 
-void mmu_construct(mmu_t *mmu, const char *name, const mmu_conf_t *conf)
+void mmu_construct(mmu_t *mmu, const char *parent, const char *name, const mmu_conf_t *conf)
 {
+    mod_construct(&mmu->mod, parent, name);
     (void)conf;
     DBG_VCD_MODULE_SCOPE(name);
     mmu->exu_state_i = itf_signal_get_src_and_chk(mmu->exu_state_in);
@@ -63,14 +64,15 @@ void mmu_construct(mmu_t *mmu, const char *name, const mmu_conf_t *conf)
     dbg_vcd_add_sig("itlb_replace_idx", DBG_SIG_TYPE_REG, 4, &mmu->itlb_replace_idx);
     dbg_vcd_add_sig("dtlb_replace_idx", DBG_SIG_TYPE_REG, 4, &mmu->dtlb_replace_idx);
 
-    mmu->perf_itlb_hit = dbg_pcm_reg_perf_cnt("mmu_itlb_hit");
-    mmu->perf_itlb_miss = dbg_pcm_reg_perf_cnt("mmu_itlb_miss");
-    mmu->perf_dtlb_hit = dbg_pcm_reg_perf_cnt("mmu_dtlb_hit");
-    mmu->perf_dtlb_miss = dbg_pcm_reg_perf_cnt("mmu_dtlb_miss");
+    mmu->perf_itlb_hit = dbg_pcm_reg_perf_cnt(mmu->mod.hier_name, "itlb_hit");
+    mmu->perf_itlb_miss = dbg_pcm_reg_perf_cnt(mmu->mod.hier_name, "itlb_miss");
+    mmu->perf_dtlb_hit = dbg_pcm_reg_perf_cnt(mmu->mod.hier_name, "dtlb_hit");
+    mmu->perf_dtlb_miss = dbg_pcm_reg_perf_cnt(mmu->mod.hier_name, "dtlb_miss");
 }
 
 void mmu_reset(mmu_t *mmu)
 {
+    mod_reset(&mmu->mod);
     mmu->busy = false;
     mmu->pte_req_pending = false;
     mmu->final_req_pending = false;
@@ -607,6 +609,7 @@ static void mmu_proc_walk(mmu_t *mmu)
 
 void mmu_clock(mmu_t *mmu)
 {
+    mod_clock(&mmu->mod);
     mmu_recv_tlb_flush(mmu);
     mmu_drop_canceled_rsp(mmu);
 
@@ -626,5 +629,6 @@ void mmu_clock(mmu_t *mmu)
 
 void mmu_free(mmu_t *mmu)
 {
+    mod_free(&mmu->mod);
     (void)mmu;
 }

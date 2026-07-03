@@ -3,6 +3,6 @@
 
 #include "base/types.h"
 
-extern u64 *dbg_pcm_reg_perf_cnt(const char *name);
+extern u64 *dbg_pcm_reg_perf_cnt(const char *hier_name, const char *name);
 
 #endif

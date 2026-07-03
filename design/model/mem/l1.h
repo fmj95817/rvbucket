@@ -2,6 +2,7 @@
 #define L1_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/bti_if.h"
 #include "itf/axi4_if.h"
@@ -32,7 +33,7 @@ typedef enum l1_state {
 } l1_state_t;
 
 typedef struct l1 {
-    const u64 *cycle;
+    mod_t mod;
 
     itf_t *bti_req_slv;
     itf_t *bti_rsp_mst;
@@ -65,9 +66,14 @@ typedef struct l1 {
     u32 wb_line_addr;
     u32 beat_idx;
     bool op_ok;
+
+    u64 *perf_hit;
+    u64 *perf_miss;
+    u64 *perf_bypass;
+    u64 *perf_writeback;
 } l1_t;
 
-extern void l1_construct(l1_t *l1, const char *name, const l1_conf_t *conf);
+extern void l1_construct(l1_t *l1, const char *parent, const char *name, const l1_conf_t *conf);
 extern void l1_reset(l1_t *l1);
 extern void l1_clock(l1_t *l1);
 extern void l1_free(l1_t *l1);

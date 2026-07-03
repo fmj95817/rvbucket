@@ -7,6 +7,7 @@
 #include "dbg/vcd.h"
 
 typedef struct axi2bti_tb {
+    mod_t mod;
     u64 *cycle;
     u64 cycle_val;
 
@@ -37,6 +38,8 @@ static void tb_construct(axi2bti_tb_t *tb, const char *name)
 
     tb->cycle_val = 0;
     tb->cycle = &tb->cycle_val;
+    tb->mod.cycle = tb->cycle;
+    mod_construct(&tb->mod, NULL, name);
 
     AXI4_AR_IF_CONSTRUCT(tb, axi4_ar_itf, 1);
     AXI4_R_IF_CONSTRUCT(tb, axi4_r_itf, 1);
@@ -53,7 +56,8 @@ static void tb_construct(axi2bti_tb_t *tb, const char *name)
     tb->dut.axi4_b_mst = &tb->axi4_b_itf;
     tb->dut.bti_req_mst = &tb->bti_req_itf;
     tb->dut.bti_rsp_slv = &tb->bti_rsp_itf;
-    axi2bti_construct(&tb->dut, "u_dut");
+    tb->dut.mod.cycle = tb->mod.cycle;
+    axi2bti_construct(&tb->dut, tb->mod.hier_name, "u_dut");
 
     ut_sbd_init(&tb->sbd);
 }

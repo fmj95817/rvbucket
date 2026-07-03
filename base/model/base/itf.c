@@ -1,4 +1,5 @@
 #include "itf.h"
+#include <ctype.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "base/def.h"
@@ -8,7 +9,75 @@
 
 #define ITF_DUMP_DIR "itf_dump"
 #define ITF_DUMP_ENV "ITF_DUMP"
+#define ITF_DUMP_LIST "itf_dump_list.txt"
 #define ITF_VCD_ENV "ITF_VCD"
+
+typedef struct itf_dump_list {
+    u32 name_num;
+    char **names;
+} itf_dump_list_t;
+
+static itf_dump_list_t g_itf_dump_list;
+
+__attribute__((constructor)) static void itf_dump_list_init(void)
+{
+    FILE *fp = fopen(ITF_DUMP_LIST, "r");
+    if (fp == NULL) {
+        return;
+    }
+
+    char line[1024];
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        size_t len = strlen(line);
+        DBG_CHECK(len == 0 || line[len - 1] == '\n' || feof(fp));
+
+        char *start = line;
+        while (*start != '\0' && isspace((unsigned char)*start)) {
+            start++;
+        }
+        char *end = start + strlen(start);
+        while (end > start && isspace((unsigned char)end[-1])) {
+            end--;
+        }
+        *end = '\0';
+        if (*start == '\0') {
+            continue;
+        }
+
+        char **names = realloc(g_itf_dump_list.names,
+            sizeof(*names) * (g_itf_dump_list.name_num + 1u));
+        DBG_CHECK(names != NULL);
+        g_itf_dump_list.names = names;
+
+        size_t name_size = strlen(start) + 1u;
+        char *dump_name = malloc(name_size);
+        DBG_CHECK(dump_name != NULL);
+        memcpy(dump_name, start, name_size);
+        g_itf_dump_list.names[g_itf_dump_list.name_num++] = dump_name;
+    }
+    fclose(fp);
+}
+
+static bool itf_dump_list_match(const char *hier_name, const char *name)
+{
+    char full_name[1024];
+    int ret = snprintf(full_name, sizeof(full_name), "%s.%s", hier_name, name);
+    DBG_CHECK(ret >= 0 && (u32)ret < sizeof(full_name));
+    for (u32 i = 0; i < g_itf_dump_list.name_num; i++) {
+        if (strcmp(g_itf_dump_list.names[i], full_name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+__attribute__((destructor)) static void itf_dump_list_free(void)
+{
+    for (u32 i = 0; i < g_itf_dump_list.name_num; i++) {
+        free(g_itf_dump_list.names[i]);
+    }
+    free(g_itf_dump_list.names);
+}
 
 static inline void signal_itf_add_vcd(itf_t *itf)
 {
@@ -40,7 +109,9 @@ static void signal_itf_construct(itf_t *itf, const char *name, const itf_conf_t 
 
     if (itf->dump_enable) {
         char dump_path[1024];
-        sprintf(dump_path, ITF_DUMP_DIR"/%s_drv.txt", name);
+        int ret = snprintf(dump_path, sizeof(dump_path), ITF_DUMP_DIR"/%s.%s_drv.txt",
+            itf->hier_name, name);
+        DBG_CHECK(ret >= 0 && (u32)ret < sizeof(dump_path));
         itf->ctx.signal.dump_fp = fopen(dump_path, "w");
     } else {
         itf->ctx.signal.dump_fp = NULL;
@@ -72,8 +143,12 @@ static void fifo_itf_construct(itf_t *itf, const char *name, const itf_conf_t *c
     if (itf->dump_enable) {
         char slv_path[1024];
         char mst_path[1024];
-        sprintf(slv_path, ITF_DUMP_DIR"/%s_slv.txt", name);
-        sprintf(mst_path, ITF_DUMP_DIR"/%s_mst.txt", name);
+        int slv_ret = snprintf(slv_path, sizeof(slv_path), ITF_DUMP_DIR"/%s.%s_slv.txt",
+            itf->hier_name, name);
+        int mst_ret = snprintf(mst_path, sizeof(mst_path), ITF_DUMP_DIR"/%s.%s_mst.txt",
+            itf->hier_name, name);
+        DBG_CHECK(slv_ret >= 0 && (u32)slv_ret < sizeof(slv_path));
+        DBG_CHECK(mst_ret >= 0 && (u32)mst_ret < sizeof(mst_path));
         itf->ctx.fifo.dump_slv_fp = fopen(slv_path, "w");
         itf->ctx.fifo.dump_mst_fp = fopen(mst_path, "w");
     } else {
@@ -122,16 +197,20 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
 {
     DBG_CHECK(name != NULL);
     DBG_CHECK(conf != NULL);
+    DBG_CHECK(conf->hier_name != NULL);
     DBG_CHECK(conf->pkt2str != NULL);
     DBG_CHECK(conf->reg_vcd != NULL);
 
     itf->cycle = conf->cycle;
+    itf->hier_name = conf->hier_name;
     itf->name = name;
     itf->mode = conf->mode;
     itf->pkt_size = conf->pkt_size;
     DBG_CHECK(itf->mode <= ITF_MODE_MAX);
 
-    itf->dump_enable = dbg_get_bool_env(ITF_DUMP_ENV) && (!conf->force_disable_dump);
+    bool list_enable = itf_dump_list_match(conf->hier_name, name);
+    itf->dump_enable = list_enable ||
+        (dbg_get_bool_env(ITF_DUMP_ENV) && (!conf->force_disable_dump));
     itf->vcd_enable = dbg_get_bool_env(ITF_VCD_ENV);
     itf->pkt2str = conf->pkt2str;
     itf->reg_vcd = conf->reg_vcd;

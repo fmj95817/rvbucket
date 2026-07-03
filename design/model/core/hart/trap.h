@@ -2,6 +2,7 @@
 #define TRAP_H
 
 #include "base/types.h"
+#include "base/mod.h"
 #include "base/itf.h"
 #include "itf/hart_expt_if.h"
 #include "itf/trap_send_if.h"
@@ -13,6 +14,7 @@
 #include "spec/core/csr.h"
 
 typedef struct trap {
+    mod_t mod;
     itf_t *fch_expt_slv;
     itf_t *ex_expt_slv;
     itf_t *ldst_expt_slv;
@@ -30,7 +32,7 @@ typedef struct trap {
     const csr_trap_write_rsp_if_t *csr_write_rsp_i;
 } trap_t;
 
-extern void trap_construct(trap_t *trap, const char *name);
+extern void trap_construct(trap_t *trap, const char *parent, const char *name);
 extern void trap_reset(trap_t *trap);
 extern void trap_clock(trap_t *trap);
 extern void trap_free(trap_t *trap);

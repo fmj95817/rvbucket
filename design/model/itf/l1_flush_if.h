@@ -8,7 +8,8 @@
 
 #define L1_FLUSH_IF_CONSTRUCT(module, itf, depth) do { \
     itf_conf_t conf = { \
-        .cycle = module->cycle, \
+        .cycle = module->mod.cycle, \
+        .hier_name = module->mod.hier_name, \
         .mode = ITF_MODE_FIFO, \
         .pkt_size = sizeof(l1_flush_if_t), \
         .pkt2str = &l1_flush_if_to_str, \

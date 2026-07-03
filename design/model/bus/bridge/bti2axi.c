@@ -2,8 +2,9 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void bti2axi_construct(bti2axi_t *br, const char *name)
+void bti2axi_construct(bti2axi_t *br, const char *parent, const char *name)
 {
+    mod_construct(&br->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
 
     DBG_CHECK(br->bti_req_slv);
@@ -17,6 +18,7 @@ void bti2axi_construct(bti2axi_t *br, const char *name)
 
 void bti2axi_reset(bti2axi_t *br)
 {
+    mod_reset(&br->mod);
     br->state = BTI2AXI4_STATE_IDLE;
     br->bti_trans_id = 0;
 }
@@ -141,9 +143,13 @@ static void bti2axi_proc_wr_rsp(bti2axi_t *br)
 
 void bti2axi_clock(bti2axi_t *br)
 {
+    mod_clock(&br->mod);
     bti2axi_proc_req(br);
     bti2axi_proc_rd_rsp(br);
     bti2axi_proc_wr_rsp(br);
 }
 
-void bti2axi_free(bti2axi_t *br) {}
+void bti2axi_free(bti2axi_t *br)
+{
+    mod_free(&br->mod);
+}

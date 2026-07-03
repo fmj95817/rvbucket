@@ -2,8 +2,9 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void axi_mux_construct(axi_mux_t *axi_mux, const char *name, u32 host_num)
+void axi_mux_construct(axi_mux_t *axi_mux, const char *parent, const char *name, u32 host_num)
 {
+    mod_construct(&axi_mux->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
     DBG_CHECK(host_num <= AXI_MUX_HOST_NUM_MAX);
     axi_mux->host_num = host_num;
@@ -11,6 +12,7 @@ void axi_mux_construct(axi_mux_t *axi_mux, const char *name, u32 host_num)
 
 void axi_mux_reset(axi_mux_t *axi_mux)
 {
+    mod_reset(&axi_mux->mod);
     axi_mux->rd_state = AXI_MUX_STATE_IDLE;
     axi_mux->rd_active_host_idx = 0;
     axi_mux->rd_rr_idx = 0;
@@ -148,6 +150,7 @@ static void axi_mux_proc_ar(axi_mux_t *axi_mux)
 
 void axi_mux_clock(axi_mux_t *axi_mux)
 {
+    mod_clock(&axi_mux->mod);
     axi_mux_proc_b(axi_mux);
     axi_mux_proc_r(axi_mux);
     axi_mux_proc_w(axi_mux);
@@ -157,5 +160,6 @@ void axi_mux_clock(axi_mux_t *axi_mux)
 
 void axi_mux_free(axi_mux_t *axi_mux)
 {
+    mod_free(&axi_mux->mod);
     (void)axi_mux;
 }
