@@ -29,6 +29,7 @@ static void tb_construct(gtimer_tb_t *tb, const char *name)
     tb->cycle = &tb->cycle_val;
     tb->mod.cycle = tb->cycle;
     mod_construct(&tb->mod, NULL, name);
+    dbg_vcd_set_clk(tb->mod.cycle);
 
     APB_REQ_IF_CONSTRUCT(tb, apb_req_itf, 1);
     APB_RSP_IF_CONSTRUCT(tb, apb_rsp_itf, 1);

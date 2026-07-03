@@ -36,6 +36,7 @@ static void tb_construct(ram_tb_t *tb, const char *name)
     tb->cycle = &tb->cycle_val;
     tb->mod.cycle = tb->cycle;
     mod_construct(&tb->mod, NULL, name);
+    dbg_vcd_set_clk(tb->mod.cycle);
 
     BTI_REQ_IF_CONSTRUCT(tb, bti_req_itf, 4);
     BTI_RSP_IF_CONSTRUCT(tb, bti_rsp_itf, 4);

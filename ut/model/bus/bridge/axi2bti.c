@@ -40,6 +40,7 @@ static void tb_construct(axi2bti_tb_t *tb, const char *name)
     tb->cycle = &tb->cycle_val;
     tb->mod.cycle = tb->cycle;
     mod_construct(&tb->mod, NULL, name);
+    dbg_vcd_set_clk(tb->mod.cycle);
 
     AXI4_AR_IF_CONSTRUCT(tb, axi4_ar_itf, 1);
     AXI4_R_IF_CONSTRUCT(tb, axi4_r_itf, 1);

@@ -5,39 +5,67 @@
 #include "base/mod.h"
 #include "base/itf.h"
 #include "itf/axi4_if.h"
-#include "bus/mux/axi_mux.h"
 
-#define L2_HOST_NUM 2u
 #define L2_LINE_SIZE 64u
+#define L2_PORT_NUM 2u
+#define L2_I_PORT 0u
+#define L2_D_PORT 1u
 
 typedef struct l2_conf {
     u32 size;
     u32 way_num;
 } l2_conf_t;
 
-typedef enum l2_state {
-    L2_STATE_IDLE = 0,
-    L2_STATE_READ_SERVE,
-    L2_STATE_WRITE_WAIT_W,
-    L2_STATE_WRITE_SERVE,
-    L2_STATE_WB_AW,
-    L2_STATE_WB_W,
-    L2_STATE_WB_B,
-    L2_STATE_REFILL_AR,
-    L2_STATE_REFILL_R,
-    L2_STATE_BYPASS_R,
-    L2_STATE_BYPASS_W,
-    L2_STATE_BYPASS_B,
-} l2_state_t;
+typedef enum l2_port_state {
+    L2_PORT_STATE_IDLE = 0,
+    L2_PORT_STATE_READ,
+    L2_PORT_STATE_WRITE,
+    L2_PORT_STATE_MISS_WAIT,
+    L2_PORT_STATE_BYPASS_WAIT,
+} l2_port_state_t;
+
+typedef struct l2_port {
+    l2_port_state_t state;
+    l2_port_state_t miss_return_state;
+    axi4_ar_if_t ar;
+    axi4_aw_if_t aw;
+    u32 addr;
+    u32 beat_idx;
+    bool miss_resolved;
+} l2_port_t;
+
+typedef enum l2_mem_state {
+    L2_MEM_STATE_IDLE = 0,
+    L2_MEM_STATE_WB_AW,
+    L2_MEM_STATE_WB_W,
+    L2_MEM_STATE_WB_B,
+    L2_MEM_STATE_REFILL_AR,
+    L2_MEM_STATE_REFILL_R,
+    L2_MEM_STATE_BYPASS_R,
+    L2_MEM_STATE_BYPASS_W,
+    L2_MEM_STATE_BYPASS_B,
+} l2_mem_state_t;
 
 typedef struct l2 {
     mod_t mod;
 
-    AXI4_SLV_ARR_DECL(host_, L2_HOST_NUM);
-    AXI4_MST_DECL(gst_);
+    itf_t *i_axi4_aw_slv;
+    itf_t *i_axi4_w_slv;
+    itf_t *i_axi4_b_mst;
+    itf_t *i_axi4_ar_slv;
+    itf_t *i_axi4_r_mst;
 
-    axi_mux_t axi_mux;
-    AXI4_IF_DECL(merged_);
+    itf_t *d_axi4_aw_slv;
+    itf_t *d_axi4_w_slv;
+    itf_t *d_axi4_b_mst;
+    itf_t *d_axi4_ar_slv;
+    itf_t *d_axi4_r_mst;
+
+    itf_t *mem_axi4_aw_mst;
+    itf_t *mem_axi4_w_mst;
+    itf_t *mem_axi4_b_slv;
+    itf_t *mem_axi4_ar_mst;
+    itf_t *mem_axi4_r_slv;
 
     l2_conf_t conf;
     u32 set_num;
@@ -48,25 +76,16 @@ typedef struct l2 {
     bool *valids;
     bool *dirtys;
 
-    l2_state_t state;
-    bool is_write;
-    axi4_ar_if_t ar;
-    axi4_aw_if_t aw;
-    axi4_w_if_t w;
-    u32 burst_addr;
-    u32 beat_idx;
-    u32 byte_idx;
-    u32 beat_data;
-    u8 write_resp;
-    u8 beat_resp;
-
-    u32 req_line_addr;
-    u32 req_set;
-    u32 req_way;
-    u32 req_line_idx;
-    u32 req_tag;
+    l2_port_t ports[L2_PORT_NUM];
+    l2_mem_state_t mem_state;
+    u32 mem_owner;
+    u32 miss_line_addr;
+    u32 miss_set;
+    u32 miss_tag;
+    u32 miss_line_idx;
     u32 wb_line_addr;
-    u32 line_beat_idx;
+    u32 mem_beat_idx;
+    bool data_write_used;
 
     u64 *perf_hit;
     u64 *perf_miss;

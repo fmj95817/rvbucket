@@ -20,6 +20,7 @@ typedef struct dbg_sig {
 
 typedef struct dbg_vcd {
     bool enable;
+    bool definitions_done;
 
     const u64 *cycle;
     char clk_token[DBG_SIG_TOKEN_MAX];
@@ -65,6 +66,7 @@ static void print_vcd_header()
 __attribute__((constructor)) void dbg_vcd_constructor()
 {
     g_vcd.enable = dbg_get_bool_env("VCD");
+    g_vcd.definitions_done = false;
     g_vcd.sig_list.head = NULL;
     g_vcd.sig_list.tail = NULL;
     gen_sig_token(g_vcd.clk_token);
@@ -193,7 +195,10 @@ void dbg_vcd_reset()
     }
     DBG_CHECK(g_vcd.vcd_fp);
 
-    fprintf(g_vcd.vcd_fp, "$enddefinitions $end\n\n");
+    if (!g_vcd.definitions_done) {
+        fprintf(g_vcd.vcd_fp, "$enddefinitions $end\n\n");
+        g_vcd.definitions_done = true;
+    }
     fprintf(g_vcd.vcd_fp, "$dumpvars\n");
     fprintf(g_vcd.vcd_fp, "1%s\n", g_vcd.clk_token);
     for (dbg_sig_t *sig = g_vcd.sig_list.head; sig != NULL; sig = sig->nxt) {

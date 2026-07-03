@@ -1,14 +1,37 @@
 #include "l2.h"
 #include <stdlib.h>
 #include <string.h>
-#include "base/def.h"
 #include "dbg/chk.h"
 #include "dbg/pcm.h"
 #include "dbg/vcd.h"
 
 #define L2_WORD_SIZE 4u
 #define L2_WORD_NUM (L2_LINE_SIZE / L2_WORD_SIZE)
-#define L2_AXI_FIFO_DEPTH 2u
+
+static itf_t *l2_port_aw_slv(l2_t *l2, u32 port)
+{
+    return port == L2_I_PORT ? l2->i_axi4_aw_slv : l2->d_axi4_aw_slv;
+}
+
+static itf_t *l2_port_w_slv(l2_t *l2, u32 port)
+{
+    return port == L2_I_PORT ? l2->i_axi4_w_slv : l2->d_axi4_w_slv;
+}
+
+static itf_t *l2_port_b_mst(l2_t *l2, u32 port)
+{
+    return port == L2_I_PORT ? l2->i_axi4_b_mst : l2->d_axi4_b_mst;
+}
+
+static itf_t *l2_port_ar_slv(l2_t *l2, u32 port)
+{
+    return port == L2_I_PORT ? l2->i_axi4_ar_slv : l2->d_axi4_ar_slv;
+}
+
+static itf_t *l2_port_r_mst(l2_t *l2, u32 port)
+{
+    return port == L2_I_PORT ? l2->i_axi4_r_mst : l2->d_axi4_r_mst;
+}
 
 static u32 l2_line_idx(const l2_t *l2, u32 set, u32 way)
 {
@@ -20,26 +43,42 @@ static u32 l2_line_addr(const l2_t *l2, u32 tag, u32 set)
     return ((tag * l2->set_num) + set) * L2_LINE_SIZE;
 }
 
-static u32 l2_req_line_addr(u32 addr)
-{
-    return addr & ~(L2_LINE_SIZE - 1u);
-}
-
 static u32 l2_req_set(const l2_t *l2, u32 addr)
 {
-    return (l2_req_line_addr(addr) / L2_LINE_SIZE) % l2->set_num;
+    return (addr / L2_LINE_SIZE) % l2->set_num;
 }
 
 static u32 l2_req_tag(const l2_t *l2, u32 addr)
 {
-    return (l2_req_line_addr(addr) / L2_LINE_SIZE) / l2->set_num;
+    return (addr / L2_LINE_SIZE) / l2->set_num;
 }
 
-static u32 l2_beat_size(const l2_t *l2)
+static bool l2_lookup(const l2_t *l2, u32 addr, u32 *line_idx)
 {
-    u32 size = l2->is_write ? l2->aw.size : l2->ar.size;
-    DBG_CHECK(size <= AXI4_AR_SIZE_B4);
-    return 1u << size;
+    u32 set = l2_req_set(l2, addr);
+    u32 tag = l2_req_tag(l2, addr);
+    for (u32 way = 0; way < l2->conf.way_num; way++) {
+        u32 idx = l2_line_idx(l2, set, way);
+        if (l2->valids[idx] && l2->tags[idx] == tag) {
+            *line_idx = idx;
+            return true;
+        }
+    }
+    return false;
+}
+
+static u32 l2_select_victim(l2_t *l2, u32 set)
+{
+    for (u32 way = 0; way < l2->conf.way_num; way++) {
+        u32 idx = l2_line_idx(l2, set, way);
+        if (!l2->valids[idx]) {
+            return idx;
+        }
+    }
+
+    u32 way = l2->replace_ways[set];
+    l2->replace_ways[set] = (way + 1u) % l2->conf.way_num;
+    return l2_line_idx(l2, set, way);
 }
 
 static u32 l2_next_addr(u32 addr, u32 size, u32 burst)
@@ -48,199 +87,69 @@ static u32 l2_next_addr(u32 addr, u32 size, u32 burst)
     return burst == AXI4_AR_BURST_FIXED ? addr : addr + (1u << size);
 }
 
-static u8 l2_read_byte(const l2_t *l2, u32 line_idx, u32 line_offset)
+static u32 l2_read_word(const l2_t *l2, u32 line_idx, u32 addr)
 {
-    u32 word = l2->data[line_idx * L2_WORD_NUM + line_offset / L2_WORD_SIZE];
-    return (u8)(word >> ((line_offset % L2_WORD_SIZE) * 8u));
+    u32 word = (addr & (L2_LINE_SIZE - 1u)) / L2_WORD_SIZE;
+    return l2->data[line_idx * L2_WORD_NUM + word];
 }
 
-static void l2_write_byte(l2_t *l2, u32 line_idx, u32 line_offset, u8 data)
+static void l2_write_word(l2_t *l2, u32 line_idx, u32 addr, u32 data, u8 strobe)
 {
-    u32 *word = &l2->data[line_idx * L2_WORD_NUM + line_offset / L2_WORD_SIZE];
-    u32 shift = (line_offset % L2_WORD_SIZE) * 8u;
-    *word = (*word & ~(0xffu << shift)) | ((u32)data << shift);
-}
-
-static bool l2_lookup(l2_t *l2, u32 *way, u32 *line_idx)
-{
-    for (u32 i = 0; i < l2->conf.way_num; i++) {
-        u32 idx = l2_line_idx(l2, l2->req_set, i);
-        if (l2->valids[idx] && l2->tags[idx] == l2->req_tag) {
-            *way = i;
-            *line_idx = idx;
-            return true;
+    u32 word = (addr & (L2_LINE_SIZE - 1u)) / L2_WORD_SIZE;
+    u32 *dst = &l2->data[line_idx * L2_WORD_NUM + word];
+    for (u32 byte = 0; byte < L2_WORD_SIZE; byte++) {
+        if (strobe & (1u << byte)) {
+            u32 shift = byte * 8u;
+            *dst = (*dst & ~(0xffu << shift)) | (data & (0xffu << shift));
         }
     }
-    return false;
 }
 
-static void l2_select_victim(l2_t *l2)
+static void l2_port_next_read(l2_port_t *port)
 {
-    for (u32 i = 0; i < l2->conf.way_num; i++) {
-        u32 idx = l2_line_idx(l2, l2->req_set, i);
-        if (!l2->valids[idx]) {
-            l2->req_way = i;
-            l2->req_line_idx = idx;
-            return;
-        }
-    }
-
-    l2->req_way = l2->replace_ways[l2->req_set];
-    l2->req_line_idx = l2_line_idx(l2, l2->req_set, l2->req_way);
-    l2->replace_ways[l2->req_set] = (l2->req_way + 1u) % l2->conf.way_num;
+    port->beat_idx++;
+    port->addr = l2_next_addr(port->addr, port->ar.size, port->ar.burst);
 }
 
-static void l2_start_fragment(l2_t *l2)
+static void l2_port_next_write(l2_port_t *port)
 {
-    u32 addr = l2->burst_addr + l2->byte_idx;
-    l2->req_line_addr = l2_req_line_addr(addr);
-    l2->req_set = l2_req_set(l2, addr);
-    l2->req_tag = l2_req_tag(l2, addr);
+    port->beat_idx++;
+    port->addr = l2_next_addr(port->addr, port->aw.size, port->aw.burst);
+}
 
-    u32 way;
-    u32 line_idx;
-    if (l2_lookup(l2, &way, &line_idx)) {
-        (*l2->perf_hit)++;
-        l2->req_way = way;
-        l2->req_line_idx = line_idx;
-        l2->state = l2->is_write ? L2_STATE_WRITE_SERVE : L2_STATE_READ_SERVE;
-        return;
+static bool l2_start_miss(l2_t *l2, u32 owner, l2_port_state_t return_state)
+{
+    if (l2->mem_state != L2_MEM_STATE_IDLE) {
+        return false;
     }
 
+    l2_port_t *port = &l2->ports[owner];
+    l2->mem_owner = owner;
+    l2->miss_line_addr = port->addr & ~(L2_LINE_SIZE - 1u);
+    l2->miss_set = l2_req_set(l2, port->addr);
+    l2->miss_tag = l2_req_tag(l2, port->addr);
+    l2->miss_line_idx = l2_select_victim(l2, l2->miss_set);
+    l2->wb_line_addr = l2_line_addr(l2, l2->tags[l2->miss_line_idx], l2->miss_set);
+    l2->mem_beat_idx = 0;
+
+    port->miss_return_state = return_state;
+    port->state = L2_PORT_STATE_MISS_WAIT;
     (*l2->perf_miss)++;
-    l2_select_victim(l2);
-    l2->line_beat_idx = 0;
-    if (l2->valids[l2->req_line_idx] && l2->dirtys[l2->req_line_idx]) {
+
+    bool writeback = l2->valids[l2->miss_line_idx] && l2->dirtys[l2->miss_line_idx];
+    l2->valids[l2->miss_line_idx] = false;
+    if (writeback) {
         (*l2->perf_writeback)++;
-        l2->wb_line_addr = l2_line_addr(l2, l2->tags[l2->req_line_idx], l2->req_set);
-        l2->state = L2_STATE_WB_AW;
+        l2->mem_state = L2_MEM_STATE_WB_AW;
     } else {
-        l2->state = L2_STATE_REFILL_AR;
+        l2->mem_state = L2_MEM_STATE_REFILL_AR;
     }
+    return true;
 }
 
-static void l2_start_read_beat(l2_t *l2)
+static void l2_proc_mem_wb_aw(l2_t *l2)
 {
-    l2->byte_idx = 0;
-    l2->beat_data = 0;
-    l2->beat_resp = AXI4_R_RESP_OKAY;
-    l2_start_fragment(l2);
-}
-
-static void l2_finish_read_beat(l2_t *l2)
-{
-    if (itf_fifo_full(&l2->merged_axi4_r_itf)) {
-        return;
-    }
-
-    bool last = l2->beat_idx == l2->ar.len;
-    axi4_r_if_t r = {
-        .id = l2->ar.id,
-        .data = l2->beat_data,
-        .resp = (axi4_r_resp_t)l2->beat_resp,
-        .last = last
-    };
-    itf_write(&l2->merged_axi4_r_itf, &r);
-    if (last) {
-        l2->state = L2_STATE_IDLE;
-        return;
-    }
-
-    l2->beat_idx++;
-    l2->burst_addr = l2_next_addr(l2->burst_addr, l2->ar.size, l2->ar.burst);
-    l2_start_read_beat(l2);
-}
-
-static void l2_proc_read_serve(l2_t *l2)
-{
-    if (l2->state != L2_STATE_READ_SERVE) {
-        return;
-    }
-
-    u32 size = l2_beat_size(l2);
-    if (l2->byte_idx == size) {
-        l2_finish_read_beat(l2);
-        return;
-    }
-
-    u32 addr = l2->burst_addr + l2->byte_idx;
-    u32 line_offset = addr & (L2_LINE_SIZE - 1u);
-    u32 byte_num = MIN(size - l2->byte_idx, L2_LINE_SIZE - line_offset);
-    for (u32 i = 0; i < byte_num; i++) {
-        l2->beat_data |= (u32)l2_read_byte(l2, l2->req_line_idx, line_offset + i)
-            << ((l2->byte_idx + i) * 8u);
-    }
-    l2->byte_idx += byte_num;
-    if (l2->byte_idx < size) {
-        l2_start_fragment(l2);
-    }
-}
-
-static void l2_finish_write_beat(l2_t *l2)
-{
-    bool last = l2->beat_idx == l2->aw.len;
-    DBG_CHECK(l2->w.last == last);
-    if (last) {
-        if (itf_fifo_full(&l2->merged_axi4_b_itf)) {
-            return;
-        }
-        axi4_b_if_t b = {
-            .id = l2->aw.id,
-            .resp = (axi4_b_resp_t)l2->write_resp
-        };
-        itf_write(&l2->merged_axi4_b_itf, &b);
-        l2->state = L2_STATE_IDLE;
-        return;
-    }
-
-    l2->beat_idx++;
-    l2->burst_addr = l2_next_addr(l2->burst_addr, l2->aw.size, l2->aw.burst);
-    l2->state = L2_STATE_WRITE_WAIT_W;
-}
-
-static void l2_proc_write_wait_w(l2_t *l2)
-{
-    if (l2->state != L2_STATE_WRITE_WAIT_W ||
-        itf_fifo_empty(&l2->merged_axi4_w_itf)) {
-        return;
-    }
-    itf_read(&l2->merged_axi4_w_itf, &l2->w);
-    l2->byte_idx = 0;
-    l2_start_fragment(l2);
-}
-
-static void l2_proc_write_serve(l2_t *l2)
-{
-    if (l2->state != L2_STATE_WRITE_SERVE) {
-        return;
-    }
-
-    u32 size = l2_beat_size(l2);
-    if (l2->byte_idx == size) {
-        l2_finish_write_beat(l2);
-        return;
-    }
-
-    u32 addr = l2->burst_addr + l2->byte_idx;
-    u32 line_offset = addr & (L2_LINE_SIZE - 1u);
-    u32 byte_num = MIN(size - l2->byte_idx, L2_LINE_SIZE - line_offset);
-    for (u32 i = 0; i < byte_num; i++) {
-        u32 byte_idx = l2->byte_idx + i;
-        if (l2->w.strb & (1u << byte_idx)) {
-            l2_write_byte(l2, l2->req_line_idx, line_offset + i,
-                (u8)(l2->w.data >> (byte_idx * 8u)));
-            l2->dirtys[l2->req_line_idx] = true;
-        }
-    }
-    l2->byte_idx += byte_num;
-    if (l2->byte_idx < size) {
-        l2_start_fragment(l2);
-    }
-}
-
-static void l2_proc_wb_aw(l2_t *l2)
-{
-    if (l2->state != L2_STATE_WB_AW || itf_fifo_full(l2->gst_axi4_aw_mst)) {
+    if (l2->mem_state != L2_MEM_STATE_WB_AW || itf_fifo_full(l2->mem_axi4_aw_mst)) {
         return;
     }
     axi4_aw_if_t aw = {
@@ -251,177 +160,312 @@ static void l2_proc_wb_aw(l2_t *l2)
         .burst = AXI4_AW_BURST_INCR,
         .cache = 0xf
     };
-    itf_write(l2->gst_axi4_aw_mst, &aw);
-    l2->line_beat_idx = 0;
-    l2->state = L2_STATE_WB_W;
+    itf_write(l2->mem_axi4_aw_mst, &aw);
+    l2->mem_beat_idx = 0;
+    l2->mem_state = L2_MEM_STATE_WB_W;
 }
 
-static void l2_proc_wb_w(l2_t *l2)
+static void l2_proc_mem_wb_w(l2_t *l2)
 {
-    if (l2->state != L2_STATE_WB_W || itf_fifo_full(l2->gst_axi4_w_mst)) {
+    if (l2->mem_state != L2_MEM_STATE_WB_W || itf_fifo_full(l2->mem_axi4_w_mst)) {
         return;
     }
     axi4_w_if_t w = {
-        .data = l2->data[l2->req_line_idx * L2_WORD_NUM + l2->line_beat_idx],
+        .data = l2->data[l2->miss_line_idx * L2_WORD_NUM + l2->mem_beat_idx],
         .strb = 0xf,
-        .last = l2->line_beat_idx == L2_WORD_NUM - 1u
+        .last = l2->mem_beat_idx == L2_WORD_NUM - 1u
     };
-    itf_write(l2->gst_axi4_w_mst, &w);
+    itf_write(l2->mem_axi4_w_mst, &w);
     if (w.last) {
-        l2->state = L2_STATE_WB_B;
+        l2->mem_state = L2_MEM_STATE_WB_B;
     } else {
-        l2->line_beat_idx++;
+        l2->mem_beat_idx++;
     }
 }
 
-static void l2_proc_wb_b(l2_t *l2)
+static void l2_proc_mem_wb_b(l2_t *l2)
 {
-    if (l2->state != L2_STATE_WB_B || itf_fifo_empty(l2->gst_axi4_b_slv)) {
+    if (l2->mem_state != L2_MEM_STATE_WB_B || itf_fifo_empty(l2->mem_axi4_b_slv)) {
         return;
     }
     axi4_b_if_t b;
-    itf_read(l2->gst_axi4_b_slv, &b);
-    if (b.resp != AXI4_B_RESP_OKAY) {
-        l2->write_resp = b.resp;
-        l2->beat_resp = AXI4_R_RESP_SLVERR;
-    }
-    l2->dirtys[l2->req_line_idx] = false;
-    l2->line_beat_idx = 0;
-    l2->state = L2_STATE_REFILL_AR;
+    itf_read(l2->mem_axi4_b_slv, &b);
+    DBG_CHECK(b.resp == AXI4_B_RESP_OKAY);
+    l2->dirtys[l2->miss_line_idx] = false;
+    l2->mem_beat_idx = 0;
+    l2->mem_state = L2_MEM_STATE_REFILL_AR;
 }
 
-static void l2_proc_refill_ar(l2_t *l2)
+static void l2_proc_mem_refill_ar(l2_t *l2)
 {
-    if (l2->state != L2_STATE_REFILL_AR || itf_fifo_full(l2->gst_axi4_ar_mst)) {
+    if (l2->mem_state != L2_MEM_STATE_REFILL_AR ||
+        itf_fifo_full(l2->mem_axi4_ar_mst)) {
         return;
     }
     axi4_ar_if_t ar = {
         .id = 0,
-        .addr = l2->req_line_addr,
+        .addr = l2->miss_line_addr,
         .len = L2_WORD_NUM - 1u,
         .size = AXI4_AR_SIZE_B4,
         .burst = AXI4_AR_BURST_INCR,
         .cache = 0xf
     };
-    itf_write(l2->gst_axi4_ar_mst, &ar);
-    l2->line_beat_idx = 0;
-    l2->state = L2_STATE_REFILL_R;
+    itf_write(l2->mem_axi4_ar_mst, &ar);
+    l2->mem_beat_idx = 0;
+    l2->mem_state = L2_MEM_STATE_REFILL_R;
 }
 
-static void l2_proc_refill_r(l2_t *l2)
+static void l2_proc_mem_refill_r(l2_t *l2)
 {
-    if (l2->state != L2_STATE_REFILL_R || itf_fifo_empty(l2->gst_axi4_r_slv)) {
+    if (l2->mem_state != L2_MEM_STATE_REFILL_R ||
+        itf_fifo_empty(l2->mem_axi4_r_slv)) {
         return;
     }
     axi4_r_if_t r;
-    itf_read(l2->gst_axi4_r_slv, &r);
-    if (r.resp != AXI4_R_RESP_OKAY) {
-        l2->beat_resp = r.resp;
-        l2->write_resp = AXI4_B_RESP_SLVERR;
-    }
-    l2->data[l2->req_line_idx * L2_WORD_NUM + l2->line_beat_idx] = r.data;
+    itf_read(l2->mem_axi4_r_slv, &r);
+    DBG_CHECK(r.resp == AXI4_R_RESP_OKAY);
+    l2->data[l2->miss_line_idx * L2_WORD_NUM + l2->mem_beat_idx] = r.data;
+    l2->data_write_used = true;
 
-    bool last = r.last || l2->line_beat_idx == L2_WORD_NUM - 1u;
+    bool last = r.last || l2->mem_beat_idx == L2_WORD_NUM - 1u;
     if (last) {
-        l2->valids[l2->req_line_idx] = l2->beat_resp == AXI4_R_RESP_OKAY;
-        l2->dirtys[l2->req_line_idx] = false;
-        l2->tags[l2->req_line_idx] = l2->req_tag;
-        l2->state = l2->is_write ? L2_STATE_WRITE_SERVE : L2_STATE_READ_SERVE;
+        l2->tags[l2->miss_line_idx] = l2->miss_tag;
+        l2->valids[l2->miss_line_idx] = true;
+        l2->dirtys[l2->miss_line_idx] = false;
+        l2_port_t *owner = &l2->ports[l2->mem_owner];
+        owner->miss_resolved = true;
+        owner->state = owner->miss_return_state;
+        l2->mem_state = L2_MEM_STATE_IDLE;
     } else {
-        l2->line_beat_idx++;
+        l2->mem_beat_idx++;
     }
 }
 
-static void l2_proc_bypass_r(l2_t *l2)
+static void l2_proc_mem_bypass_r(l2_t *l2)
 {
-    if (l2->state != L2_STATE_BYPASS_R || itf_fifo_empty(l2->gst_axi4_r_slv) ||
-        itf_fifo_full(&l2->merged_axi4_r_itf)) {
+    if (l2->mem_state != L2_MEM_STATE_BYPASS_R ||
+        itf_fifo_empty(l2->mem_axi4_r_slv)) {
+        return;
+    }
+    itf_t *r_mst = l2_port_r_mst(l2, l2->mem_owner);
+    if (itf_fifo_full(r_mst)) {
         return;
     }
     axi4_r_if_t r;
-    itf_read(l2->gst_axi4_r_slv, &r);
-    itf_write(&l2->merged_axi4_r_itf, &r);
+    itf_read(l2->mem_axi4_r_slv, &r);
+    itf_write(r_mst, &r);
     if (r.last) {
-        l2->state = L2_STATE_IDLE;
+        l2->ports[l2->mem_owner].state = L2_PORT_STATE_IDLE;
+        l2->mem_state = L2_MEM_STATE_IDLE;
     }
 }
 
-static void l2_proc_bypass_w(l2_t *l2)
+static void l2_proc_mem_bypass_w(l2_t *l2)
 {
-    if (l2->state != L2_STATE_BYPASS_W ||
-        itf_fifo_empty(&l2->merged_axi4_w_itf) || itf_fifo_full(l2->gst_axi4_w_mst)) {
+    if (l2->mem_state != L2_MEM_STATE_BYPASS_W ||
+        itf_fifo_full(l2->mem_axi4_w_mst)) {
+        return;
+    }
+    itf_t *w_slv = l2_port_w_slv(l2, l2->mem_owner);
+    if (itf_fifo_empty(w_slv)) {
         return;
     }
     axi4_w_if_t w;
-    itf_read(&l2->merged_axi4_w_itf, &w);
-    itf_write(l2->gst_axi4_w_mst, &w);
+    itf_read(w_slv, &w);
+    itf_write(l2->mem_axi4_w_mst, &w);
     if (w.last) {
-        l2->state = L2_STATE_BYPASS_B;
+        l2->mem_state = L2_MEM_STATE_BYPASS_B;
     }
 }
 
-static void l2_proc_bypass_b(l2_t *l2)
+static void l2_proc_mem_bypass_b(l2_t *l2)
 {
-    if (l2->state != L2_STATE_BYPASS_B || itf_fifo_empty(l2->gst_axi4_b_slv) ||
-        itf_fifo_full(&l2->merged_axi4_b_itf)) {
+    if (l2->mem_state != L2_MEM_STATE_BYPASS_B ||
+        itf_fifo_empty(l2->mem_axi4_b_slv)) {
+        return;
+    }
+    itf_t *b_mst = l2_port_b_mst(l2, l2->mem_owner);
+    if (itf_fifo_full(b_mst)) {
         return;
     }
     axi4_b_if_t b;
-    itf_read(l2->gst_axi4_b_slv, &b);
-    itf_write(&l2->merged_axi4_b_itf, &b);
-    l2->state = L2_STATE_IDLE;
+    itf_read(l2->mem_axi4_b_slv, &b);
+    itf_write(b_mst, &b);
+    l2->ports[l2->mem_owner].state = L2_PORT_STATE_IDLE;
+    l2->mem_state = L2_MEM_STATE_IDLE;
 }
 
-static void l2_proc_idle(l2_t *l2)
+static void l2_proc_mem(l2_t *l2)
 {
-    if (l2->state != L2_STATE_IDLE) {
+    l2_proc_mem_bypass_r(l2);
+    l2_proc_mem_bypass_w(l2);
+    l2_proc_mem_bypass_b(l2);
+    l2_proc_mem_wb_b(l2);
+    l2_proc_mem_refill_r(l2);
+    l2_proc_mem_wb_w(l2);
+    l2_proc_mem_wb_aw(l2);
+    l2_proc_mem_refill_ar(l2);
+}
+
+static bool l2_start_bypass_read(l2_t *l2, u32 port_idx, const axi4_ar_if_t *ar)
+{
+    if (l2->mem_state != L2_MEM_STATE_IDLE || itf_fifo_full(l2->mem_axi4_ar_mst)) {
+        return false;
+    }
+    itf_write(l2->mem_axi4_ar_mst, ar);
+    l2->mem_owner = port_idx;
+    l2->ports[port_idx].state = L2_PORT_STATE_BYPASS_WAIT;
+    l2->mem_state = L2_MEM_STATE_BYPASS_R;
+    (*l2->perf_bypass)++;
+    return true;
+}
+
+static bool l2_start_bypass_write(l2_t *l2, u32 port_idx, const axi4_aw_if_t *aw)
+{
+    if (l2->mem_state != L2_MEM_STATE_IDLE || itf_fifo_full(l2->mem_axi4_aw_mst)) {
+        return false;
+    }
+    itf_write(l2->mem_axi4_aw_mst, aw);
+    l2->mem_owner = port_idx;
+    l2->ports[port_idx].state = L2_PORT_STATE_BYPASS_WAIT;
+    l2->mem_state = L2_MEM_STATE_BYPASS_W;
+    (*l2->perf_bypass)++;
+    return true;
+}
+
+static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
+{
+    l2_port_t *port = &l2->ports[port_idx];
+    itf_t *aw_slv = l2_port_aw_slv(l2, port_idx);
+    if (!itf_fifo_empty(aw_slv)) {
+        axi4_aw_if_t aw;
+        itf_fifo_get_front(aw_slv, &aw);
+        if (aw.cache == 0) {
+            if (!l2_start_bypass_write(l2, port_idx, &aw)) {
+                return;
+            }
+        } else {
+            DBG_CHECK(aw.size == AXI4_AW_SIZE_B4);
+            DBG_CHECK(aw.burst == AXI4_AW_BURST_INCR);
+            port->aw = aw;
+            port->addr = aw.addr;
+            port->beat_idx = 0;
+            port->miss_resolved = false;
+            port->state = L2_PORT_STATE_WRITE;
+        }
+        itf_fifo_pop_front(aw_slv);
         return;
     }
 
-    if (!itf_fifo_empty(&l2->merged_axi4_aw_itf)) {
-        itf_fifo_get_front(&l2->merged_axi4_aw_itf, &l2->aw);
-        if (l2->aw.cache == 0) {
-            if (itf_fifo_full(l2->gst_axi4_aw_mst)) {
-                return;
-            }
-            itf_fifo_pop_front(&l2->merged_axi4_aw_itf);
-            itf_write(l2->gst_axi4_aw_mst, &l2->aw);
-            (*l2->perf_bypass)++;
-            l2->state = L2_STATE_BYPASS_W;
+    itf_t *ar_slv = l2_port_ar_slv(l2, port_idx);
+    if (itf_fifo_empty(ar_slv)) {
+        return;
+    }
+    axi4_ar_if_t ar;
+    itf_fifo_get_front(ar_slv, &ar);
+    if (ar.cache == 0) {
+        if (!l2_start_bypass_read(l2, port_idx, &ar)) {
             return;
         }
+    } else {
+        DBG_CHECK(ar.size == AXI4_AR_SIZE_B4);
+        DBG_CHECK(ar.burst == AXI4_AR_BURST_INCR);
+        port->ar = ar;
+        port->addr = ar.addr;
+        port->beat_idx = 0;
+        port->miss_resolved = false;
+        port->state = L2_PORT_STATE_READ;
+    }
+    itf_fifo_pop_front(ar_slv);
+}
 
-        DBG_CHECK(l2->aw.size <= AXI4_AW_SIZE_B4);
-        DBG_CHECK(l2->aw.burst != AXI4_AW_BURST_WRAP);
-        itf_fifo_pop_front(&l2->merged_axi4_aw_itf);
-        l2->is_write = true;
-        l2->burst_addr = l2->aw.addr;
-        l2->beat_idx = 0;
-        l2->write_resp = AXI4_B_RESP_OKAY;
-        l2->state = L2_STATE_WRITE_WAIT_W;
+static void l2_proc_port_read(l2_t *l2, u32 port_idx)
+{
+    l2_port_t *port = &l2->ports[port_idx];
+    itf_t *r_mst = l2_port_r_mst(l2, port_idx);
+    if (itf_fifo_full(r_mst)) {
         return;
     }
 
-    if (!itf_fifo_empty(&l2->merged_axi4_ar_itf)) {
-        itf_fifo_get_front(&l2->merged_axi4_ar_itf, &l2->ar);
-        if (l2->ar.cache == 0) {
-            if (itf_fifo_full(l2->gst_axi4_ar_mst)) {
-                return;
-            }
-            itf_fifo_pop_front(&l2->merged_axi4_ar_itf);
-            itf_write(l2->gst_axi4_ar_mst, &l2->ar);
-            (*l2->perf_bypass)++;
-            l2->state = L2_STATE_BYPASS_R;
-            return;
-        }
+    u32 line_idx;
+    if (!l2_lookup(l2, port->addr, &line_idx)) {
+        (void)l2_start_miss(l2, port_idx, L2_PORT_STATE_READ);
+        return;
+    }
 
-        DBG_CHECK(l2->ar.size <= AXI4_AR_SIZE_B4);
-        DBG_CHECK(l2->ar.burst != AXI4_AR_BURST_WRAP);
-        itf_fifo_pop_front(&l2->merged_axi4_ar_itf);
-        l2->is_write = false;
-        l2->burst_addr = l2->ar.addr;
-        l2->beat_idx = 0;
-        l2_start_read_beat(l2);
+    if (port->miss_resolved) {
+        port->miss_resolved = false;
+    } else {
+        (*l2->perf_hit)++;
+    }
+    bool last = port->beat_idx == port->ar.len;
+    axi4_r_if_t r = {
+        .id = port->ar.id,
+        .data = l2_read_word(l2, line_idx, port->addr),
+        .resp = AXI4_R_RESP_OKAY,
+        .last = last
+    };
+    itf_write(r_mst, &r);
+    if (last) {
+        port->state = L2_PORT_STATE_IDLE;
+    } else {
+        l2_port_next_read(port);
+    }
+}
+
+static void l2_proc_port_write(l2_t *l2, u32 port_idx)
+{
+    l2_port_t *port = &l2->ports[port_idx];
+    itf_t *w_slv = l2_port_w_slv(l2, port_idx);
+    if (itf_fifo_empty(w_slv)) {
+        return;
+    }
+
+    u32 line_idx;
+    if (!l2_lookup(l2, port->addr, &line_idx)) {
+        (void)l2_start_miss(l2, port_idx, L2_PORT_STATE_WRITE);
+        return;
+    }
+    if (l2->data_write_used) {
+        return;
+    }
+
+    axi4_w_if_t w;
+    itf_fifo_get_front(w_slv, &w);
+    bool last = port->beat_idx == port->aw.len;
+    DBG_CHECK(w.last == last);
+    itf_t *b_mst = l2_port_b_mst(l2, port_idx);
+    if (last && itf_fifo_full(b_mst)) {
+        return;
+    }
+    itf_fifo_pop_front(w_slv);
+    l2_write_word(l2, line_idx, port->addr, w.data, w.strb);
+    l2->dirtys[line_idx] = true;
+    l2->data_write_used = true;
+    if (port->miss_resolved) {
+        port->miss_resolved = false;
+    } else {
+        (*l2->perf_hit)++;
+    }
+
+    if (last) {
+        axi4_b_if_t b = { .id = port->aw.id, .resp = AXI4_B_RESP_OKAY };
+        itf_write(b_mst, &b);
+        port->state = L2_PORT_STATE_IDLE;
+    } else {
+        l2_port_next_write(port);
+    }
+}
+
+static void l2_proc_port(l2_t *l2, u32 port_idx)
+{
+    l2_port_t *port = &l2->ports[port_idx];
+    if (port->state == L2_PORT_STATE_IDLE) {
+        l2_proc_port_idle(l2, port_idx);
+    } else if (port->state == L2_PORT_STATE_READ) {
+        l2_proc_port_read(l2, port_idx);
+    } else if (port->state == L2_PORT_STATE_WRITE) {
+        l2_proc_port_write(l2, port_idx);
     }
 }
 
@@ -434,18 +478,12 @@ void l2_construct(l2_t *l2, const char *parent, const char *name,
     DBG_CHECK(conf->way_num > 0);
     DBG_CHECK(conf->size >= L2_LINE_SIZE);
     DBG_CHECK((conf->size % (conf->way_num * L2_LINE_SIZE)) == 0);
-
-    AXI4_IF_CONSTRUCT(l2, merged_, L2_AXI_FIFO_DEPTH);
-    for (u32 i = 0; i < L2_HOST_NUM; i++) {
-        l2->axi_mux.host_axi4_aw_slvs[i] = l2->host_axi4_aw_slvs[i];
-        l2->axi_mux.host_axi4_w_slvs[i] = l2->host_axi4_w_slvs[i];
-        l2->axi_mux.host_axi4_b_msts[i] = l2->host_axi4_b_msts[i];
-        l2->axi_mux.host_axi4_ar_slvs[i] = l2->host_axi4_ar_slvs[i];
-        l2->axi_mux.host_axi4_r_msts[i] = l2->host_axi4_r_msts[i];
-    }
-    AXI4_MST_CONNECT(&l2->axi_mux, gst_, l2, merged_);
-    l2->axi_mux.mod.cycle = l2->mod.cycle;
-    axi_mux_construct(&l2->axi_mux, l2->mod.hier_name, "u_axi_mux", L2_HOST_NUM);
+    DBG_CHECK(l2->i_axi4_aw_slv && l2->i_axi4_w_slv && l2->i_axi4_b_mst);
+    DBG_CHECK(l2->i_axi4_ar_slv && l2->i_axi4_r_mst);
+    DBG_CHECK(l2->d_axi4_aw_slv && l2->d_axi4_w_slv && l2->d_axi4_b_mst);
+    DBG_CHECK(l2->d_axi4_ar_slv && l2->d_axi4_r_mst);
+    DBG_CHECK(l2->mem_axi4_aw_mst && l2->mem_axi4_w_mst && l2->mem_axi4_b_slv);
+    DBG_CHECK(l2->mem_axi4_ar_mst && l2->mem_axi4_r_slv);
 
     l2->conf = *conf;
     l2->set_num = conf->size / (conf->way_num * L2_LINE_SIZE);
@@ -462,18 +500,23 @@ void l2_construct(l2_t *l2, const char *parent, const char *name,
     l2->perf_bypass = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "bypass");
     l2->perf_writeback = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "writeback");
 
-    dbg_vcd_add_sig("state", DBG_SIG_TYPE_REG, 4, &l2->state);
-    dbg_vcd_add_sig("burst_addr", DBG_SIG_TYPE_REG, 32, &l2->burst_addr);
-    dbg_vcd_add_sig("req_set", DBG_SIG_TYPE_REG, 32, &l2->req_set);
-    dbg_vcd_add_sig("req_way", DBG_SIG_TYPE_REG, 32, &l2->req_way);
+    dbg_vcd_add_sig("i_state", DBG_SIG_TYPE_REG, 3, &l2->ports[L2_I_PORT].state);
+    dbg_vcd_add_sig("d_state", DBG_SIG_TYPE_REG, 3, &l2->ports[L2_D_PORT].state);
+    dbg_vcd_add_sig("mem_state", DBG_SIG_TYPE_REG, 4, &l2->mem_state);
+    dbg_vcd_add_sig("i_addr", DBG_SIG_TYPE_REG, 32, &l2->ports[L2_I_PORT].addr);
+    dbg_vcd_add_sig("d_addr", DBG_SIG_TYPE_REG, 32, &l2->ports[L2_D_PORT].addr);
 }
 
 void l2_reset(l2_t *l2)
 {
     mod_reset(&l2->mod);
-    axi_mux_reset(&l2->axi_mux);
-    AXI4_IF_RESET(l2, merged_);
-    l2->state = L2_STATE_IDLE;
+    for (u32 port = 0; port < L2_PORT_NUM; port++) {
+        l2->ports[port].state = L2_PORT_STATE_IDLE;
+        l2->ports[port].beat_idx = 0;
+        l2->ports[port].miss_resolved = false;
+    }
+    l2->mem_state = L2_MEM_STATE_IDLE;
+    l2->data_write_used = false;
     for (u32 i = 0; i < l2->line_num; i++) {
         l2->tags[i] = 0;
         l2->valids[i] = false;
@@ -490,29 +533,15 @@ void l2_reset(l2_t *l2)
 void l2_clock(l2_t *l2)
 {
     mod_clock(&l2->mod);
-    axi_mux_clock(&l2->axi_mux);
-
-    l2_proc_bypass_r(l2);
-    l2_proc_bypass_w(l2);
-    l2_proc_bypass_b(l2);
-    l2_proc_wb_b(l2);
-    l2_proc_refill_r(l2);
-    l2_proc_read_serve(l2);
-    l2_proc_write_wait_w(l2);
-    l2_proc_write_serve(l2);
-    l2_proc_wb_w(l2);
-    l2_proc_wb_aw(l2);
-    l2_proc_refill_ar(l2);
-    l2_proc_idle(l2);
-
-    AXI4_IF_DBG_CLOCK(l2, merged_);
+    l2->data_write_used = false;
+    l2_proc_mem(l2);
+    l2_proc_port(l2, L2_I_PORT);
+    l2_proc_port(l2, L2_D_PORT);
 }
 
 void l2_free(l2_t *l2)
 {
     mod_free(&l2->mod);
-    axi_mux_free(&l2->axi_mux);
-    AXI4_IF_FREE(l2, merged_);
     free(l2->tags);
     free(l2->data);
     free(l2->replace_ways);

@@ -46,6 +46,7 @@ static void tb_construct(bti2axi_tb_t *tb, const char *name)
     tb->cycle = &tb->cycle_val;
     tb->mod.cycle = tb->cycle;
     mod_construct(&tb->mod, NULL, name);
+    dbg_vcd_set_clk(tb->mod.cycle);
 
     BTI_REQ_IF_CONSTRUCT(tb, bti_req_itf, 1);
     BTI_RSP_IF_CONSTRUCT(tb, bti_rsp_itf, 1);
@@ -72,6 +73,18 @@ static void tb_reset(bti2axi_tb_t *tb)
 {
     bti2axi_reset(&tb->dut);
     dbg_vcd_reset();
+    tb->mock_rd_data = 0;
+    tb->mock_rd_resp = AXI4_R_RESP_OKAY;
+    tb->mock_wr_resp = AXI4_B_RESP_OKAY;
+    tb->mock_saw_ar = false;
+    tb->mock_ar_addr = 0;
+    tb->mock_ar_size = 0;
+    tb->mock_saw_aw = false;
+    tb->mock_aw_addr = 0;
+    tb->mock_aw_size = 0;
+    tb->mock_saw_w = false;
+    tb->mock_w_data = 0;
+    tb->mock_w_strb = 0;
 }
 
 static void tb_mock_axi4_slave(bti2axi_tb_t *tb)

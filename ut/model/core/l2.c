@@ -27,15 +27,28 @@ static void tb_construct(l2_tb_t *tb, const char *name)
     tb->cycle_val = 0;
     tb->mod.cycle = &tb->cycle_val;
     mod_construct(&tb->mod, NULL, name);
+    dbg_vcd_set_clk(tb->mod.cycle);
     DBG_VCD_MODULE_SCOPE(name);
 
     AXI4_IF_CONSTRUCT(tb, h0_, TB_FIFO_DEPTH);
     AXI4_IF_CONSTRUCT(tb, h1_, TB_FIFO_DEPTH);
     AXI4_IF_CONSTRUCT(tb, mem_, TB_FIFO_DEPTH);
 
-    AXI4_SLV_ARR_CONNECT(&tb->dut, host_, 0, tb, h0_);
-    AXI4_SLV_ARR_CONNECT(&tb->dut, host_, 1, tb, h1_);
-    AXI4_MST_CONNECT(&tb->dut, gst_, tb, mem_);
+    tb->dut.i_axi4_aw_slv = &tb->h0_axi4_aw_itf;
+    tb->dut.i_axi4_w_slv = &tb->h0_axi4_w_itf;
+    tb->dut.i_axi4_b_mst = &tb->h0_axi4_b_itf;
+    tb->dut.i_axi4_ar_slv = &tb->h0_axi4_ar_itf;
+    tb->dut.i_axi4_r_mst = &tb->h0_axi4_r_itf;
+    tb->dut.d_axi4_aw_slv = &tb->h1_axi4_aw_itf;
+    tb->dut.d_axi4_w_slv = &tb->h1_axi4_w_itf;
+    tb->dut.d_axi4_b_mst = &tb->h1_axi4_b_itf;
+    tb->dut.d_axi4_ar_slv = &tb->h1_axi4_ar_itf;
+    tb->dut.d_axi4_r_mst = &tb->h1_axi4_r_itf;
+    tb->dut.mem_axi4_aw_mst = &tb->mem_axi4_aw_itf;
+    tb->dut.mem_axi4_w_mst = &tb->mem_axi4_w_itf;
+    tb->dut.mem_axi4_b_slv = &tb->mem_axi4_b_itf;
+    tb->dut.mem_axi4_ar_mst = &tb->mem_axi4_ar_itf;
+    tb->dut.mem_axi4_r_slv = &tb->mem_axi4_r_itf;
     tb->dut.mod.cycle = tb->mod.cycle;
     l2_conf_t conf = {
         .size = L2_LINE_SIZE,
@@ -81,6 +94,7 @@ static void tb_clock(l2_tb_t *tb)
     AXI4_IF_DBG_CLOCK(tb, h1_);
     AXI4_IF_DBG_CLOCK(tb, mem_);
     tb->cycle_val++;
+    dbg_vcd_clock();
 }
 
 static void tb_send_read(l2_tb_t *tb, u32 host, u8 id, u32 addr, u8 len, u8 cache)
@@ -155,6 +169,12 @@ TEST_CASE(l2_tb_t, read_miss_hit_and_arb)
 
     tb_send_read(tb, 0, 2, 0, 0, 0xf);
     tb_send_read(tb, 1, 3, 4, 0, 0xf);
+    tb_clock(tb);
+    REQUIRE(!tb_read_rsp_ready(tb, 0) && !tb_read_rsp_ready(tb, 1),
+        "both ports accept requests before producing responses");
+    tb_clock(tb);
+    REQUIRE(tb_read_rsp_ready(tb, 0) && tb_read_rsp_ready(tb, 1),
+        "I and D hits complete in the same cycle");
     REQUIRE(tb_collect_read(tb, 0, 2, 0, 1), "host 0 hit completes");
     REQUIRE(tb_collect_read(tb, 1, 3, 4, 1), "host 1 hit completes");
     REQUIRE(*tb->dut.perf_miss == 1, "shared line serves both hosts without refill");
@@ -167,12 +187,12 @@ TEST_CASE(l2_tb_t, writeback_and_bypass)
     tb_reset(tb);
     TEST_BEGIN("Dirty Writeback and Non-cacheable Bypass");
 
-    tb_send_write(tb, 0, 4, 0, 0x12345678u);
-    for (u32 cycle = 0; cycle < TB_TIMEOUT && !tb_write_rsp_ready(tb, 0); cycle++) {
+    tb_send_write(tb, 1, 4, 0, 0x12345678u);
+    for (u32 cycle = 0; cycle < TB_TIMEOUT && !tb_write_rsp_ready(tb, 1); cycle++) {
         tb_clock(tb);
     }
     axi4_b_if_t b;
-    itf_read(&tb->h0_axi4_b_itf, &b);
+    itf_read(&tb->h1_axi4_b_itf, &b);
     REQUIRE(b.id == 4 && b.resp == AXI4_B_RESP_OKAY, "cached write completes");
     REQUIRE(((u32 *)tb->ram.data)[0] != 0x12345678u, "dirty data remains in L2");
 

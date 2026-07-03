@@ -74,9 +74,21 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     };
     cbi_construct(&s->cbi, s->mod.hier_name, "u_cbi", &cbi_conf);
 
-    AXI4_SLV_ARR_CONNECT(&s->l2, host_, 0, s, cbi_mm_i_);
-    AXI4_SLV_ARR_CONNECT(&s->l2, host_, 1, s, cbi_mm_d_);
-    AXI4_MST_IMPORT(&s->l2, gst_, s, mm_);
+    s->l2.i_axi4_aw_slv = &s->cbi_mm_i_axi4_aw_itf;
+    s->l2.i_axi4_w_slv = &s->cbi_mm_i_axi4_w_itf;
+    s->l2.i_axi4_b_mst = &s->cbi_mm_i_axi4_b_itf;
+    s->l2.i_axi4_ar_slv = &s->cbi_mm_i_axi4_ar_itf;
+    s->l2.i_axi4_r_mst = &s->cbi_mm_i_axi4_r_itf;
+    s->l2.d_axi4_aw_slv = &s->cbi_mm_d_axi4_aw_itf;
+    s->l2.d_axi4_w_slv = &s->cbi_mm_d_axi4_w_itf;
+    s->l2.d_axi4_b_mst = &s->cbi_mm_d_axi4_b_itf;
+    s->l2.d_axi4_ar_slv = &s->cbi_mm_d_axi4_ar_itf;
+    s->l2.d_axi4_r_mst = &s->cbi_mm_d_axi4_r_itf;
+    s->l2.mem_axi4_aw_mst = s->mm_axi4_aw_mst;
+    s->l2.mem_axi4_w_mst = s->mm_axi4_w_mst;
+    s->l2.mem_axi4_b_slv = s->mm_axi4_b_slv;
+    s->l2.mem_axi4_ar_mst = s->mm_axi4_ar_mst;
+    s->l2.mem_axi4_r_slv = s->mm_axi4_r_slv;
     s->l2.mod.cycle = s->mod.cycle;
     l2_conf_t l2_conf = {
         .size = L2_SIZE,
