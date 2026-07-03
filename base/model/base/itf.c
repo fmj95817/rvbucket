@@ -11,17 +11,19 @@
 #define ITF_DUMP_ENV "ITF_DUMP"
 #define ITF_DUMP_LIST "itf_dump_list.txt"
 #define ITF_VCD_ENV "ITF_VCD"
+#define ITF_VCD_LIST "itf_vcd_list.txt"
 
-typedef struct itf_dump_list {
+typedef struct itf_name_list {
     u32 name_num;
     char **names;
-} itf_dump_list_t;
+} itf_name_list_t;
 
-static itf_dump_list_t g_itf_dump_list;
+static itf_name_list_t g_itf_dump_list;
+static itf_name_list_t g_itf_vcd_list;
 
-__attribute__((constructor)) static void itf_dump_list_init(void)
+static void itf_name_list_load(itf_name_list_t *list, const char *path)
 {
-    FILE *fp = fopen(ITF_DUMP_LIST, "r");
+    FILE *fp = fopen(path, "r");
     if (fp == NULL) {
         return;
     }
@@ -44,39 +46,51 @@ __attribute__((constructor)) static void itf_dump_list_init(void)
             continue;
         }
 
-        char **names = realloc(g_itf_dump_list.names,
-            sizeof(*names) * (g_itf_dump_list.name_num + 1u));
+        char **names = realloc(list->names, sizeof(*names) * (list->name_num + 1u));
         DBG_CHECK(names != NULL);
-        g_itf_dump_list.names = names;
+        list->names = names;
 
         size_t name_size = strlen(start) + 1u;
         char *dump_name = malloc(name_size);
         DBG_CHECK(dump_name != NULL);
         memcpy(dump_name, start, name_size);
-        g_itf_dump_list.names[g_itf_dump_list.name_num++] = dump_name;
+        list->names[list->name_num++] = dump_name;
     }
     fclose(fp);
 }
 
-static bool itf_dump_list_match(const char *hier_name, const char *name)
+static bool itf_name_list_match(const itf_name_list_t *list,
+    const char *hier_name, const char *name)
 {
     char full_name[1024];
     int ret = snprintf(full_name, sizeof(full_name), "%s.%s", hier_name, name);
     DBG_CHECK(ret >= 0 && (u32)ret < sizeof(full_name));
-    for (u32 i = 0; i < g_itf_dump_list.name_num; i++) {
-        if (strcmp(g_itf_dump_list.names[i], full_name) == 0) {
+    for (u32 i = 0; i < list->name_num; i++) {
+        if (strcmp(list->names[i], full_name) == 0) {
             return true;
         }
     }
     return false;
 }
 
-__attribute__((destructor)) static void itf_dump_list_free(void)
+static void itf_name_list_free(itf_name_list_t *list)
 {
-    for (u32 i = 0; i < g_itf_dump_list.name_num; i++) {
-        free(g_itf_dump_list.names[i]);
+    for (u32 i = 0; i < list->name_num; i++) {
+        free(list->names[i]);
     }
-    free(g_itf_dump_list.names);
+    free(list->names);
+}
+
+__attribute__((constructor)) static void itf_name_lists_init(void)
+{
+    itf_name_list_load(&g_itf_dump_list, ITF_DUMP_LIST);
+    itf_name_list_load(&g_itf_vcd_list, ITF_VCD_LIST);
+}
+
+__attribute__((destructor)) static void itf_name_lists_free(void)
+{
+    itf_name_list_free(&g_itf_dump_list);
+    itf_name_list_free(&g_itf_vcd_list);
 }
 
 static inline void signal_itf_add_vcd(itf_t *itf)
@@ -208,10 +222,13 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
     itf->pkt_size = conf->pkt_size;
     DBG_CHECK(itf->mode <= ITF_MODE_MAX);
 
-    bool list_enable = itf_dump_list_match(conf->hier_name, name);
-    itf->dump_enable = list_enable ||
+    bool dump_list_enable = itf_name_list_match(&g_itf_dump_list,
+        conf->hier_name, name);
+    itf->dump_enable = dump_list_enable ||
         (dbg_get_bool_env(ITF_DUMP_ENV) && (!conf->force_disable_dump));
-    itf->vcd_enable = dbg_get_bool_env(ITF_VCD_ENV);
+    bool vcd_list_enable = itf_name_list_match(&g_itf_vcd_list,
+        conf->hier_name, name);
+    itf->vcd_enable = vcd_list_enable || dbg_get_bool_env(ITF_VCD_ENV);
     itf->pkt2str = conf->pkt2str;
     itf->reg_vcd = conf->reg_vcd;
 
