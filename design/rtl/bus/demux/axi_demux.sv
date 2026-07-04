@@ -1,3 +1,6 @@
+`include "itf/axi4_r_if.svh"
+`include "itf/axi4_b_if.svh"
+
 module axi_demux #(
     parameter GST_SEL_AW = 8,
     parameter GST_NUM = 4,

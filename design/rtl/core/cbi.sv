@@ -68,8 +68,13 @@ module cbi(
     axi_demux #(
         .GST_SEL_AW (8),
         .GST_NUM    (I_GST_NUM),
-        .GST_SEL    ('{8'h40, 8'h10, 8'h80, 8'h00}),
+    `ifdef VERILATOR
+        .GST_SEL    ('{8'h40, 8'h10, 8'h80, 8'0}),
         .GST_AW     ('{BOOT_ROM_AW, ITCM_AW, MM_AW, 0})
+    `else
+        .GST_SEL    ('{8'h40, 8'h10, 8'h80}),
+        .GST_AW     ('{BOOT_ROM_AW, ITCM_AW, MM_AW})
+    `endif
     ) u_i_axi_demux(
         clk, rst_n,
         hart_i_axi4_aw_slv, hart_i_axi4_w_slv, hart_i_axi4_b_mst,
