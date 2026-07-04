@@ -1,4 +1,4 @@
-`include "core/isa.svh"
+`include "spec/core/isa.svh"
 
 module i_imm_decode(
     input rv32g_inst_t inst,

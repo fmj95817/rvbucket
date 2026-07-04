@@ -1,6 +1,6 @@
 `include "itf/bti_req_if.svh"
 
-module biu(
+module hbi(
     input logic       clk,
     input logic       rst_n,
     fch_req_if_t.slv  fch_req_slv,
@@ -17,6 +17,9 @@ module biu(
     assign i_bti_req_mst.pkt.trans_id = {16{1'b0}};
     assign i_bti_req_mst.pkt.cmd = BTI_REQ_CMD_READ;
     assign i_bti_req_mst.pkt.addr = fch_req_slv.pkt.pc;
+    assign i_bti_req_mst.pkt.size = BTI_REQ_SIZE_B4;
+    assign i_bti_req_mst.pkt.data = '0;
+    assign i_bti_req_mst.pkt.strobe = '0;
     assign fch_req_slv.rdy = i_bti_req_mst.rdy;
 
     assign fch_rsp_mst.vld = i_bti_rsp_slv.vld;
@@ -27,6 +30,7 @@ module biu(
     assign d_bti_req_mst.pkt.trans_id = {16{1'b0}};
     assign d_bti_req_mst.pkt.cmd = ldst_req_slv.pkt.st ? BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
     assign d_bti_req_mst.pkt.addr = ldst_req_slv.pkt.addr;
+    assign d_bti_req_mst.pkt.size = bti_req_size_t'(ldst_req_slv.pkt.size);
     assign d_bti_req_mst.pkt.data = ldst_req_slv.pkt.data;
     assign d_bti_req_mst.pkt.strobe = ldst_req_slv.pkt.strobe;
     assign ldst_req_slv.rdy = d_bti_req_mst.rdy;

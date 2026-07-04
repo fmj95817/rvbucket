@@ -1,4 +1,5 @@
-`include "core/isa.svh"
+`include "spec/core/isa.svh"
+`include "itf/ldst_req_if.svh"
 
 module exu_ldst_handler(
     input logic        clk,
@@ -69,6 +70,7 @@ module exu_ldst_handler(
 
     assign ldst_req_mst.pkt.addr = gpr_mst.rd1 + offset;
     assign ldst_req_mst.pkt.st = ~is_ld_nxt;
+    assign ldst_req_mst.pkt.size = ldst_req_size_t'(inst.s.funct3[1:0]);
     assign ldst_req_mst.pkt.data = gpr_mst.rd2;
     always_comb begin
         case (inst.s.funct3)

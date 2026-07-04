@@ -279,8 +279,8 @@ function build_sw_case {
         if [ "${2}" = "model" ]; then
             ${BIN2X} "${bootrom}" c_array > design/model/core/boot.c
         elif [ "${2}" = "rtl" ]; then
-            ${BIN2X} "${bootrom}" sv_rom_header > design/rtl/boot.svh
-            ${BIN2X} "${bootrom}" sv_rom_src > design/rtl/boot.sv
+            ${BIN2X} "${bootrom}" sv_rom_header > design/rtl/core/boot.svh
+            ${BIN2X} "${bootrom}" sv_rom_src > design/rtl/core/boot.sv
         fi
     fi
 }
@@ -352,9 +352,12 @@ function build_rtl {
     local wd="$(pwd)"
 
     local common_args=(
+        +incdir+${wd}/base/rtl \
         +incdir+${wd}/design/rtl \
+        +incdir+${wd}/design/rtl/core \
     )
     local rtl_sim_src=(
+        $(find ${wd}/base/rtl -name *.sv) \
         $(find ${wd}/design/rtl -name *.sv) \
         $(find ${wd}/sim/rtl/model -name *.sv) \
         $(find ${wd}/sim/rtl/${simulator} -name *.sv) \
@@ -377,6 +380,7 @@ function build_rtl {
             --sc --exe --build \
             --trace --no-timing \
             --top-module sim_top \
+            -CFLAGS '-std=gnu++17' \
             ${common_args[@]} \
             ${rtl_sim_src[@]} \
             $(find ${wd}/sim/rtl/verilator -name *.cc);
@@ -421,8 +425,8 @@ function build_sw {
 }
 
 function build_hw {
-    build_sw_case boot "${1}"
     if [ "${1}" = "model" ]; then
+        build_sw_case boot "${1}"
         build_model
     elif [ "${1}" = "rtl" ]; then
         build_rtl "${2}"

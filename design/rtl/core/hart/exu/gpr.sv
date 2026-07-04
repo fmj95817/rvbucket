@@ -1,4 +1,4 @@
-`include "core/isa.svh"
+`include "spec/core/isa.svh"
 
 interface exu_gpr_if_t;
     logic [`RV_GPR_AW-1:0] ra1;

@@ -1,150 +1,122 @@
-`include "core/isa.svh"
-`include "boot.svh"
+`include "spec/core/isa.svh"
+`include "core/boot.svh"
 
 module soc(
-    input  logic      clk,
-    input  logic      rst_n,
-    output logic      uart_tx,
-    input  logic      uart_rx
+    input logic  clk,
+    input logic  rst_n,
+    output logic uart_tx,
+    input logic  uart_rx
 );
-    localparam BTI_GST_SEL_AW = 8;
-    localparam I_BTI_GST_NUM = 2;
-    localparam D_BTI_GST_NUM = 4;
-
     localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
     localparam FLASH_AW = 20;
     localparam ITCM_AW = 17;
     localparam DTCM_AW = 16;
     localparam UART_AW = 4;
 
-    localparam BOOT_ROM_SEL = 8'h40;
-    localparam FLASH_SEL = 8'h80;
-    localparam ITCM_SEL = 8'h10;
-    localparam DTCM_SEL = 8'h20;
-    localparam UART_SEL = 8'h30;
+    bti_req_if_t boot_rom_req();
+    bti_rsp_if_t boot_rom_rsp();
+    bti_req_if_t itcm_i_req();
+    bti_rsp_if_t itcm_i_rsp();
+    bti_req_if_t itcm_d_req();
+    bti_rsp_if_t itcm_d_rsp();
+    bti_req_if_t dtcm_req();
+    bti_rsp_if_t dtcm_rsp();
+    bti_req_if_t cfg_req();
+    bti_rsp_if_t cfg_rsp();
+    bti_req_if_t mm_bti_req();
+    bti_rsp_if_t mm_bti_rsp();
+    axi4_aw_if_t mm_aw();
+    axi4_w_if_t mm_w();
+    axi4_b_if_t mm_b();
+    axi4_ar_if_t mm_ar();
+    axi4_r_if_t mm_r();
 
-    bti_req_if_t i_bti_req_if();
-    bti_rsp_if_t         i_bti_rsp_if();
-    bti_req_if_t d_bti_req_if();
-    bti_rsp_if_t         d_bti_rsp_if();
-
-    bti_req_if_t i_bti_req_if_arr[I_BTI_GST_NUM]();
-    bti_rsp_if_t         i_bti_rsp_if_arr[I_BTI_GST_NUM]();
-    bti_req_if_t d_bti_req_if_arr[D_BTI_GST_NUM]();
-    bti_rsp_if_t         d_bti_rsp_if_arr[D_BTI_GST_NUM]();
-
-    tri                              boot_rom_cs;
-    tri [`BOOT_ROM_WORD_AW-1:0]      boot_rom_addr;
-    tri [`RV_XLEN-1:0]               boot_rom_data;
+    tri boot_rom_cs;
+    tri [`BOOT_ROM_WORD_AW-1:0] boot_rom_addr;
+    tri [`RV_XLEN-1:0] boot_rom_data;
 
     rv32g u_rv32g(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .i_bti_req_mst    (i_bti_req_if),
-        .i_bti_rsp_slv    (i_bti_rsp_if),
-        .d_bti_req_mst    (d_bti_req_if),
-        .d_bti_rsp_slv    (d_bti_rsp_if)
+        clk, rst_n,
+        boot_rom_req, boot_rom_rsp,
+        itcm_i_req, itcm_i_rsp,
+        itcm_d_req, itcm_d_rsp,
+        dtcm_req, dtcm_rsp,
+        cfg_req, cfg_rsp,
+        mm_aw, mm_w, mm_b, mm_ar, mm_r
+    );
+
+    axi2bti u_mm_axi2bti(
+        clk, rst_n,
+        mm_aw, mm_w, mm_b, mm_ar, mm_r,
+        mm_bti_req, mm_bti_rsp
     );
 
     boot_rom u_boot_rom(
-        .clk              (clk),
-        .cs               (boot_rom_cs),
-        .addr             (boot_rom_addr),
-        .data             (boot_rom_data)
+        .clk  (clk),
+        .cs   (boot_rom_cs),
+        .addr (boot_rom_addr),
+        .data (boot_rom_data)
     );
 
     bti_to_rom #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .ROM_AW           (BOOT_ROM_AW)
+        .BTI_AW (`RV_AW),
+        .BTI_DW (`RV_XLEN),
+        .ROM_AW (BOOT_ROM_AW)
     ) u_bti_to_boot_rom(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .bti_req_slv      (i_bti_req_if_arr[0]),
-        .bti_rsp_mst      (i_bti_rsp_if_arr[0]),
-        .cs               (boot_rom_cs),
-        .addr             (boot_rom_addr),
-        .data             (boot_rom_data)
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (boot_rom_req),
+        .bti_rsp_mst (boot_rom_rsp),
+        .cs          (boot_rom_cs),
+        .addr        (boot_rom_addr),
+        .data        (boot_rom_data)
     );
 
     bti_rom #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .ROM_AW           (FLASH_AW)
+        .BTI_AW (`RV_AW),
+        .BTI_DW (`RV_XLEN),
+        .ROM_AW (FLASH_AW)
     ) u_flash(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .bti_req_slv      (d_bti_req_if_arr[0]),
-        .bti_rsp_mst      (d_bti_rsp_if_arr[0])
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (mm_bti_req),
+        .bti_rsp_mst (mm_bti_rsp)
     );
 
     bti_dp_sram #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .SRAM_AW          (ITCM_AW)
+        .BTI_AW  (`RV_AW),
+        .BTI_DW  (`RV_XLEN),
+        .SRAM_AW (ITCM_AW)
     ) u_itcm(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .bti_r_req_slv    (i_bti_req_if_arr[1]),
-        .bti_r_rsp_mst    (i_bti_rsp_if_arr[1]),
-        .bti_w_req_slv    (d_bti_req_if_arr[1]),
-        .bti_w_rsp_mst    (d_bti_rsp_if_arr[1])
+        .clk           (clk),
+        .rst_n         (rst_n),
+        .bti_r_req_slv (itcm_i_req),
+        .bti_r_rsp_mst (itcm_i_rsp),
+        .bti_w_req_slv (itcm_d_req),
+        .bti_w_rsp_mst (itcm_d_rsp)
     );
 
     bti_sram #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .SRAM_AW          (DTCM_AW)
+        .BTI_AW  (`RV_AW),
+        .BTI_DW  (`RV_XLEN),
+        .SRAM_AW (DTCM_AW)
     ) u_dtcm(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .bti_req_slv      (d_bti_req_if_arr[2]),
-        .bti_rsp_mst      (d_bti_rsp_if_arr[2])
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (dtcm_req),
+        .bti_rsp_mst (dtcm_rsp)
     );
 
     bti_uart #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .UART_AW          (UART_AW)
+        .BTI_AW  (`RV_AW),
+        .BTI_DW  (`RV_XLEN),
+        .UART_AW (UART_AW)
     ) u_uart(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .bti_req_slv      (d_bti_req_if_arr[3]),
-        .bti_rsp_mst      (d_bti_rsp_if_arr[3]),
-        .tx               (uart_tx),
-        .rx               (uart_rx)
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (cfg_req),
+        .bti_rsp_mst (cfg_rsp),
+        .tx          (uart_tx),
+        .rx          (uart_rx)
     );
-
-    bti_demux #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .GST_SEL_AW       (BTI_GST_SEL_AW),
-        .GST_NUM          (I_BTI_GST_NUM),
-        .GST_SEL          ('{BOOT_ROM_SEL, ITCM_SEL}),
-        .GST_AW           ('{BOOT_ROM_AW, ITCM_AW})
-    ) u_i_bti_demux(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .host_bti_req_slv (i_bti_req_if),
-        .host_bti_rsp_mst (i_bti_rsp_if),
-        .gst_bti_req_msts (i_bti_req_if_arr),
-        .gst_bti_rsp_slvs (i_bti_rsp_if_arr)
-    );
-
-    bti_demux #(
-        .BTI_AW           (`RV_AW),
-        .BTI_DW           (`RV_XLEN),
-        .GST_SEL_AW       (BTI_GST_SEL_AW),
-        .GST_NUM          (D_BTI_GST_NUM),
-        .GST_SEL          ('{FLASH_SEL, ITCM_SEL, DTCM_SEL, UART_SEL}),
-        .GST_AW           ('{FLASH_AW, ITCM_AW, DTCM_AW, UART_AW})
-    ) u_d_bti_demux(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .host_bti_req_slv (d_bti_req_if),
-        .host_bti_rsp_mst (d_bti_rsp_if),
-        .gst_bti_req_msts (d_bti_req_if_arr),
-        .gst_bti_rsp_slvs (d_bti_rsp_if_arr)
-    );
-
 endmodule

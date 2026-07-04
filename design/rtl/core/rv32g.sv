@@ -1,50 +1,67 @@
 module rv32g(
     input logic       clk,
     input logic       rst_n,
-    bti_req_if_t.mst  i_bti_req_mst,
-    bti_rsp_if_t.slv  i_bti_rsp_slv,
-    bti_req_if_t.mst  d_bti_req_mst,
-    bti_rsp_if_t.slv  d_bti_rsp_slv
+    bti_req_if_t.mst  boot_rom_bti_req_mst,
+    bti_rsp_if_t.slv  boot_rom_bti_rsp_slv,
+    bti_req_if_t.mst  itcm_i_bti_req_mst,
+    bti_rsp_if_t.slv  itcm_i_bti_rsp_slv,
+    bti_req_if_t.mst  itcm_d_bti_req_mst,
+    bti_rsp_if_t.slv  itcm_d_bti_rsp_slv,
+    bti_req_if_t.mst  dtcm_bti_req_mst,
+    bti_rsp_if_t.slv  dtcm_bti_rsp_slv,
+    bti_req_if_t.mst  cfg_bti_req_mst,
+    bti_rsp_if_t.slv  cfg_bti_rsp_slv,
+    axi4_aw_if_t.mst  mm_axi4_aw_mst,
+    axi4_w_if_t.mst   mm_axi4_w_mst,
+    axi4_b_if_t.slv   mm_axi4_b_slv,
+    axi4_ar_if_t.mst  mm_axi4_ar_mst,
+    axi4_r_if_t.slv   mm_axi4_r_slv
 );
-    fch_req_if_t fch_req_if();
-    fch_rsp_if_t fch_rsp_if();
-    ex_req_if_t  ex_req_if();
-    ex_rsp_if_t  ex_rsp_if();
-    fl_req_if_t  fl_req_if();
-    ldst_req_if_t ldst_req_if();
-    ldst_rsp_if_t ldst_rsp_if();
+    axi4_aw_if_t hart_i_aw();
+    axi4_w_if_t hart_i_w();
+    axi4_b_if_t hart_i_b();
+    axi4_ar_if_t hart_i_ar();
+    axi4_r_if_t hart_i_r();
+    axi4_aw_if_t hart_d_aw();
+    axi4_w_if_t hart_d_w();
+    axi4_b_if_t hart_d_b();
+    axi4_ar_if_t hart_d_ar();
+    axi4_r_if_t hart_d_r();
+    axi4_aw_if_t mm_i_aw();
+    axi4_w_if_t mm_i_w();
+    axi4_b_if_t mm_i_b();
+    axi4_ar_if_t mm_i_ar();
+    axi4_r_if_t mm_i_r();
+    axi4_aw_if_t mm_d_aw();
+    axi4_w_if_t mm_d_w();
+    axi4_b_if_t mm_d_b();
+    axi4_ar_if_t mm_d_ar();
+    axi4_r_if_t mm_d_r();
 
-    ifu u_ifu(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .fch_req_mst      (fch_req_if),
-        .fch_rsp_slv      (fch_rsp_if),
-        .ex_req_mst       (ex_req_if),
-        .ex_rsp_slv       (ex_rsp_if),
-        .fl_req_mst       (fl_req_if)
+    hart u_hart(
+        clk, rst_n,
+        hart_i_aw, hart_i_w, hart_i_b, hart_i_ar, hart_i_r,
+        hart_d_aw, hart_d_w, hart_d_b, hart_d_ar, hart_d_r
     );
 
-    exu u_exu(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .ex_req_slv       (ex_req_if),
-        .ex_rsp_mst       (ex_rsp_if),
-        .fl_req_slv       (fl_req_if),
-        .ldst_req_mst     (ldst_req_if),
-        .ldst_rsp_slv     (ldst_rsp_if)
+    cbi u_cbi(
+        clk, rst_n,
+        hart_i_aw, hart_i_w, hart_i_b, hart_i_ar, hart_i_r,
+        hart_d_aw, hart_d_w, hart_d_b, hart_d_ar, hart_d_r,
+        boot_rom_bti_req_mst, boot_rom_bti_rsp_slv,
+        itcm_i_bti_req_mst, itcm_i_bti_rsp_slv,
+        itcm_d_bti_req_mst, itcm_d_bti_rsp_slv,
+        dtcm_bti_req_mst, dtcm_bti_rsp_slv,
+        cfg_bti_req_mst, cfg_bti_rsp_slv,
+        mm_i_aw, mm_i_w, mm_i_b, mm_i_ar, mm_i_r,
+        mm_d_aw, mm_d_w, mm_d_b, mm_d_ar, mm_d_r
     );
 
-    biu u_biu(
-        .clk              (clk),
-        .rst_n            (rst_n),
-        .fch_req_slv      (fch_req_if),
-        .fch_rsp_mst      (fch_rsp_if),
-        .ldst_req_slv     (ldst_req_if),
-        .ldst_rsp_mst     (ldst_rsp_if),
-        .i_bti_req_mst    (i_bti_req_mst),
-        .i_bti_rsp_slv    (i_bti_rsp_slv),
-        .d_bti_req_mst    (d_bti_req_mst),
-        .d_bti_rsp_slv    (d_bti_rsp_slv)
+    l2 u_l2(
+        clk, rst_n,
+        mm_i_aw, mm_i_w, mm_i_b, mm_i_ar, mm_i_r,
+        mm_d_aw, mm_d_w, mm_d_b, mm_d_ar, mm_d_r,
+        mm_axi4_aw_mst, mm_axi4_w_mst, mm_axi4_b_slv,
+        mm_axi4_ar_mst, mm_axi4_r_slv
     );
-
 endmodule
