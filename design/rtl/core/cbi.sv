@@ -69,7 +69,7 @@ module cbi(
         .GST_SEL_AW (8),
         .GST_NUM    (I_GST_NUM),
     `ifdef VERILATOR
-        .GST_SEL    ('{8'h40, 8'h10, 8'h80, 8'0}),
+        .GST_SEL    ('{8'h40, 8'h10, 8'h80, 8'h00}),
         .GST_AW     ('{BOOT_ROM_AW, ITCM_AW, MM_AW, 0})
     `else
         .GST_SEL    ('{8'h40, 8'h10, 8'h80}),
