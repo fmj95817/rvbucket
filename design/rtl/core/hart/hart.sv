@@ -10,7 +10,10 @@ module hart(
     axi4_w_if_t.mst   d_axi4_w_mst,
     axi4_b_if_t.slv   d_axi4_b_slv,
     axi4_ar_if_t.mst  d_axi4_ar_mst,
-    axi4_r_if_t.slv   d_axi4_r_slv
+    axi4_r_if_t.slv   d_axi4_r_slv,
+    core_timer_if_t.slv core_timer_slv,
+    core_m_irq_if_t.slv core_m_irq_slv,
+    ext_irq_if_t.slv ext_irq_slv
 );
     fch_req_if_t fch_req_if();
     fch_rsp_if_t fch_rsp_if();
@@ -23,6 +26,13 @@ module hart(
     csr_exu_read_rsp_if_t csr_exu_read_rsp_if();
     exu_csr_write_req_if_t exu_csr_write_req_if();
     csr_exu_write_rsp_if_t csr_exu_write_rsp_if();
+    hart_expt_if_t ex_expt_if();
+    exu_state_if_t exu_state_if();
+    trap_exu_ctrl_if_t trap_exu_ctrl_if();
+    csr_trap_state_if_t csr_trap_state_if();
+    trap_csr_write_req_if_t trap_csr_write_req_if();
+    csr_trap_write_rsp_if_t csr_trap_write_rsp_if();
+    trap_send_if_t trap_send_if();
 
     bti_req_if_t hbi_i_bti_req_if();
     bti_rsp_if_t hbi_i_bti_rsp_if();
@@ -36,7 +46,8 @@ module hart(
         .fch_rsp_slv (fch_rsp_if),
         .ex_req_mst  (ex_req_if),
         .ex_rsp_slv  (ex_rsp_if),
-        .fl_req_mst  (fl_req_if)
+        .fl_req_mst  (fl_req_if),
+        .trap_send_slv (trap_send_if)
     );
 
     exu u_exu(
@@ -50,7 +61,10 @@ module hart(
         .exu_csr_read_req_mst  (exu_csr_read_req_if),
         .csr_exu_read_rsp_slv  (csr_exu_read_rsp_if),
         .exu_csr_write_req_mst (exu_csr_write_req_if),
-        .csr_exu_write_rsp_slv (csr_exu_write_rsp_if)
+        .csr_exu_write_rsp_slv (csr_exu_write_rsp_if),
+        .ex_expt_mst           (ex_expt_if),
+        .exu_state_mst         (exu_state_if),
+        .trap_exu_ctrl_slv     (trap_exu_ctrl_if)
     );
 
     csr u_csr(
@@ -59,12 +73,25 @@ module hart(
         .exu_csr_read_req_slv   (exu_csr_read_req_if),
         .csr_exu_read_rsp_mst   (csr_exu_read_rsp_if),
         .exu_csr_write_req_slv  (exu_csr_write_req_if),
-        .csr_exu_write_rsp_mst  (csr_exu_write_rsp_if)
+        .csr_exu_write_rsp_mst  (csr_exu_write_rsp_if),
+        .core_timer_slv         (core_timer_slv),
+        .core_m_irq_slv         (core_m_irq_slv),
+        .ext_irq_slv            (ext_irq_slv),
+        .trap_csr_write_req_slv (trap_csr_write_req_if),
+        .csr_trap_write_rsp_mst (csr_trap_write_rsp_if),
+        .csr_trap_state_mst     (csr_trap_state_if)
     );
 
     trap u_trap(
-        .clk   (clk),
-        .rst_n (rst_n)
+        .clk                    (clk),
+        .rst_n                  (rst_n),
+        .ex_expt_slv            (ex_expt_if),
+        .exu_state_slv          (exu_state_if),
+        .trap_exu_ctrl_mst      (trap_exu_ctrl_if),
+        .csr_trap_state_slv     (csr_trap_state_if),
+        .trap_csr_write_req_mst (trap_csr_write_req_if),
+        .csr_trap_write_rsp_slv (csr_trap_write_rsp_if),
+        .trap_send_mst          (trap_send_if)
     );
 
     hbi u_hbi(

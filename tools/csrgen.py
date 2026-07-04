@@ -162,7 +162,13 @@ def gen_rtl(csr_desc, fp):
     fp.write("    exu_csr_read_req_if_t.slv      exu_csr_read_req_slv,\n")
     fp.write("    csr_exu_read_rsp_if_t.mst      csr_exu_read_rsp_mst,\n")
     fp.write("    exu_csr_write_req_if_t.slv     exu_csr_write_req_slv,\n")
-    fp.write("    csr_exu_write_rsp_if_t.mst     csr_exu_write_rsp_mst\n")
+    fp.write("    csr_exu_write_rsp_if_t.mst     csr_exu_write_rsp_mst,\n")
+    fp.write("    core_timer_if_t.slv             core_timer_slv,\n")
+    fp.write("    core_m_irq_if_t.slv             core_m_irq_slv,\n")
+    fp.write("    ext_irq_if_t.slv                ext_irq_slv,\n")
+    fp.write("    trap_csr_write_req_if_t.slv     trap_csr_write_req_slv,\n")
+    fp.write("    csr_trap_write_rsp_if_t.mst     csr_trap_write_rsp_mst,\n")
+    fp.write("    csr_trap_state_if_t.mst         csr_trap_state_mst\n")
     fp.write(");\n")
     for csr in csr_desc["csr"]:
         fp.write(f"    logic [31:0] csr_{csr['name']};\n")
@@ -173,7 +179,19 @@ def gen_rtl(csr_desc, fp):
         fp.write(f"            csr_{csr['name']} <= {rtl_reset_value(csr)};\n")
     fp.write("        end else begin\n")
     fp.write("            csr_cycle <= csr_cycle + 1'b1;\n")
-    fp.write("            if (exu_csr_write_req_slv.vld && csr_exu_write_rsp_mst.pkt.ok) begin\n")
+    fp.write("            csr_time <= core_timer_slv.pkt.mtime[31:0];\n")
+    fp.write("            csr_timeh <= core_timer_slv.pkt.mtime[63:32];\n")
+    fp.write("            csr_mip[7] <= core_m_irq_slv.pkt.mtimer;\n")
+    fp.write("            csr_mip[3] <= core_m_irq_slv.pkt.msw;\n")
+    fp.write("            csr_mip[11] <= ext_irq_slv.pkt.irq;\n")
+    fp.write("            if (trap_csr_write_req_slv.vld && csr_trap_write_rsp_mst.pkt.ok) begin\n")
+    fp.write("                case (trap_csr_write_req_slv.pkt.addr)\n")
+    for csr in csr_desc["csr"]:
+        if 'w' in csr["prop"]:
+            fp.write(f"                    12'h{int(csr['addr'], 0):03x}: csr_{csr['name']} <= trap_csr_write_req_slv.pkt.val;\n")
+    fp.write("                    default: ;\n")
+    fp.write("                endcase\n")
+    fp.write("            end else if (exu_csr_write_req_slv.vld && csr_exu_write_rsp_mst.pkt.ok) begin\n")
     fp.write("                case (exu_csr_write_req_slv.pkt.addr)\n")
     for csr in csr_desc["csr"]:
         if 'w' in csr["prop"]:
@@ -216,6 +234,10 @@ def gen_rtl(csr_desc, fp):
     fp.write("            default: ;\n")
     fp.write("        endcase\n")
     fp.write("    end\n")
+    fp.write("\n    assign csr_trap_write_rsp_mst.vld = trap_csr_write_req_slv.vld;\n")
+    fp.write("    assign csr_trap_write_rsp_mst.pkt.ok = 1'b1;\n")
+    for name in ["mstatus", "mip", "mie", "mtvec", "mepc", "medeleg", "mideleg", "sstatus", "sip", "sie", "stvec", "sepc"]:
+        fp.write(f"    assign csr_trap_state_mst.pkt.{name} = csr_{name};\n")
     fp.write("endmodule\n")
 
 

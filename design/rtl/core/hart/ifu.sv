@@ -7,12 +7,14 @@ module ifu(
     fch_rsp_if_t.slv fch_rsp_slv,
     ex_req_if_t.mst  ex_req_mst,
     ex_rsp_if_t.slv  ex_rsp_slv,
-    fl_req_if_t.mst  fl_req_mst
+    fl_req_if_t.mst  fl_req_mst,
+    trap_send_if_t.slv trap_send_slv
 );
     typedef enum logic [1:0] {
         FETCH_REQ,
         FETCH_RESP,
-        EXEC
+        EXEC,
+        FETCH_DROP
     } state_t;
 
     state_t state;
@@ -31,6 +33,12 @@ module ifu(
             pc <= 32'h40000000;
             req_pc <= '0;
             ir_raw <= '0;
+        end else if (trap_send_slv.vld) begin
+            pc <= trap_send_slv.pkt.target_pc;
+            if (state == FETCH_RESP || (state == FETCH_REQ && fch_req_hsk))
+                state <= FETCH_DROP;
+            else
+                state <= FETCH_REQ;
         end else begin
             case (state)
                 FETCH_REQ: begin
@@ -51,6 +59,10 @@ module ifu(
                         state <= FETCH_REQ;
                     end
                 end
+                FETCH_DROP: begin
+                    if (fch_rsp_hsk)
+                        state <= FETCH_REQ;
+                end
                 default: state <= FETCH_REQ;
             endcase
         end
@@ -58,7 +70,7 @@ module ifu(
 
     assign fch_req_mst.vld = state == FETCH_REQ;
     assign fch_req_mst.pkt.pc = pc;
-    assign fch_rsp_slv.rdy = state == FETCH_RESP;
+    assign fch_rsp_slv.rdy = state == FETCH_RESP || state == FETCH_DROP;
 
     assign ex_req_mst.vld = state == EXEC;
     assign ex_req_mst.pkt.inst.raw = ir_raw;

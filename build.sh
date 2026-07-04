@@ -429,7 +429,9 @@ function build_hw {
         build_sw_case boot "${1}"
         build_model
     elif [ "${1}" = "rtl" ]; then
-        build_sw_case boot "${1}"
+        if [ "${SKIP_BOOT_BUILD}" != "1" ]; then
+            build_sw_case boot "${1}"
+        fi
         build_rtl "${2}"
     elif [ "${1}" = "fpga" ]; then
         build_fpga "${2}"
