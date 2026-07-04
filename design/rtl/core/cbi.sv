@@ -39,8 +39,8 @@ module cbi(
     localparam D_GST_NUM = 4;
     localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
     localparam ITCM_AW = 17;
-    localparam DTCM_AW = 16;
-    localparam CFG_AW = 4;
+    localparam DTCM_AW = 18;
+    localparam CFG_AW = 25;
     localparam MM_AW = 20;
 
     axi4_aw_if_t i_aw[I_GST_NUM]();

@@ -38,10 +38,17 @@ module axi_demux #(
     axi4_b_resp_t gst_b_resp[GST_NUM];
 
     for (genvar i = 0; i < GST_NUM; i++) begin
-        assign rd_sel[i] = host_axi4_ar_slv.pkt.addr[31:ADDR_END_BIT] == GST_SEL[i] &&
-            host_axi4_ar_slv.pkt.addr[ADDR_END_BIT-1:GST_AW[i]] == '0;
-        assign wr_sel[i] = host_axi4_aw_slv.pkt.addr[31:ADDR_END_BIT] == GST_SEL[i] &&
-            host_axi4_aw_slv.pkt.addr[ADDR_END_BIT-1:GST_AW[i]] == '0;
+        if (GST_AW[i] >= ADDR_END_BIT) begin
+            assign rd_sel[i] = host_axi4_ar_slv.pkt.addr[31:GST_AW[i]] ==
+                GST_SEL[i][GST_SEL_AW-1:GST_AW[i]-ADDR_END_BIT];
+            assign wr_sel[i] = host_axi4_aw_slv.pkt.addr[31:GST_AW[i]] ==
+                GST_SEL[i][GST_SEL_AW-1:GST_AW[i]-ADDR_END_BIT];
+        end else begin
+            assign rd_sel[i] = host_axi4_ar_slv.pkt.addr[31:ADDR_END_BIT] == GST_SEL[i] &&
+                host_axi4_ar_slv.pkt.addr[ADDR_END_BIT-1:GST_AW[i]] == '0;
+            assign wr_sel[i] = host_axi4_aw_slv.pkt.addr[31:ADDR_END_BIT] == GST_SEL[i] &&
+                host_axi4_aw_slv.pkt.addr[ADDR_END_BIT-1:GST_AW[i]] == '0;
+        end
 
         assign gst_axi4_ar_msts[i].vld = !(|rd_pending) && host_axi4_ar_slv.vld && rd_sel[i];
         assign gst_axi4_ar_msts[i].pkt = host_axi4_ar_slv.pkt;

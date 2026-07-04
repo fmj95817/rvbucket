@@ -9,6 +9,7 @@ module sim_top(
     logic uart_rx_ch_vld;
     logic [7:0] uart_rx_ch;
     logic itf_dump_en;
+    logic progress_en;
     int unsigned itf_dump_count;
     int unsigned itf_dump_cycle;
 
@@ -38,6 +39,18 @@ module sim_top(
     end
 
     always @(posedge clk) begin
+        if (progress_en && rst_n) begin
+            itf_dump_cycle <= itf_dump_cycle + 1;
+            if (itf_dump_cycle % 100000 == 0)
+                $display("PROGRESS cycle=%0d state=%0d pc=%08x req_pc=%08x sp=%08x",
+                    itf_dump_cycle,
+                    u_soc.u_rv32g.u_hart.u_ifu.state,
+                    u_soc.u_rv32g.u_hart.u_ifu.pc,
+                    u_soc.u_rv32g.u_hart.u_ifu.req_pc,
+                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[2]);
+            if (itf_dump_cycle >= 5000000)
+                $finish;
+        end
         if (itf_dump_en && rst_n) begin
             itf_dump_cycle <= itf_dump_cycle + 1;
             if (itf_dump_cycle < 20 || itf_dump_cycle % 1000 == 0)
@@ -79,6 +92,7 @@ module sim_top(
     initial begin
         string path;
         itf_dump_en = $test$plusargs("itf_dump");
+        progress_en = $test$plusargs("progress");
         itf_dump_count = 0;
         itf_dump_cycle = 0;
         if ($value$plusargs("program=%s", path)) begin

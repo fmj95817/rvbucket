@@ -56,16 +56,12 @@ module ifu(
         end
     end
 
-    wire is_system = ir_raw[6:0] == 7'b1110011;
-    wire is_csr = is_system && ir_raw[14:12] != 3'b000;
-    wire [`RV_IR_SIZE-1:0] ir = is_csr ? 32'h00000013 : ir_raw;
-
     assign fch_req_mst.vld = state == FETCH_REQ;
     assign fch_req_mst.pkt.pc = pc;
     assign fch_rsp_slv.rdy = state == FETCH_RESP;
 
     assign ex_req_mst.vld = state == EXEC;
-    assign ex_req_mst.pkt.inst.raw = ir;
+    assign ex_req_mst.pkt.inst.raw = ir_raw;
     assign ex_req_mst.pkt.pc = req_pc;
     assign ex_req_mst.pkt.pred_taken = 1'b0;
     assign ex_req_mst.pkt.pred_pc = '0;

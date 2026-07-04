@@ -2,6 +2,7 @@
 
 import sys
 import json
+from pathlib import Path
 
 def gen_c_header(csr_desc, fp):
     fp.write("#ifndef RV32G_CSR_H\n")
@@ -141,14 +142,96 @@ def gen_c_src(csr_desc, fp):
     fp.write("}\n")
 
 
+def rtl_reset_value(csr):
+    reset = csr.get("reset", 0)
+    if csr["name"] == "misa" and isinstance(reset, str):
+        value = 1 << 30
+        for ext in reset:
+            value |= 1 << (ord(ext.lower()) - ord('a'))
+        return f"32'h{value:08x}"
+    if isinstance(reset, str):
+        return reset
+    return f"32'h{reset:08x}"
+
+
+def gen_rtl(csr_desc, fp):
+    priv_map = {'u': 0, 's': 1, 'm': 3}
+    fp.write("module csr(\n")
+    fp.write("    input logic                    clk,\n")
+    fp.write("    input logic                    rst_n,\n")
+    fp.write("    exu_csr_read_req_if_t.slv      exu_csr_read_req_slv,\n")
+    fp.write("    csr_exu_read_rsp_if_t.mst      csr_exu_read_rsp_mst,\n")
+    fp.write("    exu_csr_write_req_if_t.slv     exu_csr_write_req_slv,\n")
+    fp.write("    csr_exu_write_rsp_if_t.mst     csr_exu_write_rsp_mst\n")
+    fp.write(");\n")
+    for csr in csr_desc["csr"]:
+        fp.write(f"    logic [31:0] csr_{csr['name']};\n")
+    fp.write("\n")
+    fp.write("    always_ff @(posedge clk or negedge rst_n) begin\n")
+    fp.write("        if (!rst_n) begin\n")
+    for csr in csr_desc["csr"]:
+        fp.write(f"            csr_{csr['name']} <= {rtl_reset_value(csr)};\n")
+    fp.write("        end else begin\n")
+    fp.write("            csr_cycle <= csr_cycle + 1'b1;\n")
+    fp.write("            if (exu_csr_write_req_slv.vld && csr_exu_write_rsp_mst.pkt.ok) begin\n")
+    fp.write("                case (exu_csr_write_req_slv.pkt.addr)\n")
+    for csr in csr_desc["csr"]:
+        if 'w' in csr["prop"]:
+            fp.write(f"                    12'h{int(csr['addr'], 0):03x}: csr_{csr['name']} <= exu_csr_write_req_slv.pkt.val;\n")
+    fp.write("                    default: ;\n")
+    fp.write("                endcase\n")
+    fp.write("            end\n")
+    fp.write("        end\n")
+    fp.write("    end\n\n")
+    fp.write("    always_comb begin\n")
+    fp.write("        csr_exu_read_rsp_mst.pkt.val = '0;\n")
+    fp.write("        csr_exu_read_rsp_mst.pkt.ok = 1'b0;\n")
+    fp.write("        case (exu_csr_read_req_slv.pkt.addr)\n")
+    for csr in csr_desc["csr"]:
+        addr = int(csr["addr"], 0)
+        priv = priv_map[csr["prop"][0]]
+        fp.write(f"            12'h{addr:03x}: begin\n")
+        if priv == 0:
+            fp.write("                csr_exu_read_rsp_mst.pkt.ok = 1'b1;\n")
+        else:
+            fp.write(f"                csr_exu_read_rsp_mst.pkt.ok = exu_csr_read_req_slv.pkt.priv >= 2'd{priv};\n")
+        fp.write(f"                csr_exu_read_rsp_mst.pkt.val = csr_{csr['name']};\n")
+        fp.write("            end\n")
+    fp.write("            default: ;\n")
+    fp.write("        endcase\n")
+    fp.write("    end\n\n")
+    fp.write("    always_comb begin\n")
+    fp.write("        csr_exu_write_rsp_mst.vld = exu_csr_write_req_slv.vld;\n")
+    fp.write("        csr_exu_write_rsp_mst.pkt.ok = 1'b0;\n")
+    fp.write("        case (exu_csr_write_req_slv.pkt.addr)\n")
+    for csr in csr_desc["csr"]:
+        if 'w' not in csr["prop"]:
+            continue
+        addr = int(csr["addr"], 0)
+        priv = priv_map[csr["prop"][0]]
+        if priv == 0:
+            fp.write(f"            12'h{addr:03x}: csr_exu_write_rsp_mst.pkt.ok = 1'b1;\n")
+        else:
+            fp.write(f"            12'h{addr:03x}: csr_exu_write_rsp_mst.pkt.ok = exu_csr_write_req_slv.pkt.priv >= 2'd{priv};\n")
+    fp.write("            default: ;\n")
+    fp.write("        endcase\n")
+    fp.write("    end\n")
+    fp.write("endmodule\n")
+
+
+repo_root = Path(__file__).resolve().parent.parent
 csr_desc_fp = open(sys.argv[1], "r")
 csr_desc = json.load(csr_desc_fp)
 csr_desc_fp.close()
 
-c_header_fp = open("model/spec/core/csr.h", "w")
+c_header_fp = open(repo_root / "design/model/spec/core/csr.h", "w")
 gen_c_header(csr_desc, c_header_fp)
 c_header_fp.close()
 
-c_src_fp = open("model/spec/core/csr.c", "w")
+c_src_fp = open(repo_root / "design/model/spec/core/csr.c", "w")
 gen_c_src(csr_desc, c_src_fp)
 c_src_fp.close()
+
+rtl_fp = open(repo_root / "design/rtl/core/hart/csr.sv", "w")
+gen_rtl(csr_desc, rtl_fp)
+rtl_fp.close()

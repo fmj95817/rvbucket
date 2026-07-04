@@ -7,17 +7,25 @@ module exu_alu_handler(
     input rv32g_inst_t inst,
     exu_gpr_if_t.mst   gpr_mst
 );
-    localparam ALU_OP_SIZE = 4;
-    localparam ALU_OP_ADD = 4'd0;
-    localparam ALU_OP_SUB = 4'd1;
-    localparam ALU_OP_LESS_S = 4'd2;
-    localparam ALU_OP_LESS_U = 4'd3;
-    localparam ALU_OP_XOR = 4'd4;
-    localparam ALU_OP_OR = 4'd5;
-    localparam ALU_OP_AND = 4'd6;
-    localparam ALU_OP_SL = 4'd7;
-    localparam ALU_OP_SRL = 4'd8;
-    localparam ALU_OP_SRA = 4'd9;
+    localparam ALU_OP_SIZE = 5;
+    localparam ALU_OP_ADD = 5'd0;
+    localparam ALU_OP_SUB = 5'd1;
+    localparam ALU_OP_LESS_S = 5'd2;
+    localparam ALU_OP_LESS_U = 5'd3;
+    localparam ALU_OP_XOR = 5'd4;
+    localparam ALU_OP_OR = 5'd5;
+    localparam ALU_OP_AND = 5'd6;
+    localparam ALU_OP_SL = 5'd7;
+    localparam ALU_OP_SRL = 5'd8;
+    localparam ALU_OP_SRA = 5'd9;
+    localparam ALU_OP_MUL = 5'd10;
+    localparam ALU_OP_MULH = 5'd11;
+    localparam ALU_OP_MULHSU = 5'd12;
+    localparam ALU_OP_MULHU = 5'd13;
+    localparam ALU_OP_DIV = 5'd14;
+    localparam ALU_OP_DIVU = 5'd15;
+    localparam ALU_OP_REM = 5'd16;
+    localparam ALU_OP_REMU = 5'd17;
 
     logic [`RV_XLEN-1:0] alu_src1;
     logic [`RV_XLEN-1:0] alu_src2;
@@ -29,6 +37,15 @@ module exu_alu_handler(
     tri [`RV_XLEN-1:0] alu_src1_u = alu_src1;
     tri [`RV_XLEN-1:0] alu_src2_u = alu_src2;
     tri [4:0] shift_bits = alu_src2[4:0];
+    logic signed [63:0] mul_ss;
+    logic signed [63:0] mul_su;
+    logic [63:0] mul_uu;
+
+    always_comb begin
+        mul_ss = alu_src1_s * alu_src2_s;
+        mul_su = alu_src1_s * $signed({1'b0, alu_src2_u});
+        mul_uu = alu_src1_u * alu_src2_u;
+    end
 
     always_comb begin
         case (alu_op)
@@ -44,6 +61,28 @@ module exu_alu_handler(
             ALU_OP_SL: alu_dst = alu_src1_u << shift_bits;
             ALU_OP_SRL: alu_dst = alu_src1_u >> shift_bits;
             ALU_OP_SRA: alu_dst = alu_src1_s >>> shift_bits;
+            ALU_OP_MUL: alu_dst = mul_uu[31:0];
+            ALU_OP_MULH: alu_dst = mul_ss[63:32];
+            ALU_OP_MULHSU: alu_dst = mul_su[63:32];
+            ALU_OP_MULHU: alu_dst = mul_uu[63:32];
+            ALU_OP_DIV: begin
+                if (alu_src2_u == 0)
+                    alu_dst = 32'hffffffff;
+                else if (alu_src1_u == 32'h80000000 && alu_src2_u == 32'hffffffff)
+                    alu_dst = 32'h80000000;
+                else
+                    alu_dst = alu_src1_s / alu_src2_s;
+            end
+            ALU_OP_DIVU: alu_dst = alu_src2_u == 0 ? 32'hffffffff : alu_src1_u / alu_src2_u;
+            ALU_OP_REM: begin
+                if (alu_src2_u == 0)
+                    alu_dst = alu_src1_u;
+                else if (alu_src1_u == 32'h80000000 && alu_src2_u == 32'hffffffff)
+                    alu_dst = 0;
+                else
+                    alu_dst = alu_src1_s % alu_src2_s;
+            end
+            ALU_OP_REMU: alu_dst = alu_src2_u == 0 ? alu_src1_u : alu_src1_u % alu_src2_u;
             default: alu_dst = {`RV_XLEN{1'bx}};
         endcase
     end
@@ -91,7 +130,18 @@ module exu_alu_handler(
             gpr_mst.wd = alu_dst;
             alu_src1 = gpr_mst.rd1;
             alu_src2 = gpr_mst.rd2;
-            case (inst.r.funct3)
+            if (inst.r.funct7 == ALU_FUNCT7_M) begin
+                case (inst.r.funct3)
+                    3'b000: alu_op = ALU_OP_MUL;
+                    3'b001: alu_op = ALU_OP_MULH;
+                    3'b010: alu_op = ALU_OP_MULHSU;
+                    3'b011: alu_op = ALU_OP_MULHU;
+                    3'b100: alu_op = ALU_OP_DIV;
+                    3'b101: alu_op = ALU_OP_DIVU;
+                    3'b110: alu_op = ALU_OP_REM;
+                    3'b111: alu_op = ALU_OP_REMU;
+                endcase
+            end else case (inst.r.funct3)
                 ALU_FUNCT3_ADD_SUB: alu_op = inst.r.funct7[5] ?
                     ALU_OP_SUB : ALU_OP_ADD;
                 ALU_FUNCT3_SL: alu_op = ALU_OP_SL;

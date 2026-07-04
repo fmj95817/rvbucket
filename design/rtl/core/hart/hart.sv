@@ -19,6 +19,10 @@ module hart(
     fl_req_if_t fl_req_if();
     ldst_req_if_t ldst_req_if();
     ldst_rsp_if_t ldst_rsp_if();
+    exu_csr_read_req_if_t exu_csr_read_req_if();
+    csr_exu_read_rsp_if_t csr_exu_read_rsp_if();
+    exu_csr_write_req_if_t exu_csr_write_req_if();
+    csr_exu_write_rsp_if_t csr_exu_write_rsp_if();
 
     bti_req_if_t hbi_i_bti_req_if();
     bti_rsp_if_t hbi_i_bti_rsp_if();
@@ -42,7 +46,25 @@ module hart(
         .ex_rsp_mst   (ex_rsp_if),
         .fl_req_slv   (fl_req_if),
         .ldst_req_mst (ldst_req_if),
-        .ldst_rsp_slv (ldst_rsp_if)
+        .ldst_rsp_slv (ldst_rsp_if),
+        .exu_csr_read_req_mst  (exu_csr_read_req_if),
+        .csr_exu_read_rsp_slv  (csr_exu_read_rsp_if),
+        .exu_csr_write_req_mst (exu_csr_write_req_if),
+        .csr_exu_write_rsp_slv (csr_exu_write_rsp_if)
+    );
+
+    csr u_csr(
+        .clk                    (clk),
+        .rst_n                  (rst_n),
+        .exu_csr_read_req_slv   (exu_csr_read_req_if),
+        .csr_exu_read_rsp_mst   (csr_exu_read_rsp_if),
+        .exu_csr_write_req_slv  (exu_csr_write_req_if),
+        .csr_exu_write_rsp_mst  (csr_exu_write_rsp_if)
+    );
+
+    trap u_trap(
+        .clk   (clk),
+        .rst_n (rst_n)
     );
 
     hbi u_hbi(

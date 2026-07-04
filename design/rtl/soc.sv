@@ -10,8 +10,7 @@ module soc(
     localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
     localparam FLASH_AW = 20;
     localparam ITCM_AW = 17;
-    localparam DTCM_AW = 16;
-    localparam UART_AW = 4;
+    localparam DTCM_AW = 18;
 
     bti_req_if_t boot_rom_req();
     bti_rsp_if_t boot_rom_rsp();
@@ -107,16 +106,12 @@ module soc(
         .bti_rsp_mst (dtcm_rsp)
     );
 
-    bti_uart #(
-        .BTI_AW  (`RV_AW),
-        .BTI_DW  (`RV_XLEN),
-        .UART_AW (UART_AW)
-    ) u_uart(
+    peri u_peri(
         .clk         (clk),
         .rst_n       (rst_n),
         .bti_req_slv (cfg_req),
         .bti_rsp_mst (cfg_rsp),
-        .tx          (uart_tx),
-        .rx          (uart_rx)
+        .uart_tx     (uart_tx),
+        .uart_rx     (uart_rx)
     );
 endmodule

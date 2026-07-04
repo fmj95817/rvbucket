@@ -7,7 +7,11 @@ module exu(
     ex_rsp_if_t.mst   ex_rsp_mst,
     fl_req_if_t.slv   fl_req_slv,
     ldst_req_if_t.mst ldst_req_mst,
-    ldst_rsp_if_t.slv ldst_rsp_slv
+    ldst_rsp_if_t.slv ldst_rsp_slv,
+    exu_csr_read_req_if_t.mst exu_csr_read_req_mst,
+    csr_exu_read_rsp_if_t.slv csr_exu_read_rsp_slv,
+    exu_csr_write_req_if_t.mst exu_csr_write_req_mst,
+    csr_exu_write_rsp_if_t.slv csr_exu_write_rsp_slv
 );
     localparam INST_HANDLER_NUM = 5;
     localparam ALU_CHN_IDX = 0;
@@ -34,6 +38,7 @@ module exu(
     tri is_branch = ex_req_slv.vld & (opcode == OPCODE_BRANCH);
     tri is_load = ex_req_slv.vld & (opcode == OPCODE_LOAD);
     tri is_store = ex_req_slv.vld & (opcode == OPCODE_STORE);
+    tri is_amo = ex_req_slv.vld & (opcode == OPCODE_AMO);
     tri is_alui = ex_req_slv.vld & (opcode == OPCODE_ALUI);
     tri is_alu = ex_req_slv.vld & (opcode == OPCODE_ALU);
     tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MISC_MEM);
@@ -41,7 +46,7 @@ module exu(
 
     tri alu_sel = (~need_fl) & (is_alu | is_alui);
     tri branch_sel = (~need_fl) & (is_jal | is_jalr | is_branch);
-    tri ldst_sel = (~need_fl) & (is_load | is_store);
+    tri ldst_sel = (~need_fl) & (is_load | is_store | is_amo);
     tri misc_sel = (~need_fl) & (is_lui | is_auipc);
     tri sys_sel = (~need_fl) & (is_mem | is_sys);
 
@@ -60,6 +65,7 @@ module exu(
             OPCODE_BRANCH: ex_req_rdy = branch_done;
             OPCODE_LOAD: ex_req_rdy = ldst_done;
             OPCODE_STORE: ex_req_rdy = ldst_done;
+            OPCODE_AMO: ex_req_rdy = ldst_done;
             OPCODE_ALUI: ex_req_rdy = 1'b1;
             OPCODE_ALU: ex_req_rdy = 1'b1;
             OPCODE_MISC_MEM: ex_req_rdy = 1'b1;
@@ -137,7 +143,11 @@ module exu(
         .rst_n        (rst_n),
         .sel          (sys_sel),
         .inst         (ex_req_slv.pkt.inst),
-        .gpr_mst      (gpr_src_if_arr[SYS_CHN_IDX])
+        .gpr_mst      (gpr_src_if_arr[SYS_CHN_IDX]),
+        .csr_read_req_mst  (exu_csr_read_req_mst),
+        .csr_read_rsp_slv  (csr_exu_read_rsp_slv),
+        .csr_write_req_mst (exu_csr_write_req_mst),
+        .csr_write_rsp_slv (csr_exu_write_rsp_slv)
     );
 
 endmodule

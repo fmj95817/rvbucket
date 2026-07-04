@@ -18,6 +18,7 @@ typedef enum logic [6:0] {
     OPCODE_STORE = 7'b0100011,
     OPCODE_ALUI = 7'b0010011,
     OPCODE_ALU = 7'b0110011,
+    OPCODE_AMO = 7'b0101111,
     OPCODE_MISC_MEM = 7'b0001111,
     OPCODE_SYSTEM = 7'b1110011
 } rv32g_opcode_t;
@@ -52,6 +53,8 @@ typedef enum logic [2:0] {
     ALU_FUNCT3_OR = 3'b110,
     ALU_FUNCT3_AND = 3'b111
 } rv32g_alu_funct3_t;
+
+localparam logic [6:0] ALU_FUNCT7_M = 7'b0000001;
 
 typedef enum logic [2:0] {
     LOAD_FUNCT3_LB = 3'b000,
