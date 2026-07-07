@@ -17,6 +17,7 @@
 #include "itf/trap_csr_write_req_if.h"
 #include "itf/csr_trap_write_rsp_if.h"
 #include "itf/csr_mmu_state_if.h"
+#include "itf/csr_lsu_state_if.h"
 #include "itf/csr_trap_state_if.h"
 
 typedef struct csr {
@@ -33,6 +34,7 @@ typedef struct csr {
     itf_t *trap_csr_write_req_in;
     itf_t *csr_trap_write_rsp_out;
     itf_t *csr_mmu_state_out;
+    itf_t *csr_lsu_state_out;
     itf_t *csr_trap_state_out;
 
     const core_timer_if_t *core_timer_i;
@@ -46,6 +48,7 @@ typedef struct csr {
     const trap_csr_write_req_if_t *trap_write_req_i;
     csr_trap_write_rsp_if_t *trap_write_rsp_o;
     csr_mmu_state_if_t *mmu_state_o;
+    csr_lsu_state_if_t *lsu_state_o;
     csr_trap_state_if_t *trap_state_o;
 
     rv32g_csr_t regs;

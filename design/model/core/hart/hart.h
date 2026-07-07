@@ -9,6 +9,7 @@
 #include "exu/exu.h"
 #include "csr.h"
 #include "hbi.h"
+#include "lsu.h"
 #include "mmu.h"
 #include "trap.h"
 #include "l1.h"
@@ -38,6 +39,7 @@ typedef struct hart {
     ifu_t ifu;
     exu_t exu;
     csr_t csr;
+    lsu_t lsu;
     hbi_t hbi;
     mmu_t mmu;
     l1_t l1i;
@@ -50,8 +52,10 @@ typedef struct hart {
     itf_t fl_req_itf;
     itf_t fch_req_itf;
     itf_t fch_rsp_itf;
-    itf_t ldst_req_itf;
-    itf_t ldst_rsp_itf;
+    itf_t exu_lsu_ldst_req_itf;
+    itf_t exu_lsu_ldst_rsp_itf;
+    itf_t lsu_hbi_ldst_req_itf;
+    itf_t lsu_hbi_ldst_rsp_itf;
     BTI_IF_DECL(va_i_);
     BTI_IF_DECL(va_d_);
     BTI_IF_DECL(pa_i_);
@@ -72,6 +76,7 @@ typedef struct hart {
     itf_t exu_state_sig_itf;
     itf_t trap_exu_ctrl_sig_itf;
     itf_t csr_mmu_state_sig_itf;
+    itf_t csr_lsu_state_sig_itf;
     itf_t csr_trap_state_sig_itf;
     itf_t trap_csr_write_req_sig_itf;
     itf_t csr_trap_write_rsp_sig_itf;

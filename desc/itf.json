@@ -116,6 +116,13 @@
             ]
         },
 
+        "csr_lsu_state": {
+            "type": "none",
+            "payloads": [
+                { "name": "satp", "width": 32 }
+            ]
+        },
+
         "csr_trap_state": {
             "type": "none",
             "payloads": [

@@ -11,6 +11,9 @@ static void csr_publish_state(csr_t *csr)
     csr->mmu_state_o->mstatus = csr->regs.mstatus.raw;
     itf_signal_write_notify(csr->csr_mmu_state_out);
 
+    csr->lsu_state_o->satp = csr->regs.satp.raw;
+    itf_signal_write_notify(csr->csr_lsu_state_out);
+
     csr->trap_state_o->mstatus = csr->regs.mstatus.raw;
     csr->trap_state_o->mip = csr->regs.mip.raw;
     csr->trap_state_o->mie = csr->regs.mie.raw;
@@ -188,6 +191,7 @@ void csr_construct(csr_t *csr, const char *parent, const char *name)
     csr->trap_write_req_i = itf_signal_get_src_and_chk(csr->trap_csr_write_req_in);
     csr->trap_write_rsp_o = itf_signal_get_src_and_chk(csr->csr_trap_write_rsp_out);
     csr->mmu_state_o = itf_signal_get_src_and_chk(csr->csr_mmu_state_out);
+    csr->lsu_state_o = itf_signal_get_src_and_chk(csr->csr_lsu_state_out);
     csr->trap_state_o = itf_signal_get_src_and_chk(csr->csr_trap_state_out);
 
     itf_signal_set_wcb(csr->exu_csr_read_req_in, &csr_read_cb, csr);
