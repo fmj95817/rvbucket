@@ -167,7 +167,7 @@ function run_sw_cases {
         return
     fi
 
-    for case_dir in "${ROOT}"/cases/*/; do
+    for case_dir in "${ROOT}"/cases/bare/*/; do
         [[ -d "${case_dir}" ]] || continue
 
         local name="$(basename "${case_dir}")"

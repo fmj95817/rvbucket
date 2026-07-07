@@ -16,6 +16,8 @@ fi
 SDK_DIR="./sdk"
 CRT_DIR="${SDK_DIR}/crt"
 DRIVERS_DIR="${SDK_DIR}/drivers"
+BARE_CASES_DIR="./cases/bare"
+USER_CASES_DIR="./cases/user"
 
 CROSS_PREFIX="riscv32-unknown-elf"
 CROSS_CC="${CROSS_PREFIX}-gcc"
@@ -33,6 +35,10 @@ OPEN_SBI_DIR="./thirdparty/opensbi"
 LINUX_DIR="./thirdparty/linux"
 BUSYBOX_DIR="./thirdparty/busybox"
 LINUX_CROSS_PREFIX="riscv32-unknown-linux-gnu"
+LINUX_CC="${LINUX_CROSS_PREFIX}-gcc"
+LINUX_USER_CFLAGS=(-Wall -O2 -static)
+LINUX_BUILD_DIR="./build/sw/linux"
+LINUX_USER_BIN_DIR="${LINUX_BUILD_DIR}/bin"
 LINUX_KERNEL_LOAD="0x40000000"
 LINUX_INITRD_LOAD="0x45000000"
 LINUX_DTB_LOAD="0x44f00000"
@@ -141,7 +147,8 @@ function build_linux_rootfs {
             CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
             clean
         rm -rf "${BUSYBOX_DIR}/rootfs"
-        rm "${initrd}"
+        rm -f "${initrd}"
+        clean_linux_user_tests
         return
     fi
 
@@ -161,6 +168,8 @@ function build_linux_rootfs {
         install
     mkdir -p ${BUSYBOX_DIR}/rootfs/{bin,sbin,etc,proc,sys,usr/bin,usr/sbin}
     cp -a "${BUSYBOX_DIR}/_install"/* "${BUSYBOX_DIR}/rootfs/"
+    build_user_tests
+    cp -a "${LINUX_USER_BIN_DIR}"/* "${BUSYBOX_DIR}/rootfs/bin/"
 
     echo "#!/bin/sh" > "${BUSYBOX_DIR}/rootfs/init"
     echo "mount -t proc none /proc" >> "${BUSYBOX_DIR}/rootfs/init"
@@ -174,6 +183,39 @@ function build_linux_rootfs {
     cd -
 }
 
+function build_user_tests {
+    rm -rf "${LINUX_USER_BIN_DIR}"
+    mkdir -p "${LINUX_USER_BIN_DIR}"
+
+    local case_dirs=($(find "${USER_CASES_DIR}" -mindepth 1 -maxdepth 1 -type d | sort))
+    local count=0
+    for case_dir in "${case_dirs[@]}"; do
+        local case_name="$(basename "${case_dir}")"
+        local out="${LINUX_USER_BIN_DIR}/${case_name}"
+        local scripts=($(find "${case_dir}" -maxdepth 1 -name '*.sh' -type f | sort))
+        local srcs=($(find "${case_dir}" -name '*.c' | sort))
+
+        if [ ${#scripts[@]} -ne 0 ]; then
+            echo "  packing user/${case_name} ..."
+            cp -a "${case_dir}"/* "${LINUX_USER_BIN_DIR}/"
+            chmod +x "${LINUX_USER_BIN_DIR}"/*.sh
+        elif [ ${#srcs[@]} -ne 0 ]; then
+            echo "  compiling user/${case_name} ..."
+            ${LINUX_CC} ${LINUX_USER_CFLAGS[@]} -o "${out}" "${srcs[@]}"
+        else
+            echo "build_sw: user case has no C sources or shell scripts: ${case_name}"
+            exit 1
+        fi
+        count=$((count + 1))
+    done
+    echo "build_sw: ${count} user case(s) built."
+}
+
+function clean_linux_user_tests {
+    rm -rf "${LINUX_USER_BIN_DIR}"
+    echo "build_sw: linux user tests clean done."
+}
+
 function build_linux_case {
     local clean="${1}"
 
@@ -185,8 +227,13 @@ function build_linux_case {
         return
     fi
 
+    if [ -n "${clean}" ]; then
+        echo "usage: $0 sw linux [clean]"
+        exit 1
+    fi
+
     local case_name="linux"
-    local output_dir="build/sw/${case_name}"
+    local output_dir="${LINUX_BUILD_DIR}"
 
     local fw_dir="${OPEN_SBI_DIR}/build/platform/rvbucket/firmware"
     local fw_bin="${fw_dir}/fw_jump.bin"
@@ -228,7 +275,7 @@ function build_sw_case {
 
     echo "  compiling sw/${case_name} ..."
 
-    local case_dir="cases/${case_name}"
+    local case_dir="${BARE_CASES_DIR}/${case_name}"
     local output_dir="build/sw/${case_name}"
 
     mkdir -p "${output_dir}"
@@ -411,7 +458,7 @@ function build_sw {
     fi
 
     local args=(-mindepth 1 -maxdepth 1 -type d)
-    local cases=("$(find cases ${args[@]})")
+    local cases=("$(find "${BARE_CASES_DIR}" ${args[@]})")
     local count=0
 
     for case_dir in ${cases[@]}; do
