@@ -7,9 +7,9 @@
 #include "dbg/env.h"
 #include "dbg/vcd.h"
 
-#define ITF_DUMP_DIR "itf_dump"
-#define ITF_DUMP_ENV "ITF_DUMP"
-#define ITF_DUMP_LIST "itf_dump_list.txt"
+#define ITF_TRACE_DIR "itf_trace"
+#define ITF_TRACE_ENV "ITF_TRACE"
+#define ITF_TRACE_LIST "itf_trace_list.txt"
 #define ITF_VCD_ENV "ITF_VCD"
 #define ITF_VCD_LIST "itf_vcd_list.txt"
 
@@ -18,7 +18,7 @@ typedef struct itf_name_list {
     char **names;
 } itf_name_list_t;
 
-static itf_name_list_t g_itf_dump_list;
+static itf_name_list_t g_itf_trace_list;
 static itf_name_list_t g_itf_vcd_list;
 
 static void itf_name_list_load(itf_name_list_t *list, const char *path)
@@ -51,10 +51,10 @@ static void itf_name_list_load(itf_name_list_t *list, const char *path)
         list->names = names;
 
         size_t name_size = strlen(start) + 1u;
-        char *dump_name = malloc(name_size);
-        DBG_CHECK(dump_name != NULL);
-        memcpy(dump_name, start, name_size);
-        list->names[list->name_num++] = dump_name;
+        char *trace_name = malloc(name_size);
+        DBG_CHECK(trace_name != NULL);
+        memcpy(trace_name, start, name_size);
+        list->names[list->name_num++] = trace_name;
     }
     fclose(fp);
 }
@@ -83,13 +83,13 @@ static void itf_name_list_free(itf_name_list_t *list)
 
 __attribute__((constructor)) static void itf_name_lists_init(void)
 {
-    itf_name_list_load(&g_itf_dump_list, ITF_DUMP_LIST);
+    itf_name_list_load(&g_itf_trace_list, ITF_TRACE_LIST);
     itf_name_list_load(&g_itf_vcd_list, ITF_VCD_LIST);
 }
 
 __attribute__((destructor)) static void itf_name_lists_free(void)
 {
-    itf_name_list_free(&g_itf_dump_list);
+    itf_name_list_free(&g_itf_trace_list);
     itf_name_list_free(&g_itf_vcd_list);
 }
 
@@ -121,14 +121,14 @@ static void signal_itf_construct(itf_t *itf, const char *name, const itf_conf_t 
     itf->ctx.signal.sig_wr_cb_args = NULL;
     itf->ctx.signal.write_vld = false;
 
-    if (itf->dump_enable) {
-        char dump_path[1024];
-        int ret = snprintf(dump_path, sizeof(dump_path), ITF_DUMP_DIR"/%s.%s_drv.txt",
+    if (itf->trace_enable) {
+        char trace_path[1024];
+        int ret = snprintf(trace_path, sizeof(trace_path), ITF_TRACE_DIR"/%s.%s_drv.txt",
             itf->hier_name, name);
-        DBG_CHECK(ret >= 0 && (u32)ret < sizeof(dump_path));
-        itf->ctx.signal.dump_fp = fopen(dump_path, "w");
+        DBG_CHECK(ret >= 0 && (u32)ret < sizeof(trace_path));
+        itf->ctx.signal.trace_fp = fopen(trace_path, "w");
     } else {
-        itf->ctx.signal.dump_fp = NULL;
+        itf->ctx.signal.trace_fp = NULL;
     }
 
     if (itf->vcd_enable && !conf->ext_sig_src) {
@@ -154,20 +154,20 @@ static void fifo_itf_construct(itf_t *itf, const char *name, const itf_conf_t *c
     itf->ctx.fifo.rptr = 0;
     itf->ctx.fifo.wptr = 0;
 
-    if (itf->dump_enable) {
+    if (itf->trace_enable) {
         char slv_path[1024];
         char mst_path[1024];
-        int slv_ret = snprintf(slv_path, sizeof(slv_path), ITF_DUMP_DIR"/%s.%s_slv.txt",
+        int slv_ret = snprintf(slv_path, sizeof(slv_path), ITF_TRACE_DIR"/%s.%s_slv.txt",
             itf->hier_name, name);
-        int mst_ret = snprintf(mst_path, sizeof(mst_path), ITF_DUMP_DIR"/%s.%s_mst.txt",
+        int mst_ret = snprintf(mst_path, sizeof(mst_path), ITF_TRACE_DIR"/%s.%s_mst.txt",
             itf->hier_name, name);
         DBG_CHECK(slv_ret >= 0 && (u32)slv_ret < sizeof(slv_path));
         DBG_CHECK(mst_ret >= 0 && (u32)mst_ret < sizeof(mst_path));
-        itf->ctx.fifo.dump_slv_fp = fopen(slv_path, "w");
-        itf->ctx.fifo.dump_mst_fp = fopen(mst_path, "w");
+        itf->ctx.fifo.trace_slv_fp = fopen(slv_path, "w");
+        itf->ctx.fifo.trace_mst_fp = fopen(mst_path, "w");
     } else {
-        itf->ctx.fifo.dump_slv_fp = NULL;
-        itf->ctx.fifo.dump_mst_fp = NULL;
+        itf->ctx.fifo.trace_slv_fp = NULL;
+        itf->ctx.fifo.trace_mst_fp = NULL;
     }
 
     if (itf->vcd_enable) {
@@ -222,20 +222,20 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
     itf->pkt_size = conf->pkt_size;
     DBG_CHECK(itf->mode <= ITF_MODE_MAX);
 
-    bool dump_list_enable = itf_name_list_match(&g_itf_dump_list,
+    bool trace_list_enable = itf_name_list_match(&g_itf_trace_list,
         conf->hier_name, name);
-    itf->dump_enable = dump_list_enable ||
-        (dbg_get_bool_env(ITF_DUMP_ENV) && (!conf->force_disable_dump));
+    itf->trace_enable = trace_list_enable ||
+        (dbg_get_bool_env(ITF_TRACE_ENV) && (!conf->force_disable_trace));
     bool vcd_list_enable = itf_name_list_match(&g_itf_vcd_list,
         conf->hier_name, name);
     itf->vcd_enable = vcd_list_enable || dbg_get_bool_env(ITF_VCD_ENV);
     itf->pkt2str = conf->pkt2str;
     itf->reg_vcd = conf->reg_vcd;
 
-    if (itf->dump_enable) {
+    if (itf->trace_enable) {
         struct stat s;
-        if (stat(ITF_DUMP_DIR, &s) || !S_ISDIR(s.st_mode)) {
-            mkdir(ITF_DUMP_DIR, 0755);
+        if (stat(ITF_TRACE_DIR, &s) || !S_ISDIR(s.st_mode)) {
+            mkdir(ITF_TRACE_DIR, 0755);
         }
     }
 
@@ -280,9 +280,9 @@ static void signal_itf_free(itf_t *itf)
         itf->ctx.signal.old_pkt_data = NULL;
     }
 
-    if (itf->ctx.signal.dump_fp) {
-        fclose(itf->ctx.signal.dump_fp);
-        itf->ctx.signal.dump_fp = NULL;
+    if (itf->ctx.signal.trace_fp) {
+        fclose(itf->ctx.signal.trace_fp);
+        itf->ctx.signal.trace_fp = NULL;
     }
 }
 
@@ -310,14 +310,14 @@ static void fifo_itf_free(itf_t *itf)
         itf->ctx.fifo.pkts_pend_mask = NULL;
     }
 
-    if (itf->ctx.fifo.dump_slv_fp) {
-        fclose(itf->ctx.fifo.dump_slv_fp);
-        itf->ctx.fifo.dump_slv_fp = NULL;
+    if (itf->ctx.fifo.trace_slv_fp) {
+        fclose(itf->ctx.fifo.trace_slv_fp);
+        itf->ctx.fifo.trace_slv_fp = NULL;
     }
 
-    if (itf->ctx.fifo.dump_mst_fp) {
-        fclose(itf->ctx.fifo.dump_mst_fp);
-        itf->ctx.fifo.dump_mst_fp = NULL;
+    if (itf->ctx.fifo.trace_mst_fp) {
+        fclose(itf->ctx.fifo.trace_mst_fp);
+        itf->ctx.fifo.trace_mst_fp = NULL;
     }
 }
 
@@ -369,12 +369,12 @@ static void fifo_itf_write(itf_t *itf, const void *pkt)
     itf->ctx.fifo.pkt_num++;
     itf->ctx.fifo.wptr = (itf->ctx.fifo.wptr + 1) % itf->ctx.fifo.fifo_depth;
 
-    if (itf->dump_enable) {
-        if (itf->ctx.fifo.dump_mst_fp) {
+    if (itf->trace_enable) {
+        if (itf->ctx.fifo.trace_mst_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->ctx.fifo.dump_mst_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.fifo.dump_mst_fp);
+            fprintf(itf->ctx.fifo.trace_mst_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.trace_mst_fp);
         }
     }
 }
@@ -413,12 +413,12 @@ static void fifo_itf_read(itf_t *itf, void *pkt)
     itf->ctx.fifo.pkt_num--;
     itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
 
-    if (itf->dump_enable) {
-        if (itf->ctx.fifo.dump_slv_fp) {
+    if (itf->trace_enable) {
+        if (itf->ctx.fifo.trace_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->ctx.fifo.dump_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.fifo.dump_slv_fp);
+            fprintf(itf->ctx.fifo.trace_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.trace_slv_fp);
         }
     }
 }
@@ -439,14 +439,14 @@ static void signal_itf_dbg_clock(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
 
-    if (itf->dump_enable && itf->ctx.signal.dump_fp != NULL) {
+    if (itf->trace_enable && itf->ctx.signal.trace_fp != NULL) {
         void *old = itf->ctx.signal.old_pkt_data;
         void *cur = itf->ctx.signal.shared_pkt_data;
         if (memcmp(cur, old, itf->pkt_size) != 0) {
             char pkt_str[1024];
             itf->pkt2str(cur, pkt_str);
-            fprintf(itf->ctx.signal.dump_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.signal.dump_fp);
+            fprintf(itf->ctx.signal.trace_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.signal.trace_fp);
             memcpy(old, cur, itf->pkt_size);
         }
     }
@@ -541,12 +541,12 @@ void itf_fifo_pop_front(itf_t *itf)
         itf->ctx.fifo.read_cycle = *itf->cycle;
     }
 
-    if (itf->dump_enable) {
-        if (itf->ctx.fifo.dump_slv_fp) {
+    if (itf->trace_enable) {
+        if (itf->ctx.fifo.trace_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), pkt_str);
-            fprintf(itf->ctx.fifo.dump_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.fifo.dump_slv_fp);
+            fprintf(itf->ctx.fifo.trace_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.trace_slv_fp);
         }
     }
 

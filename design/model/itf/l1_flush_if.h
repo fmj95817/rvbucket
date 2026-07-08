@@ -14,7 +14,7 @@
         .pkt_size = sizeof(l1_flush_if_t), \
         .pkt2str = &l1_flush_if_to_str, \
         .reg_vcd = &l1_flush_if_reg_vcd, \
-        .force_disable_dump = false, \
+        .force_disable_trace = false, \
         .fifo_depth = depth \
     }; \
     itf_construct(&module->itf, #itf, &conf); \

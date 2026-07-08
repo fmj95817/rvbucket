@@ -6,7 +6,7 @@
 #include "base/def.h"
 #include "dbg/vcd.h"
 
-#define CSR_EXU_WRITE_RSP_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
+#define CSR_EXU_WRITE_RSP_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) do { \
     itf_conf_t conf = { \
         .cycle = module->mod.cycle, \
         .hier_name = module->mod.hier_name, \
@@ -14,7 +14,7 @@
         .pkt_size = sizeof(csr_exu_write_rsp_if_t), \
         .pkt2str = &csr_exu_write_rsp_if_to_str, \
         .reg_vcd = &csr_exu_write_rsp_if_reg_vcd, \
-        .force_disable_dump = dis_dump, \
+        .force_disable_trace = dis_trace, \
         .ext_sig_src = ext_src \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
@@ -28,7 +28,7 @@
         .pkt_size = sizeof(csr_exu_write_rsp_if_t), \
         .pkt2str = &csr_exu_write_rsp_if_to_str, \
         .reg_vcd = &csr_exu_write_rsp_if_reg_vcd, \
-        .force_disable_dump = false, \
+        .force_disable_trace = false, \
         .fifo_depth = depth \
     }; \
     itf_construct(&module->itf, #itf, &conf); \

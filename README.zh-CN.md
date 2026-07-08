@@ -28,10 +28,10 @@
 - **L1缓存**: 可配置组相联L1指令/数据缓存，支持bypass模式。
 - **陷阱处理**: 机器态/监管态陷阱、中断、委托机制。
 - **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、GTimer、ACLINT、PLIC。
-- **C模型**: 精确到时钟周期的仿真，支持VCD波形和接口事务dump。
+- **C模型**: 精确到时钟周期的仿真，支持VCD波形和接口事务trace。
 - **双UI**: Web UI Dashboard（xterm.js终端 + GPIO面板）和 Terminal UI（vim风格命令模式）。
 - **RTL实现**: SystemVerilog实现，接口由 `itfgen.py` 自动生成，支持VCS/Verilator/FPGA。
-- **单元测试框架**: 模块化UT框架，彩色输出，计分板，接口dump验证。
+- **单元测试框架**: 模块化UT框架，彩色输出，计分板，接口trace验证。
 - **Linux支持**: UART控制台、sysfs GPIO接口。
 - **回归套件**: `run.sh` 全量SW用例 + UT回归，支持单用例运行。
 

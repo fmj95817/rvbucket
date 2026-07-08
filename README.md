@@ -28,10 +28,10 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 - **L1 Cache**: Configurable set-associative L1 I-Cache and D-Cache with bypass support.
 - **Trap Handling**: Machine/Supervisor mode traps, interrupts, delegations.
 - **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, GTimer, ACLINT, PLIC.
-- **C-Model**: Cycle-accurate simulation with VCD waveform dumps and interface transaction dumps.
+- **C-Model**: Cycle-accurate simulation with VCD waveform dumps and interface transaction traces.
 - **Dual UI**: Web UI Dashboard (xterm.js terminal + GPIO panel + reset) and Terminal UI (vim-style cmd mode).
 - **RTL**: SystemVerilog implementation with auto-generated interfaces (`itfgen.py`), supports VCS/Verilator/FPGA.
-- **Unit Test Framework**: Modular UT framework with scoreboard, colored output, and interface dump verification.
+- **Unit Test Framework**: Modular UT framework with scoreboard, colored output, and interface trace verification.
 - **Linux Support**: UART console, sysfs GPIO interface.
 - **Regression Suite**: `run.sh` automates full SW case + UT regression with single-case mode.
 

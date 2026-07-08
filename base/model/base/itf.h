@@ -23,7 +23,7 @@ typedef struct itf_conf {
     u32 pkt_size;
     pkt2str_t pkt2str;
     pkt_reg_vcd_t reg_vcd;
-    bool force_disable_dump;
+    bool force_disable_trace;
     bool ext_sig_src;
     u32 fifo_depth;
 } itf_conf_t;
@@ -36,7 +36,7 @@ typedef struct signal_itf_ctx {
     void *sig_wr_cb_args;
     bool write_vld;
     u64 write_cycle;
-    FILE *dump_fp;
+    FILE *trace_fp;
 } signal_itf_ctx_t;
 
 typedef struct fifo_itf_ctx {
@@ -46,8 +46,8 @@ typedef struct fifo_itf_ctx {
     u32 rptr;
     u32 wptr;
 
-    FILE *dump_slv_fp;
-    FILE *dump_mst_fp;
+    FILE *trace_slv_fp;
+    FILE *trace_mst_fp;
 
     bool *pkts_pend_mask;
     bool read_vld;
@@ -65,7 +65,7 @@ typedef struct itf {
     itf_mode_t mode;
     u32 pkt_size;
 
-    bool dump_enable;
+    bool trace_enable;
     pkt2str_t pkt2str;
     bool vcd_enable;
     pkt_reg_vcd_t reg_vcd;
