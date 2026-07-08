@@ -11,7 +11,8 @@ module csr(
     trap_csr_write_req_if_t.slv     trap_csr_write_req_slv,
     csr_trap_write_rsp_if_t.mst     csr_trap_write_rsp_mst,
     csr_trap_state_if_t.mst         csr_trap_state_mst,
-    csr_mmu_state_if_t.mst          csr_mmu_state_mst
+    csr_mmu_state_if_t.mst          csr_mmu_state_mst,
+    csr_lsu_state_if_t.mst          csr_lsu_state_mst
 );
     logic [31:0] csr_stvec;
     logic [31:0] csr_scounteren;
@@ -2226,4 +2227,5 @@ module csr(
     assign csr_trap_state_mst.pkt.sepc = csr_sepc;
     assign csr_mmu_state_mst.pkt.satp = csr_satp;
     assign csr_mmu_state_mst.pkt.mstatus = csr_mstatus;
+    assign csr_lsu_state_mst.pkt.satp = csr_satp;
 endmodule
