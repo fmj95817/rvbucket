@@ -100,14 +100,17 @@ static void tb_mock_bti_slave(axi2bti_tb_t *tb)
     tb->mock_req_count++;
     tb->mock_last_addr = req.addr;
     tb->mock_last_data = req.data;
-    tb->mock_last_write = (req.cmd == BTI_REQ_CMD_WRITE);
+    bool is_read = req.cmd == BTI_REQ_CMD_READ;
+    bool is_write = req.cmd == BTI_REQ_CMD_WRITE;
+    tb->mock_last_write = is_write;
     tb->mock_last_size = req.size;
 
-    bool ok = (tb->mock_err_on_req == 0) || (tb->mock_req_count != tb->mock_err_on_req);
+    bool ok = (is_read || is_write) &&
+        ((tb->mock_err_on_req == 0) || (tb->mock_req_count != tb->mock_err_on_req));
 
     bti_rsp_if_t rsp = {
         .trans_id = req.trans_id,
-        .data = (req.cmd == BTI_REQ_CMD_READ) ? (req.addr + tb->mock_rd_data_off) : 0,
+        .data = is_read ? (req.addr + tb->mock_rd_data_off) : 0,
         .ok = ok
     };
     itf_write(&tb->bti_rsp_itf, &rsp);

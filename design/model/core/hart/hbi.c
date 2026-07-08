@@ -61,7 +61,23 @@ static void hbi_proc_d_req(hbi_t *hbi)
 
     bti_req_if_t bti_req = {};
     bti_req.trans_id = LDST_TRANS_ID;
-    bti_req.cmd = ldst_req.st ? BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
+    switch (ldst_req.cmo) {
+    case LDST_REQ_CMO_NONE:
+        bti_req.cmd = ldst_req.st ? BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
+        break;
+    case LDST_REQ_CMO_INVAL:
+        bti_req.cmd = BTI_REQ_CMD_CBO_INVAL;
+        break;
+    case LDST_REQ_CMO_CLEAN:
+        bti_req.cmd = BTI_REQ_CMD_CBO_CLEAN;
+        break;
+    case LDST_REQ_CMO_FLUSH:
+        bti_req.cmd = BTI_REQ_CMD_CBO_FLUSH;
+        break;
+    default:
+        DBG_CHECK(0);
+        return;
+    }
     bti_req.addr = ldst_req.addr;
     bti_req.size = (bti_req_size_t)ldst_req.size;
     bti_req.data = ldst_req.data;

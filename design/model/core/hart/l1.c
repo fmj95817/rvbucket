@@ -5,6 +5,7 @@
 #include "dbg/chk.h"
 #include "dbg/pcm.h"
 #include "dbg/vcd.h"
+#include "spec/core/cache.h"
 
 #define L1_WORD_SIZE 4u
 #define L1_WORD_NUM (L1_LINE_SIZE / L1_WORD_SIZE)
@@ -22,6 +23,40 @@ static u32 l1_line_addr(const l1_t *l1, u32 tag, u32 set)
 static u32 l1_req_line_addr(u32 addr)
 {
     return addr & ~(L1_LINE_SIZE - 1u);
+}
+
+static bool l1_req_is_cbo(bti_req_cmd_t cmd)
+{
+    return cmd == BTI_REQ_CMD_CBO_INVAL ||
+           cmd == BTI_REQ_CMD_CBO_CLEAN ||
+           cmd == BTI_REQ_CMD_CBO_FLUSH;
+}
+
+static bool l1_cbo_cleans(bti_req_cmd_t cmd)
+{
+    return cmd == BTI_REQ_CMD_CBO_CLEAN ||
+           cmd == BTI_REQ_CMD_CBO_FLUSH;
+}
+
+static bool l1_cbo_invalidates(bti_req_cmd_t cmd)
+{
+    return cmd == BTI_REQ_CMD_CBO_INVAL ||
+           cmd == BTI_REQ_CMD_CBO_FLUSH;
+}
+
+static u32 l1_cbo_axi_user(bti_req_cmd_t cmd)
+{
+    switch (cmd) {
+    case BTI_REQ_CMD_CBO_INVAL:
+        return AXI4_USER_CMO_INVAL;
+    case BTI_REQ_CMD_CBO_CLEAN:
+        return AXI4_USER_CMO_CLEAN;
+    case BTI_REQ_CMD_CBO_FLUSH:
+        return AXI4_USER_CMO_FLUSH;
+    default:
+        DBG_CHECK(0);
+        return 0;
+    }
 }
 
 static u32 l1_req_set(const l1_t *l1, u32 addr)
@@ -217,6 +252,34 @@ static void l1_start_cached_fragment(l1_t *l1)
     }
 }
 
+static void l1_start_cbo(l1_t *l1)
+{
+    DBG_CHECK(l1_req_is_cbo(l1->req.cmd));
+    l1_setup_fragment(l1);
+
+    u32 way;
+    u32 line_idx;
+    bool hit = l1_lookup(l1, &way, &line_idx);
+    if (hit) {
+        l1->req_way = way;
+        l1->req_line_idx = line_idx;
+
+        if (l1_cbo_cleans(l1->req.cmd) && l1->dirtys[line_idx]) {
+            l1->beat_idx = 0;
+            l1->wb_line_addr = l1->req_line_addr;
+            l1->state = L1_STATE_CMO_L1_WB_AW;
+            return;
+        }
+
+        if (l1_cbo_invalidates(l1->req.cmd)) {
+            l1->valids[line_idx] = false;
+            l1->dirtys[line_idx] = false;
+        }
+    }
+
+    l1->state = L1_STATE_CMO_L2_AR;
+}
+
 static bool l1_try_bypass_req(l1_t *l1)
 {
     if (l1->req.cmd == BTI_REQ_CMD_READ) {
@@ -238,6 +301,15 @@ static bool l1_try_bypass_req(l1_t *l1)
         };
         itf_write(l1->axi4_ar_mst, &ar);
         l1->state = L1_STATE_BYPASS_RD_WAIT;
+        return true;
+    }
+
+    if (l1->req.cmd != BTI_REQ_CMD_WRITE) {
+        if (itf_fifo_full(l1->bti_rsp_mst)) {
+            return false;
+        }
+        itf_fifo_pop_front(l1->bti_req_slv);
+        l1_send_rsp(l1, false, 0);
         return true;
     }
 
@@ -288,6 +360,12 @@ static void l1_proc_idle(l1_t *l1)
     l1->req_byte_idx = 0;
     l1->req_data = 0;
 
+    if (l1_req_is_cbo(l1->req.cmd)) {
+        itf_fifo_pop_front(l1->bti_req_slv);
+        l1_start_cbo(l1);
+        return;
+    }
+
     if (l1_bypass(l1, l1->req.addr)) {
         (*l1->perf_bypass)++;
         (void)l1_try_bypass_req(l1);
@@ -303,8 +381,122 @@ static void l1_proc_idle(l1_t *l1)
         return;
     }
 
+    if (l1->req.cmd != BTI_REQ_CMD_READ && l1->req.cmd != BTI_REQ_CMD_WRITE) {
+        if (itf_fifo_full(l1->bti_rsp_mst)) {
+            return;
+        }
+        itf_fifo_pop_front(l1->bti_req_slv);
+        l1_send_rsp(l1, false, 0);
+        return;
+    }
+
     itf_fifo_pop_front(l1->bti_req_slv);
     l1_start_cached_fragment(l1);
+}
+
+static void l1_proc_cmo_l1_wb_aw(l1_t *l1)
+{
+    if (l1->state != L1_STATE_CMO_L1_WB_AW || itf_fifo_full(l1->axi4_aw_mst)) {
+        return;
+    }
+
+    axi4_aw_if_t aw = {
+        .id = 0,
+        .addr = l1->wb_line_addr,
+        .len = L1_WORD_NUM - 1u,
+        .size = AXI4_AW_SIZE_B4,
+        .burst = AXI4_AW_BURST_INCR,
+        .lock = false,
+        .cache = 0xf,
+        .prot = 0,
+        .qos = 0,
+        .user = 0
+    };
+    itf_write(l1->axi4_aw_mst, &aw);
+    l1->beat_idx = 0;
+    l1->state = L1_STATE_CMO_L1_WB_W;
+}
+
+static void l1_proc_cmo_l1_wb_w(l1_t *l1)
+{
+    if (l1->state != L1_STATE_CMO_L1_WB_W || itf_fifo_full(l1->axi4_w_mst)) {
+        return;
+    }
+
+    axi4_w_if_t w = {
+        .data = l1->data[l1->req_line_idx * L1_WORD_NUM + l1->beat_idx],
+        .strb = 0xf,
+        .last = l1->beat_idx == (L1_WORD_NUM - 1u)
+    };
+    itf_write(l1->axi4_w_mst, &w);
+    if (w.last) {
+        l1->state = L1_STATE_CMO_L1_WB_B;
+    } else {
+        l1->beat_idx++;
+    }
+}
+
+static void l1_proc_cmo_l1_wb_b(l1_t *l1)
+{
+    if (l1->state != L1_STATE_CMO_L1_WB_B || itf_fifo_empty(l1->axi4_b_slv)) {
+        return;
+    }
+
+    axi4_b_if_t b;
+    itf_fifo_get_front(l1->axi4_b_slv, &b);
+    if (b.resp != AXI4_B_RESP_OKAY) {
+        if (itf_fifo_full(l1->bti_rsp_mst)) {
+            return;
+        }
+        itf_fifo_pop_front(l1->axi4_b_slv);
+        l1_send_rsp(l1, false, 0);
+        l1->state = L1_STATE_IDLE;
+        return;
+    }
+
+    itf_fifo_pop_front(l1->axi4_b_slv);
+    l1->dirtys[l1->req_line_idx] = false;
+    if (l1_cbo_invalidates(l1->req.cmd)) {
+        l1->valids[l1->req_line_idx] = false;
+    }
+    l1->state = L1_STATE_CMO_L2_AR;
+}
+
+static void l1_proc_cmo_l2_ar(l1_t *l1)
+{
+    if (l1->state != L1_STATE_CMO_L2_AR || itf_fifo_full(l1->axi4_ar_mst)) {
+        return;
+    }
+
+    axi4_ar_if_t ar = {
+        .id = 0,
+        .addr = l1->req_line_addr,
+        .len = 0,
+        .size = AXI4_AR_SIZE_B4,
+        .burst = AXI4_AR_BURST_FIXED,
+        .lock = false,
+        .cache = 0xf,
+        .prot = 0,
+        .qos = 0,
+        .user = l1_cbo_axi_user(l1->req.cmd)
+    };
+    itf_write(l1->axi4_ar_mst, &ar);
+    l1->state = L1_STATE_CMO_L2_R;
+}
+
+static void l1_proc_cmo_l2_r(l1_t *l1)
+{
+    if (l1->state != L1_STATE_CMO_L2_R ||
+        itf_fifo_empty(l1->axi4_r_slv) ||
+        itf_fifo_full(l1->bti_rsp_mst)) {
+        return;
+    }
+
+    axi4_r_if_t r;
+    itf_read(l1->axi4_r_slv, &r);
+    DBG_CHECK(r.last);
+    l1_send_rsp(l1, r.resp == AXI4_R_RESP_OKAY, 0);
+    l1->state = L1_STATE_IDLE;
 }
 
 static void l1_proc_flush(l1_t *l1)
@@ -481,9 +673,12 @@ static void l1_proc_serve_miss(l1_t *l1)
                     (u8)(l1->req.data >> (req_byte * 8u)));
                 l1->dirtys[l1->req_line_idx] = true;
             }
-        } else {
+        } else if (l1->req.cmd == BTI_REQ_CMD_READ) {
             l1->req_data |= (u32)l1_read_byte(l1, l1->req_line_idx, line_offset + i)
                 << (req_byte * 8u);
+        } else {
+            l1->op_ok = false;
+            break;
         }
     }
     l1->req_byte_idx += byte_num;
@@ -496,7 +691,7 @@ static void l1_proc_serve_miss(l1_t *l1)
     if (itf_fifo_full(l1->bti_rsp_mst)) {
         return;
     }
-    l1_send_rsp(l1, true, l1->req.cmd == BTI_REQ_CMD_READ ? l1->req_data : 0);
+    l1_send_rsp(l1, l1->op_ok, l1->req.cmd == BTI_REQ_CMD_READ ? l1->req_data : 0);
     l1->state = L1_STATE_IDLE;
 }
 
@@ -508,9 +703,14 @@ void l1_clock(l1_t *l1)
     }
     l1_proc_bypass_rd_wait(l1);
     l1_proc_bypass_wr_wait(l1);
+    l1_proc_cmo_l2_r(l1);
     l1_proc_wb_b(l1);
     l1_proc_refill_r(l1);
     l1_proc_serve_miss(l1);
+    l1_proc_cmo_l1_wb_b(l1);
+    l1_proc_cmo_l1_wb_w(l1);
+    l1_proc_cmo_l1_wb_aw(l1);
+    l1_proc_cmo_l2_ar(l1);
     l1_proc_wb_w(l1);
     l1_proc_wb_aw(l1);
     l1_proc_refill_ar(l1);

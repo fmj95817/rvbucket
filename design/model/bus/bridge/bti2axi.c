@@ -58,7 +58,7 @@ static void bti2axi_proc_req(bti2axi_t *br)
         itf_write(br->axi4_ar_mst, &ar);
         br->bti_trans_id = bti_req.trans_id;
         br->state = BTI2AXI4_STATE_RD_PENDING;
-    } else {
+    } else if (bti_req.cmd == BTI_REQ_CMD_WRITE) {
         if (itf_fifo_full(br->axi4_aw_mst) || itf_fifo_full(br->axi4_w_mst)) {
             return;
         }
@@ -86,6 +86,17 @@ static void bti2axi_proc_req(bti2axi_t *br)
         itf_write(br->axi4_w_mst, &w);
         br->bti_trans_id = bti_req.trans_id;
         br->state = BTI2AXI4_STATE_WR_PENDING;
+    } else {
+        if (itf_fifo_full(br->bti_rsp_mst)) {
+            return;
+        }
+        itf_fifo_pop_front(br->bti_req_slv);
+        bti_rsp_if_t rsp = {
+            .trans_id = bti_req.trans_id,
+            .data = 0,
+            .ok = false
+        };
+        itf_write(br->bti_rsp_mst, &rsp);
     }
 }
 

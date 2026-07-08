@@ -30,6 +30,11 @@ typedef enum l1_state {
     L1_STATE_REFILL_AR,
     L1_STATE_REFILL_R,
     L1_STATE_SERVE_MISS,
+    L1_STATE_CMO_L1_WB_AW,
+    L1_STATE_CMO_L1_WB_W,
+    L1_STATE_CMO_L1_WB_B,
+    L1_STATE_CMO_L2_AR,
+    L1_STATE_CMO_L2_R,
 } l1_state_t;
 
 typedef struct l1 {

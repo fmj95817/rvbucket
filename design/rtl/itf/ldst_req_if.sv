@@ -7,6 +7,7 @@ interface ldst_req_if_t;
     struct packed {
         logic [31:0] addr;
         logic st;
+        ldst_req_cmo_t cmo;
         ldst_req_size_t size;
         logic [31:0] data;
         logic [3:0] strobe;

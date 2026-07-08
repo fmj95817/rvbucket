@@ -270,7 +270,9 @@ void amo_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
     };
 
     bool send_ldst_req;
-    ldst_req_if_t ldst_req;
+    ldst_req_if_t ldst_req = {
+        .cmo = LDST_REQ_CMO_NONE
+    };
     u32 funct375 = (ex_req->inst.r.funct3 << 5) | (ex_req->inst.r.funct7 >> 2);
     amo_ex_req_handler_t handler = handlers[funct375];
     bool biu_rdy = !itf_fifo_full(exu->ldst_req_mst);
@@ -309,7 +311,9 @@ void amo_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
     };
 
     bool send_st_req;
-    ldst_req_if_t st_req;
+    ldst_req_if_t st_req = {
+        .cmo = LDST_REQ_CMO_NONE
+    };
     amo_biu_rsp_handler_t handler = handlers[exu->amo_funct375];
     bool biu_rdy = !itf_fifo_full(exu->ldst_req_mst);
 

@@ -31,6 +31,7 @@ static ldst_req_if_t lsu_make_byte_req(const lsu_t *lsu, u32 byte_idx)
     ldst_req_if_t req = {
         .addr = lsu->req.addr + byte_idx,
         .st = lsu->req.st,
+        .cmo = LDST_REQ_CMO_NONE,
         .size = LDST_REQ_SIZE_B1,
         .data = byte,
         .strobe = lsu->req.st ? 0x1 : 0x0
@@ -65,7 +66,8 @@ static void lsu_accept_req(lsu_t *lsu)
     itf_read(lsu->exu_ldst_req_slv, &req);
 
     lsu->busy = true;
-    lsu->split = lsu_translation_enabled(lsu) && lsu_cross_page(&req);
+    lsu->split = req.cmo == LDST_REQ_CMO_NONE &&
+        lsu_translation_enabled(lsu) && lsu_cross_page(&req);
     lsu->req = req;
     lsu->byte_num = lsu_req_byte_num(req.size);
     lsu->req_byte_idx = 0;

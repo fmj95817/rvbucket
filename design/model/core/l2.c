@@ -4,6 +4,7 @@
 #include "dbg/chk.h"
 #include "dbg/pcm.h"
 #include "dbg/vcd.h"
+#include "spec/core/cache.h"
 
 #define L2_WORD_SIZE 4u
 #define L2_WORD_NUM (L2_LINE_SIZE / L2_WORD_SIZE)
@@ -295,11 +296,90 @@ static void l2_proc_mem_bypass_b(l2_t *l2)
     l2->mem_state = L2_MEM_STATE_IDLE;
 }
 
+static bool l2_cmo_cleans(u32 user)
+{
+    return axi4_user_cmo_cleans(user);
+}
+
+static bool l2_cmo_invalidates(u32 user)
+{
+    return axi4_user_cmo_invalidates(user);
+}
+
+static void l2_finish_cmo(l2_t *l2, bool ok)
+{
+    l2_port_t *port = &l2->ports[l2->mem_owner];
+    if (ok && l2->cmo_hit) {
+        l2->dirtys[l2->cmo_line_idx] = false;
+        if (l2_cmo_invalidates(l2->cmo_user)) {
+            l2->valids[l2->cmo_line_idx] = false;
+        }
+    }
+    port->state = L2_PORT_STATE_CMO_RSP;
+    l2->mem_state = L2_MEM_STATE_IDLE;
+}
+
+static void l2_proc_mem_cmo_wb_aw(l2_t *l2)
+{
+    if (l2->mem_state != L2_MEM_STATE_CMO_WB_AW ||
+        itf_fifo_full(l2->mem_axi4_aw_mst)) {
+        return;
+    }
+
+    axi4_aw_if_t aw = {
+        .id = 0,
+        .addr = l2->wb_line_addr,
+        .len = L2_WORD_NUM - 1u,
+        .size = AXI4_AW_SIZE_B4,
+        .burst = AXI4_AW_BURST_INCR,
+        .cache = 0xf
+    };
+    itf_write(l2->mem_axi4_aw_mst, &aw);
+    l2->mem_beat_idx = 0;
+    l2->mem_state = L2_MEM_STATE_CMO_WB_W;
+}
+
+static void l2_proc_mem_cmo_wb_w(l2_t *l2)
+{
+    if (l2->mem_state != L2_MEM_STATE_CMO_WB_W ||
+        itf_fifo_full(l2->mem_axi4_w_mst)) {
+        return;
+    }
+
+    axi4_w_if_t w = {
+        .data = l2->data[l2->cmo_line_idx * L2_WORD_NUM + l2->mem_beat_idx],
+        .strb = 0xf,
+        .last = l2->mem_beat_idx == L2_WORD_NUM - 1u
+    };
+    itf_write(l2->mem_axi4_w_mst, &w);
+    if (w.last) {
+        l2->mem_state = L2_MEM_STATE_CMO_WB_B;
+    } else {
+        l2->mem_beat_idx++;
+    }
+}
+
+static void l2_proc_mem_cmo_wb_b(l2_t *l2)
+{
+    if (l2->mem_state != L2_MEM_STATE_CMO_WB_B ||
+        itf_fifo_empty(l2->mem_axi4_b_slv)) {
+        return;
+    }
+
+    axi4_b_if_t b;
+    itf_read(l2->mem_axi4_b_slv, &b);
+    DBG_CHECK(b.resp == AXI4_B_RESP_OKAY);
+    l2_finish_cmo(l2, true);
+}
+
 static void l2_proc_mem(l2_t *l2)
 {
     l2_proc_mem_bypass_r(l2);
     l2_proc_mem_bypass_w(l2);
     l2_proc_mem_bypass_b(l2);
+    l2_proc_mem_cmo_wb_b(l2);
+    l2_proc_mem_cmo_wb_w(l2);
+    l2_proc_mem_cmo_wb_aw(l2);
     l2_proc_mem_wb_b(l2);
     l2_proc_mem_refill_r(l2);
     l2_proc_mem_wb_w(l2);
@@ -333,6 +413,47 @@ static bool l2_start_bypass_write(l2_t *l2, u32 port_idx, const axi4_aw_if_t *aw
     return true;
 }
 
+static bool l2_start_cmo(l2_t *l2, u32 port_idx, const axi4_ar_if_t *ar)
+{
+    if (l2->mem_state != L2_MEM_STATE_IDLE) {
+        return false;
+    }
+
+    DBG_CHECK(ar->len == 0);
+    DBG_CHECK(ar->size == AXI4_AR_SIZE_B4);
+
+    l2_port_t *port = &l2->ports[port_idx];
+    port->ar = *ar;
+    port->addr = ar->addr & ~(L2_LINE_SIZE - 1u);
+    port->beat_idx = 0;
+
+    l2->mem_owner = port_idx;
+    l2->cmo_user = ar->user;
+    l2->cmo_hit = l2_lookup(l2, port->addr, &l2->cmo_line_idx);
+
+    if (!l2->cmo_hit) {
+        port->state = L2_PORT_STATE_CMO_RSP;
+        return true;
+    }
+
+    if (l2_cmo_cleans(ar->user) && l2->dirtys[l2->cmo_line_idx]) {
+        u32 set = l2_req_set(l2, port->addr);
+        l2->wb_line_addr = l2_line_addr(l2, l2->tags[l2->cmo_line_idx], set);
+        l2->mem_beat_idx = 0;
+        port->state = L2_PORT_STATE_CMO_WAIT;
+        l2->mem_state = L2_MEM_STATE_CMO_WB_AW;
+        (*l2->perf_writeback)++;
+        return true;
+    }
+
+    l2->dirtys[l2->cmo_line_idx] = false;
+    if (l2_cmo_invalidates(ar->user)) {
+        l2->valids[l2->cmo_line_idx] = false;
+    }
+    port->state = L2_PORT_STATE_CMO_RSP;
+    return true;
+}
+
 static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
 {
     l2_port_t *port = &l2->ports[port_idx];
@@ -363,7 +484,11 @@ static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
     }
     axi4_ar_if_t ar;
     itf_fifo_get_front(ar_slv, &ar);
-    if (ar.cache == 0) {
+    if (axi4_user_is_cmo(ar.user)) {
+        if (!l2_start_cmo(l2, port_idx, &ar)) {
+            return;
+        }
+    } else if (ar.cache == 0) {
         if (!l2_start_bypass_read(l2, port_idx, &ar)) {
             return;
         }
@@ -377,6 +502,24 @@ static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
         port->state = L2_PORT_STATE_READ;
     }
     itf_fifo_pop_front(ar_slv);
+}
+
+static void l2_proc_port_cmo_rsp(l2_t *l2, u32 port_idx)
+{
+    l2_port_t *port = &l2->ports[port_idx];
+    itf_t *r_mst = l2_port_r_mst(l2, port_idx);
+    if (itf_fifo_full(r_mst)) {
+        return;
+    }
+
+    axi4_r_if_t r = {
+        .id = port->ar.id,
+        .data = 0,
+        .resp = AXI4_R_RESP_OKAY,
+        .last = true
+    };
+    itf_write(r_mst, &r);
+    port->state = L2_PORT_STATE_IDLE;
 }
 
 static void l2_proc_port_read(l2_t *l2, u32 port_idx)
@@ -466,6 +609,8 @@ static void l2_proc_port(l2_t *l2, u32 port_idx)
         l2_proc_port_read(l2, port_idx);
     } else if (port->state == L2_PORT_STATE_WRITE) {
         l2_proc_port_write(l2, port_idx);
+    } else if (port->state == L2_PORT_STATE_CMO_RSP) {
+        l2_proc_port_cmo_rsp(l2, port_idx);
     }
 }
 

@@ -25,6 +25,22 @@ typedef enum mmu_access {
     MMU_ACCESS_STORE,
 } mmu_access_t;
 
+static mmu_access_t mmu_data_access_from_cmd(bti_req_cmd_t cmd)
+{
+    switch (cmd) {
+    case BTI_REQ_CMD_READ:
+    case BTI_REQ_CMD_CBO_INVAL:
+    case BTI_REQ_CMD_CBO_CLEAN:
+    case BTI_REQ_CMD_CBO_FLUSH:
+        return MMU_ACCESS_LOAD;
+    case BTI_REQ_CMD_WRITE:
+        return MMU_ACCESS_STORE;
+    default:
+        DBG_CHECK(0);
+        return MMU_ACCESS_LOAD;
+    }
+}
+
 static bool mmu_pte_permits(const mmu_t *mmu, u32 pte);
 static bool mmu_pte_ad_ok(const mmu_t *mmu, u32 pte);
 
@@ -49,7 +65,7 @@ void mmu_construct(mmu_t *mmu, const char *parent, const char *name, const mmu_c
     dbg_vcd_add_sig("busy", DBG_SIG_TYPE_REG, 1, &mmu->busy);
     dbg_vcd_add_sig("is_inst", DBG_SIG_TYPE_REG, 1, &mmu->is_inst);
     dbg_vcd_add_sig("req_addr", DBG_SIG_TYPE_REG, 32, &mmu->req.addr);
-    dbg_vcd_add_sig("req_cmd", DBG_SIG_TYPE_REG, 1, &mmu->req.cmd);
+    dbg_vcd_add_sig("req_cmd", DBG_SIG_TYPE_REG, 3, &mmu->req.cmd);
     dbg_vcd_add_sig("req_priv", DBG_SIG_TYPE_REG, 2, &mmu->req_priv);
     dbg_vcd_add_sig("req_sum", DBG_SIG_TYPE_REG, 1, &mmu->req_sum);
     dbg_vcd_add_sig("req_mxr", DBG_SIG_TYPE_REG, 1, &mmu->req_mxr);
@@ -137,7 +153,7 @@ static void mmu_raise_fault(mmu_t *mmu)
     hart_expt_cause_t cause;
     if (mmu->is_inst) {
         cause = HART_EXPT_CAUSE_INST_PAGE_FAULT;
-    } else if (mmu->req.cmd == BTI_REQ_CMD_WRITE) {
+    } else if (mmu_data_access_from_cmd(mmu->req.cmd) == MMU_ACCESS_STORE) {
         cause = HART_EXPT_CAUSE_STORE_AMO_PAGE_FAULT;
     } else {
         cause = HART_EXPT_CAUSE_LOAD_PAGE_FAULT;
@@ -174,7 +190,7 @@ static void mmu_send_pa_req(mmu_t *mmu, itf_t *pa_req_mst, const bti_req_if_t *r
 static void mmu_start_req(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
 {
     mmu_access_t access = is_inst ? MMU_ACCESS_INST :
-        (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
+        mmu_data_access_from_cmd(req->cmd);
 
     mmu->busy = true;
     mmu->is_inst = is_inst;
@@ -253,7 +269,7 @@ static bool mmu_tlb_lookup(mmu_t *mmu, bool is_inst, const bti_req_if_t *req)
     u32 num;
     mmu_tlb_entry_t *entries = mmu_tlb_entries(mmu, is_inst, &num);
     mmu_access_t access = is_inst ? MMU_ACCESS_INST :
-        (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
+        mmu_data_access_from_cmd(req->cmd);
     rv32g_priv_t req_priv = mmu_effective_priv(mmu, access);
     bool req_sum = mmu_mstatus(mmu).reg.sum;
     bool req_mxr = mmu_mstatus(mmu).reg.mxr;
@@ -348,8 +364,7 @@ static void mmu_accept_new_req(mmu_t *mmu)
         bti_req_if_t req;
         itf_read(mmu->va_d_bti_req_slv, &req);
 
-        mmu_access_t access = req.cmd == BTI_REQ_CMD_WRITE ?
-            MMU_ACCESS_STORE : MMU_ACCESS_LOAD;
+        mmu_access_t access = mmu_data_access_from_cmd(req.cmd);
         if (!mmu_translation_enabled(mmu, access)) {
             if (itf_fifo_full(mmu->pa_d_bti_req_mst)) {
                 return;
@@ -446,7 +461,7 @@ static bool mmu_pte_permits(const mmu_t *mmu, u32 pte)
     if (mmu->is_inst) {
         return (pte & PTE_X) != 0;
     }
-    if (mmu->req.cmd == BTI_REQ_CMD_WRITE) {
+    if (mmu_data_access_from_cmd(mmu->req.cmd) == MMU_ACCESS_STORE) {
         return (pte & PTE_W) != 0;
     }
 
@@ -458,7 +473,9 @@ static bool mmu_pte_ad_ok(const mmu_t *mmu, u32 pte)
     if ((pte & PTE_A) == 0) {
         return false;
     }
-    if (!mmu->is_inst && mmu->req.cmd == BTI_REQ_CMD_WRITE && (pte & PTE_D) == 0) {
+    if (!mmu->is_inst &&
+        mmu_data_access_from_cmd(mmu->req.cmd) == MMU_ACCESS_STORE &&
+        (pte & PTE_D) == 0) {
         return false;
     }
     return true;
