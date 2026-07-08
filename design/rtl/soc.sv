@@ -1,28 +1,18 @@
 `include "spec/core/isa.svh"
-`include "core/boot.svh"
-
 module soc(
-    input logic  clk,
-    input logic  rst_n,
-    output logic uart_tx,
-    input logic  uart_rx
+    input logic         clk,
+    input logic         rst_n,
+    output logic        uart_tx,
+    input logic         uart_rx,
+    input logic [23:0]  gpio_in,
+    output logic [23:0] gpio_out,
+    output logic [23:0] gpio_oe
 );
-    localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
     localparam FLASH_AW = 25;
-    localparam ITCM_AW = 19;
-    localparam DTCM_AW = 18;
     localparam DDR_AW = 28;
 
-    bti_req_if_t boot_rom_req();
-    bti_rsp_if_t boot_rom_rsp();
-    bti_req_if_t itcm_i_req();
-    bti_rsp_if_t itcm_i_rsp();
-    bti_req_if_t itcm_d_req();
-    bti_rsp_if_t itcm_d_rsp();
-    bti_req_if_t dtcm_req();
-    bti_rsp_if_t dtcm_rsp();
-    bti_req_if_t cfg_req();
-    bti_rsp_if_t cfg_rsp();
+    apb_req_if_t peri_req();
+    apb_rsp_if_t peri_rsp();
     bti_req_if_t flash_bti_req();
     bti_rsp_if_t flash_bti_rsp();
     axi4_aw_if_t mm_aw();
@@ -36,20 +26,22 @@ module soc(
     axi4_ar_if_t mm_gst_ar[2]();
     axi4_r_if_t mm_gst_r[2]();
     ext_irq_if_t uart_irq();
-
-    tri boot_rom_cs;
-    tri [`BOOT_ROM_WORD_AW-1:0] boot_rom_addr;
-    tri [`RV_XLEN-1:0] boot_rom_data;
+    ext_irq_if_t gpio_irq();
+    ext_irq_if_t gtimer_irq();
 
     rv32g u_rv32g(
-        clk, rst_n,
-        boot_rom_req, boot_rom_rsp,
-        itcm_i_req, itcm_i_rsp,
-        itcm_d_req, itcm_d_rsp,
-        dtcm_req, dtcm_rsp,
-        cfg_req, cfg_rsp,
-        mm_aw, mm_w, mm_b, mm_ar, mm_r,
-        uart_irq
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .peri_apb_req_mst (peri_req),
+        .peri_apb_rsp_slv (peri_rsp),
+        .mm_axi4_aw_mst   (mm_aw),
+        .mm_axi4_w_mst    (mm_w),
+        .mm_axi4_b_slv    (mm_b),
+        .mm_axi4_ar_mst   (mm_ar),
+        .mm_axi4_r_slv    (mm_r),
+        .uart_irq_slv     (uart_irq),
+        .gpio_irq_slv     (gpio_irq),
+        .gtimer_irq_slv   (gtimer_irq)
     );
 
     axi_demux #(
@@ -64,44 +56,42 @@ module soc(
         .GST_SIZE ('{32'h40000000, 32'h02000000})
 `endif
     ) u_mm_axi_demux(
-        clk, rst_n,
-        mm_aw, mm_w, mm_b, mm_ar, mm_r,
-        mm_gst_aw, mm_gst_w, mm_gst_b, mm_gst_ar, mm_gst_r
+        .clk                (clk),
+        .rst_n              (rst_n),
+        .host_axi4_aw_slv   (mm_aw),
+        .host_axi4_w_slv    (mm_w),
+        .host_axi4_b_mst    (mm_b),
+        .host_axi4_ar_slv   (mm_ar),
+        .host_axi4_r_mst    (mm_r),
+        .gst_axi4_aw_msts   (mm_gst_aw),
+        .gst_axi4_w_msts    (mm_gst_w),
+        .gst_axi4_b_slvs    (mm_gst_b),
+        .gst_axi4_ar_msts   (mm_gst_ar),
+        .gst_axi4_r_slvs    (mm_gst_r)
     );
 
-    axi_sram #(
-        .SRAM_AW (DDR_AW)
+    axi_ddr #(
+        .DDR_AW (DDR_AW)
     ) u_ddr(
-        clk, rst_n,
-        mm_gst_aw[0], mm_gst_w[0], mm_gst_b[0],
-        mm_gst_ar[0], mm_gst_r[0]
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .axi4_aw_slv  (mm_gst_aw[0]),
+        .axi4_w_slv   (mm_gst_w[0]),
+        .axi4_b_mst   (mm_gst_b[0]),
+        .axi4_ar_slv  (mm_gst_ar[0]),
+        .axi4_r_mst   (mm_gst_r[0])
     );
 
     axi2bti u_flash_axi2bti(
-        clk, rst_n,
-        mm_gst_aw[1], mm_gst_w[1], mm_gst_b[1], mm_gst_ar[1], mm_gst_r[1],
-        flash_bti_req, flash_bti_rsp
-    );
-
-    boot_rom u_boot_rom(
-        .clk  (clk),
-        .cs   (boot_rom_cs),
-        .addr (boot_rom_addr),
-        .data (boot_rom_data)
-    );
-
-    bti_to_rom #(
-        .BTI_AW (`RV_AW),
-        .BTI_DW (`RV_XLEN),
-        .ROM_AW (BOOT_ROM_AW)
-    ) u_bti_to_boot_rom(
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .bti_req_slv (boot_rom_req),
-        .bti_rsp_mst (boot_rom_rsp),
-        .cs          (boot_rom_cs),
-        .addr        (boot_rom_addr),
-        .data        (boot_rom_data)
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .axi4_aw_slv  (mm_gst_aw[1]),
+        .axi4_w_slv   (mm_gst_w[1]),
+        .axi4_b_mst   (mm_gst_b[1]),
+        .axi4_ar_slv  (mm_gst_ar[1]),
+        .axi4_r_mst   (mm_gst_r[1]),
+        .bti_req_mst  (flash_bti_req),
+        .bti_rsp_slv  (flash_bti_rsp)
     );
 
     bti_rom #(
@@ -115,37 +105,18 @@ module soc(
         .bti_rsp_mst (flash_bti_rsp)
     );
 
-    bti_dp_sram #(
-        .BTI_AW  (`RV_AW),
-        .BTI_DW  (`RV_XLEN),
-        .SRAM_AW (ITCM_AW)
-    ) u_itcm(
-        .clk           (clk),
-        .rst_n         (rst_n),
-        .bti_r_req_slv (itcm_i_req),
-        .bti_r_rsp_mst (itcm_i_rsp),
-        .bti_w_req_slv (itcm_d_req),
-        .bti_w_rsp_mst (itcm_d_rsp)
-    );
-
-    bti_sram #(
-        .BTI_AW  (`RV_AW),
-        .BTI_DW  (`RV_XLEN),
-        .SRAM_AW (DTCM_AW)
-    ) u_dtcm(
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .bti_req_slv (dtcm_req),
-        .bti_rsp_mst (dtcm_rsp)
-    );
-
     peri u_peri(
         .clk         (clk),
         .rst_n       (rst_n),
-        .bti_req_slv (cfg_req),
-        .bti_rsp_mst (cfg_rsp),
+        .apb_req_slv (peri_req),
+        .apb_rsp_mst (peri_rsp),
         .uart_tx     (uart_tx),
         .uart_rx     (uart_rx),
-        .uart_irq_mst(uart_irq)
+        .gpio_in     (gpio_in),
+        .gpio_out    (gpio_out),
+        .gpio_oe     (gpio_oe),
+        .uart_irq_mst(uart_irq),
+        .gpio_irq_mst(gpio_irq),
+        .gtimer_irq_mst(gtimer_irq)
     );
 endmodule

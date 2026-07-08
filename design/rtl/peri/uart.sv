@@ -1,5 +1,3 @@
-`include "itf/bti_req_if.svh"
-
 module uart_tx #(
     parameter BCW = 16
 )(
@@ -143,16 +141,14 @@ module uart_rx #(
 
 endmodule
 
-module bti_to_uart #(
-    parameter BTI_AW = 32,
-    parameter BTI_DW = 32,
+module apb_to_uart #(
     parameter UART_AW = 4,
     parameter UART_BCW = 16
 )(
     input  logic                clk,
     input  logic                rst_n,
-    bti_req_if_t.slv            bti_req_slv,
-    bti_rsp_if_t.mst            bti_rsp_mst,
+    apb_req_if_t.slv            apb_req_slv,
+    apb_rsp_if_t.mst            apb_rsp_mst,
     output logic [UART_BCW-1:0] bc,
     output logic                tx_ch_vld,
     output logic [7:0]          tx_ch,
@@ -177,12 +173,11 @@ module bti_to_uart #(
             reg_bc <= reg_bc_nxt;
     end
 
-    tri bti_req_hsk = bti_req_slv.vld & bti_req_slv.rdy;
-    tri bti_rsp_hsk = bti_rsp_mst.vld & bti_rsp_mst.rdy;
-    tri [REG_AW-1:0] reg_addr = bti_req_slv.pkt.addr[REG_AW+1:2];
-    tri [BTI_DW-1:0] reg_data = bti_req_slv.pkt.data;
-    tri bti_req_cmd = bti_req_slv.pkt.cmd;
-    tri bti_wr = (bti_req_cmd == BTI_REQ_CMD_WRITE) && bti_req_hsk;
+    logic apb_req_hsk;
+    tri apb_req = apb_req_slv.psel & apb_req_slv.penable;
+    tri [REG_AW-1:0] reg_addr = apb_req_slv.pkt.paddr[REG_AW+1:2];
+    tri [31:0] reg_data = apb_req_slv.pkt.pwdata;
+    tri apb_wr = apb_req_slv.pkt.pwrite & apb_req_hsk;
 
     logic reg_rx_set;
     logic [7:0] reg_rx;
@@ -196,27 +191,27 @@ module bti_to_uart #(
             if (reg_rx_set)
                 reg_rx <= reg_rx_nxt;
             if (rx_ch_vld) rx_valid <= 1'b1;
-            else if (bti_req_hsk && bti_req_slv.pkt.cmd == BTI_REQ_CMD_READ &&
+            else if (apb_req_hsk && !apb_req_slv.pkt.pwrite &&
                 reg_addr == REG_RX_ADDR) rx_valid <= 1'b0;
         end
     end
 
-    logic bti_req_cmd_pend;
-    tri bti_rd_pend = (bti_req_cmd_pend == BTI_REQ_CMD_READ);
+    logic apb_req_write_pend;
+    tri apb_rd_pend = !apb_req_write_pend;
 
     always_ff @(posedge clk) begin
-        if (bti_req_hsk)
-            bti_req_cmd_pend <= bti_req_slv.pkt.cmd;
+        if (apb_req_hsk)
+            apb_req_write_pend <= apb_req_slv.pkt.pwrite;
     end
 
-    logic [BTI_DW-1:0] reg_rdata;
+    logic [31:0] reg_rdata;
     always_ff @(posedge clk) begin
-        if (bti_req_hsk) begin
+        if (apb_req_hsk) begin
             case (reg_addr)
-                REG_BC_ADDR: reg_rdata <= { {(BTI_DW-UART_BCW){1'b0}}, reg_bc };
-                REG_RX_ADDR: reg_rdata <= { {(BTI_DW-8){1'b0}}, reg_rx };
-                REG_STS_ADDR: reg_rdata <= {{(BTI_DW-1){1'b0}}, rx_valid};
-                default: reg_rdata <= {BTI_DW{1'b0}};
+                REG_BC_ADDR: reg_rdata <= { {(32-UART_BCW){1'b0}}, reg_bc };
+                REG_RX_ADDR: reg_rdata <= { 24'b0, reg_rx };
+                REG_STS_ADDR: reg_rdata <= { 31'b0, rx_valid };
+                default: reg_rdata <= 32'b0;
             endcase
         end
     end
@@ -234,6 +229,8 @@ module bti_to_uart #(
     tri at_s_tx = (state == S_TX);
     tri at_s_tx_done = (state == S_TX_DONE);
 
+    assign apb_req_hsk = apb_req & at_s_idle;
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             state <= S_IDLE;
@@ -244,9 +241,9 @@ module bti_to_uart #(
     always_comb begin
         case (state)
             S_IDLE: begin
-                if (bti_req_slv.vld)
+                if (apb_req)
                     if (reg_addr == REG_TX_ADDR &&
-                        bti_req_cmd == BTI_REQ_CMD_WRITE)
+                        apb_req_slv.pkt.pwrite)
                         state_nxt = S_TX;
                     else
                         state_nxt = S_REG_RW;
@@ -254,10 +251,7 @@ module bti_to_uart #(
                     state_nxt = S_IDLE;
             end
             S_REG_RW: begin
-                if (bti_rsp_mst.rdy)
-                    state_nxt = S_IDLE;
-                else
-                    state_nxt = S_REG_RW;
+                state_nxt = S_IDLE;
             end
             S_TX: begin
                 if (tx_done)
@@ -266,44 +260,38 @@ module bti_to_uart #(
                     state_nxt = S_TX;
             end
             S_TX_DONE: begin
-                if (bti_rsp_mst.rdy)
-                    state_nxt = S_IDLE;
-                else
-                    state_nxt = S_TX_DONE;
+                state_nxt = S_IDLE;
             end
             default: state_nxt = 2'bxx;
         endcase
     end
 
-    assign reg_bc_set = bti_wr && (reg_addr == REG_BC_ADDR);
+    assign reg_bc_set = apb_wr && (reg_addr == REG_BC_ADDR);
     assign reg_bc_nxt = reg_data[UART_BCW-1:0];
 
     assign reg_rx_set = rx_ch_vld;
     assign reg_rx_nxt = rx_ch;
 
-    assign tx_ch_vld = bti_wr && (reg_addr == REG_TX_ADDR);
+    assign tx_ch_vld = apb_wr && (reg_addr == REG_TX_ADDR);
     assign tx_ch = reg_data[7:0];
 
-    assign bti_req_slv.rdy = at_s_idle;
-    assign bti_rsp_mst.vld = at_s_reg_rw | at_s_tx_done;
-    assign bti_rsp_mst.pkt.ok = 1'b1;
-    assign bti_rsp_mst.pkt.data = bti_rd_pend ? reg_rdata : {BTI_DW{1'b0}};
+    assign apb_rsp_mst.pready = at_s_reg_rw | at_s_tx_done;
+    assign apb_rsp_mst.pkt.pslverr = 1'b0;
+    assign apb_rsp_mst.pkt.prdata = apb_rd_pend ? reg_rdata : 32'b0;
 
     assign bc = reg_bc;
     assign irq = rx_valid;
 
 endmodule
 
-module bti_uart #(
-    parameter BTI_AW = 32,
-    parameter BTI_DW = 32,
+module apb_uart #(
     parameter UART_AW = 4,
     parameter UART_BCW = 16
 )(
     input  logic        clk,
     input  logic        rst_n,
-    bti_req_if_t.slv    bti_req_slv,
-    bti_rsp_if_t.mst    bti_rsp_mst,
+    apb_req_if_t.slv    apb_req_slv,
+    apb_rsp_if_t.mst    apb_rsp_mst,
     input  logic        rx,
     output logic        tx,
     output logic        irq
@@ -315,15 +303,13 @@ module bti_uart #(
     logic                rx_ch_vld;
     logic [7:0]          rx_ch;
 
-    bti_to_uart #(
-        .BTI_AW      (BTI_AW),
-        .BTI_DW      (BTI_DW),
+    apb_to_uart #(
         .UART_AW     (UART_AW)
-    ) u_bti_to_uart(
+    ) u_apb_to_uart(
         .clk         (clk),
         .rst_n       (rst_n),
-        .bti_req_slv (bti_req_slv),
-        .bti_rsp_mst (bti_rsp_mst),
+        .apb_req_slv (apb_req_slv),
+        .apb_rsp_mst (apb_rsp_mst),
         .bc          (bc),
         .tx_ch_vld   (tx_ch_vld),
         .tx_ch       (tx_ch),

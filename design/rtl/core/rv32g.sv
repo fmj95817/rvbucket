@@ -1,23 +1,24 @@
+`include "spec/core/isa.svh"
+`include "boot.svh"
+
 module rv32g(
     input logic       clk,
     input logic       rst_n,
-    bti_req_if_t.mst  boot_rom_bti_req_mst,
-    bti_rsp_if_t.slv  boot_rom_bti_rsp_slv,
-    bti_req_if_t.mst  itcm_i_bti_req_mst,
-    bti_rsp_if_t.slv  itcm_i_bti_rsp_slv,
-    bti_req_if_t.mst  itcm_d_bti_req_mst,
-    bti_rsp_if_t.slv  itcm_d_bti_rsp_slv,
-    bti_req_if_t.mst  dtcm_bti_req_mst,
-    bti_rsp_if_t.slv  dtcm_bti_rsp_slv,
-    bti_req_if_t.mst  cfg_bti_req_mst,
-    bti_rsp_if_t.slv  cfg_bti_rsp_slv,
+    apb_req_if_t.mst  peri_apb_req_mst,
+    apb_rsp_if_t.slv  peri_apb_rsp_slv,
     axi4_aw_if_t.mst  mm_axi4_aw_mst,
     axi4_w_if_t.mst   mm_axi4_w_mst,
     axi4_b_if_t.slv   mm_axi4_b_slv,
     axi4_ar_if_t.mst  mm_axi4_ar_mst,
     axi4_r_if_t.slv   mm_axi4_r_slv,
-    ext_irq_if_t.slv  uart_irq_slv
+    ext_irq_if_t.slv  uart_irq_slv,
+    ext_irq_if_t.slv  gpio_irq_slv,
+    ext_irq_if_t.slv  gtimer_irq_slv
 );
+    localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
+    localparam ITCM_AW = 19;
+    localparam DTCM_AW = 18;
+
     axi4_aw_if_t hart_i_aw();
     axi4_w_if_t hart_i_w();
     axi4_b_if_t hart_i_b();
@@ -38,50 +39,193 @@ module rv32g(
     axi4_b_if_t mm_d_b();
     axi4_ar_if_t mm_d_ar();
     axi4_r_if_t mm_d_r();
-    bti_req_if_t cfg_req();
-    bti_rsp_if_t cfg_rsp();
-    bti_req_if_t aclint_req();
-    bti_rsp_if_t aclint_rsp();
-    bti_req_if_t plic_req();
-    bti_rsp_if_t plic_rsp();
+    apb_req_if_t cfg_req();
+    apb_rsp_if_t cfg_rsp();
+    apb_req_if_t cfg_gst_req[3]();
+    apb_rsp_if_t cfg_gst_rsp[3]();
+    apb_req_if_t aclint_req();
+    apb_rsp_if_t aclint_rsp();
+    apb_req_if_t plic_req();
+    apb_rsp_if_t plic_rsp();
+    bti_req_if_t boot_rom_req();
+    bti_rsp_if_t boot_rom_rsp();
+    bti_req_if_t itcm_i_req();
+    bti_rsp_if_t itcm_i_rsp();
+    bti_req_if_t itcm_d_req();
+    bti_rsp_if_t itcm_d_rsp();
+    bti_req_if_t dtcm_req();
+    bti_rsp_if_t dtcm_rsp();
     core_timer_if_t core_timer();
     core_m_irq_if_t core_m_irq();
     ext_irq_if_t ext_irq();
+    logic boot_rom_cs;
+    logic [`BOOT_ROM_WORD_AW-1:0] boot_rom_addr;
+    logic [`RV_XLEN-1:0] boot_rom_data;
 
     hart u_hart(
-        clk, rst_n,
-        hart_i_aw, hart_i_w, hart_i_b, hart_i_ar, hart_i_r,
-        hart_d_aw, hart_d_w, hart_d_b, hart_d_ar, hart_d_r,
-        core_timer, core_m_irq, ext_irq
+        .clk            (clk),
+        .rst_n          (rst_n),
+        .i_axi4_aw_mst  (hart_i_aw),
+        .i_axi4_w_mst   (hart_i_w),
+        .i_axi4_b_slv   (hart_i_b),
+        .i_axi4_ar_mst  (hart_i_ar),
+        .i_axi4_r_slv   (hart_i_r),
+        .d_axi4_aw_mst  (hart_d_aw),
+        .d_axi4_w_mst   (hart_d_w),
+        .d_axi4_b_slv   (hart_d_b),
+        .d_axi4_ar_mst  (hart_d_ar),
+        .d_axi4_r_slv   (hart_d_r),
+        .core_timer_slv (core_timer),
+        .core_m_irq_slv (core_m_irq),
+        .ext_irq_slv    (ext_irq)
     );
 
     cbi u_cbi(
-        clk, rst_n,
-        hart_i_aw, hart_i_w, hart_i_b, hart_i_ar, hart_i_r,
-        hart_d_aw, hart_d_w, hart_d_b, hart_d_ar, hart_d_r,
-        boot_rom_bti_req_mst, boot_rom_bti_rsp_slv,
-        itcm_i_bti_req_mst, itcm_i_bti_rsp_slv,
-        itcm_d_bti_req_mst, itcm_d_bti_rsp_slv,
-        dtcm_bti_req_mst, dtcm_bti_rsp_slv,
-        cfg_req, cfg_rsp,
-        mm_i_aw, mm_i_w, mm_i_b, mm_i_ar, mm_i_r,
-        mm_d_aw, mm_d_w, mm_d_b, mm_d_ar, mm_d_r
+        .clk                  (clk),
+        .rst_n                (rst_n),
+        .hart_i_axi4_aw_slv   (hart_i_aw),
+        .hart_i_axi4_w_slv    (hart_i_w),
+        .hart_i_axi4_b_mst    (hart_i_b),
+        .hart_i_axi4_ar_slv   (hart_i_ar),
+        .hart_i_axi4_r_mst    (hart_i_r),
+        .hart_d_axi4_aw_slv   (hart_d_aw),
+        .hart_d_axi4_w_slv    (hart_d_w),
+        .hart_d_axi4_b_mst    (hart_d_b),
+        .hart_d_axi4_ar_slv   (hart_d_ar),
+        .hart_d_axi4_r_mst    (hart_d_r),
+        .boot_rom_bti_req_mst (boot_rom_req),
+        .boot_rom_bti_rsp_slv (boot_rom_rsp),
+        .itcm_i_bti_req_mst   (itcm_i_req),
+        .itcm_i_bti_rsp_slv   (itcm_i_rsp),
+        .itcm_d_bti_req_mst   (itcm_d_req),
+        .itcm_d_bti_rsp_slv   (itcm_d_rsp),
+        .dtcm_bti_req_mst     (dtcm_req),
+        .dtcm_bti_rsp_slv     (dtcm_rsp),
+        .cfg_apb_req_mst      (cfg_req),
+        .cfg_apb_rsp_slv      (cfg_rsp),
+        .mm_i_axi4_aw_mst     (mm_i_aw),
+        .mm_i_axi4_w_mst      (mm_i_w),
+        .mm_i_axi4_b_slv      (mm_i_b),
+        .mm_i_axi4_ar_mst     (mm_i_ar),
+        .mm_i_axi4_r_slv      (mm_i_r),
+        .mm_d_axi4_aw_mst     (mm_d_aw),
+        .mm_d_axi4_w_mst      (mm_d_w),
+        .mm_d_axi4_b_slv      (mm_d_b),
+        .mm_d_axi4_ar_mst     (mm_d_ar),
+        .mm_d_axi4_r_slv      (mm_d_r)
     );
 
-    cfg_router u_cfg_router(
-        clk, rst_n, cfg_req, cfg_rsp,
-        cfg_bti_req_mst, cfg_bti_rsp_slv,
-        aclint_req, aclint_rsp, plic_req, plic_rsp
+    apb_demux #(
+        .GST_NUM  (3),
+        .GST_BASE ('{32'h30000000, 32'h31000000, 32'h31100000}),
+        .GST_SIZE ('{32'h01000000, 32'h00100000, 32'h00400000})
+    ) u_cfg_apb_demux(
+        .host_apb_req_slv  (cfg_req),
+        .host_apb_rsp_mst  (cfg_rsp),
+        .gst_apb_req_msts  (cfg_gst_req),
+        .gst_apb_rsp_slvs  (cfg_gst_rsp)
     );
 
-    aclint u_aclint(clk, rst_n, aclint_req, aclint_rsp, core_timer, core_m_irq);
-    plic u_plic(clk, rst_n, plic_req, plic_rsp, uart_irq_slv, ext_irq);
+    assign peri_apb_req_mst.psel = cfg_gst_req[0].psel;
+    assign peri_apb_req_mst.penable = cfg_gst_req[0].penable;
+    assign peri_apb_req_mst.pkt = cfg_gst_req[0].pkt;
+    assign cfg_gst_rsp[0].pready = peri_apb_rsp_slv.pready;
+    assign cfg_gst_rsp[0].pkt = peri_apb_rsp_slv.pkt;
+
+    assign aclint_req.psel = cfg_gst_req[1].psel;
+    assign aclint_req.penable = cfg_gst_req[1].penable;
+    assign aclint_req.pkt = cfg_gst_req[1].pkt;
+    assign cfg_gst_rsp[1].pready = aclint_rsp.pready;
+    assign cfg_gst_rsp[1].pkt = aclint_rsp.pkt;
+
+    assign plic_req.psel = cfg_gst_req[2].psel;
+    assign plic_req.penable = cfg_gst_req[2].penable;
+    assign plic_req.pkt = cfg_gst_req[2].pkt;
+    assign cfg_gst_rsp[2].pready = plic_rsp.pready;
+    assign cfg_gst_rsp[2].pkt = plic_rsp.pkt;
+
+    aclint u_aclint(
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .apb_req_slv      (aclint_req),
+        .apb_rsp_mst      (aclint_rsp),
+        .core_timer_mst   (core_timer),
+        .core_m_irq_mst   (core_m_irq)
+    );
+
+    plic u_plic(
+        .clk             (clk),
+        .rst_n           (rst_n),
+        .apb_req_slv     (plic_req),
+        .apb_rsp_mst     (plic_rsp),
+        .uart_irq_slv    (uart_irq_slv),
+        .gpio_irq_slv    (gpio_irq_slv),
+        .gtimer_irq_slv  (gtimer_irq_slv),
+        .core_irq_mst    (ext_irq)
+    );
+
+    boot_rom u_boot_rom(
+        .clk  (clk),
+        .cs   (boot_rom_cs),
+        .addr (boot_rom_addr),
+        .data (boot_rom_data)
+    );
+
+    bti_to_rom #(
+        .BTI_AW (`RV_AW),
+        .BTI_DW (`RV_XLEN),
+        .ROM_AW (BOOT_ROM_AW)
+    ) u_bti_to_boot_rom(
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (boot_rom_req),
+        .bti_rsp_mst (boot_rom_rsp),
+        .cs          (boot_rom_cs),
+        .addr        (boot_rom_addr),
+        .data        (boot_rom_data)
+    );
+
+    bti_dp_sram #(
+        .BTI_AW  (`RV_AW),
+        .BTI_DW  (`RV_XLEN),
+        .SRAM_AW (ITCM_AW)
+    ) u_itcm(
+        .clk           (clk),
+        .rst_n         (rst_n),
+        .bti_r_req_slv (itcm_i_req),
+        .bti_r_rsp_mst (itcm_i_rsp),
+        .bti_w_req_slv (itcm_d_req),
+        .bti_w_rsp_mst (itcm_d_rsp)
+    );
+
+    bti_sram #(
+        .BTI_AW  (`RV_AW),
+        .BTI_DW  (`RV_XLEN),
+        .SRAM_AW (DTCM_AW)
+    ) u_dtcm(
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (dtcm_req),
+        .bti_rsp_mst (dtcm_rsp)
+    );
 
     l2 u_l2(
-        clk, rst_n,
-        mm_i_aw, mm_i_w, mm_i_b, mm_i_ar, mm_i_r,
-        mm_d_aw, mm_d_w, mm_d_b, mm_d_ar, mm_d_r,
-        mm_axi4_aw_mst, mm_axi4_w_mst, mm_axi4_b_slv,
-        mm_axi4_ar_mst, mm_axi4_r_slv
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .i_axi4_aw_slv    (mm_i_aw),
+        .i_axi4_w_slv     (mm_i_w),
+        .i_axi4_b_mst     (mm_i_b),
+        .i_axi4_ar_slv    (mm_i_ar),
+        .i_axi4_r_mst     (mm_i_r),
+        .d_axi4_aw_slv    (mm_d_aw),
+        .d_axi4_w_slv     (mm_d_w),
+        .d_axi4_b_mst     (mm_d_b),
+        .d_axi4_ar_slv    (mm_d_ar),
+        .d_axi4_r_mst     (mm_d_r),
+        .mem_axi4_aw_mst  (mm_axi4_aw_mst),
+        .mem_axi4_w_mst   (mm_axi4_w_mst),
+        .mem_axi4_b_slv   (mm_axi4_b_slv),
+        .mem_axi4_ar_mst  (mm_axi4_ar_mst),
+        .mem_axi4_r_slv   (mm_axi4_r_slv)
     );
 endmodule

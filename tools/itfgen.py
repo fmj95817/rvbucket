@@ -156,6 +156,60 @@ def _rtl_field_width(p):
     return (p["width"], False)
 
 
+def _enum_width(enum_list):
+    max_val = max(enum_list.values())
+    return max(1, math.ceil(math.log2(max_val + 1)))
+
+
+def _rtl_trace_expr(itf_name, p):
+    name = p.get("rtl_alias", p["name"])
+    if "type" in p:
+        return "pkt.{}".format(name)
+    if "ext_type" in p:
+        return "pkt.{}.{}".format(name, p["raw"])
+    return "pkt.{}".format(name)
+
+
+def _rtl_trace_width(desc, p):
+    if "type" in p:
+        return _enum_width(desc["enums"][p["type"]])
+    return p["width"]
+
+
+def _rtl_trace_when(desc, itf_type, payloads, ctrl_sigs):
+    if itf_type == "vld-rdy":
+        return "vld && rdy"
+    if itf_type == "vld":
+        return "vld"
+    if itf_type == "none":
+        if "trace_when" in desc:
+            return desc["trace_when"]
+        if ctrl_sigs:
+            return "__itf_trace_ctrl_changed()"
+        if payloads:
+            return "__itf_trace_pkt_changed()"
+    if "trace_when" in desc:
+        raise Exception("trace_when is only supported for type=none interfaces")
+    return None
+
+
+def _rtl_trace_suffixes(desc, itf_type, ctrl_sigs):
+    if "trace_suffixes" in desc:
+        suffixes = desc["trace_suffixes"]
+        if len(suffixes) == 1:
+            return (suffixes[0], "")
+        if len(suffixes) == 2:
+            return (suffixes[0], suffixes[1])
+        raise Exception("trace_suffixes expects one or two suffixes")
+    if itf_type == "vld-rdy" or ctrl_sigs:
+        return ("mst", "slv")
+    return ("drv", "")
+
+
+def _rtl_ctrl_width(ctrl_sigs):
+    return sum(c["width"] for c in ctrl_sigs)
+
+
 def gen_rtl_itf(itf_name, desc):
     """Generate RTL .sv interface and .svh header for one interface."""
     if desc.get("model_only", False):
@@ -201,6 +255,8 @@ def gen_rtl_itf(itf_name, desc):
         for inc in inc_rtl:
             f.write("`include \"{}\"\n".format(inc))
             needs_blank = True
+        f.write("`include \"dbg/itf_trace.svh\"\n")
+        needs_blank = True
 
         f.write("{}interface {}_if_t;\n".format("\n" if needs_blank else "", itf_name))
 
@@ -208,6 +264,8 @@ def gen_rtl_itf(itf_name, desc):
         has_rdy  = itf_type == "vld-rdy"
         has_pkt  = len(payloads) > 0
         has_ctrl = len(ctrl_sigs) > 0
+        trace_needs_change = itf_type == "none"
+        trace_has_state = trace_needs_change and (has_pkt or has_ctrl)
 
         if has_vld:
             f.write("    logic vld;\n")
@@ -238,8 +296,88 @@ def gen_rtl_itf(itf_name, desc):
                         f.write("        logic [{}:0] {};\n".format(w - 1, name))
             f.write("    } pkt;\n")
 
-        # modports
         f.write("\n")
+        f.write("`ifdef RVB_ITF_TRACE_ENABLED\n")
+        if has_pkt and trace_has_state:
+            f.write("    logic [$bits(pkt)-1:0] __itf_trace_old_pkt;\n")
+            f.write("    bit __itf_trace_pkt_seen;\n")
+        if has_ctrl and trace_has_state:
+            ctrl_width = _rtl_ctrl_width(ctrl_sigs)
+            f.write("    localparam int __ITF_TRACE_CTRL_WIDTH = {};\n".format(ctrl_width))
+            f.write("    logic [__ITF_TRACE_CTRL_WIDTH-1:0] __itf_trace_old_ctrl;\n")
+            f.write("    bit __itf_trace_ctrl_seen;\n")
+
+        if trace_has_state:
+            f.write("\n")
+            f.write("    initial begin\n")
+            if has_pkt:
+                f.write("        __itf_trace_old_pkt = '0;\n")
+                f.write("        __itf_trace_pkt_seen = 1'b0;\n")
+            if has_ctrl:
+                f.write("        __itf_trace_old_ctrl = '0;\n")
+                f.write("        __itf_trace_ctrl_seen = 1'b0;\n")
+            f.write("    end\n")
+
+        if has_pkt and trace_has_state:
+            f.write("\n")
+            f.write("    function automatic bit __itf_trace_pkt_changed;\n")
+            f.write("        if (!__itf_trace_pkt_seen)\n")
+            f.write("            __itf_trace_pkt_changed = 1'b1;\n")
+            f.write("        else\n")
+            f.write("            __itf_trace_pkt_changed = __itf_trace_old_pkt !== $bits(pkt)'(pkt);\n")
+            f.write("    endfunction\n")
+
+        if has_ctrl and trace_has_state:
+            f.write("\n")
+            f.write("    function automatic logic [__ITF_TRACE_CTRL_WIDTH-1:0] __itf_trace_ctrl_pack;\n")
+            f.write("        __itf_trace_ctrl_pack = {")
+            f.write(", ".join(c["name"] for c in ctrl_sigs))
+            f.write("};\n")
+            f.write("    endfunction\n\n")
+            f.write("    function automatic bit __itf_trace_ctrl_changed;\n")
+            f.write("        if (!__itf_trace_ctrl_seen)\n")
+            f.write("            __itf_trace_ctrl_changed = 1'b0;\n")
+            f.write("        else\n")
+            f.write("            __itf_trace_ctrl_changed = __itf_trace_old_ctrl !==\n")
+            f.write("                __itf_trace_ctrl_pack();\n")
+            f.write("    endfunction\n")
+
+        if trace_has_state:
+            f.write("\n")
+            f.write("    task automatic __itf_trace_update_state;\n")
+            f.write("        begin\n")
+            if has_pkt:
+                f.write("            __itf_trace_old_pkt = $bits(pkt)'(pkt);\n")
+                f.write("            __itf_trace_pkt_seen = 1'b1;\n")
+            if has_ctrl:
+                f.write("            __itf_trace_old_ctrl = __itf_trace_ctrl_pack();\n")
+                f.write("            __itf_trace_ctrl_seen = 1'b1;\n")
+            f.write("        end\n")
+            f.write("    endtask\n")
+
+        f.write("\n")
+        f.write("    function automatic string __itf_trace_pkt_str;\n")
+        if has_pkt:
+            fmt_parts = []
+            args = []
+            for p in payloads:
+                width = _rtl_trace_width(desc, p)
+                fmt_parts.append("%0{}x".format(math.ceil(width / 4)))
+                args.append(_rtl_trace_expr(itf_name, p))
+            f.write("        __itf_trace_pkt_str = $sformatf(\n")
+            f.write("            \"{}\"".format(" ".join(fmt_parts)))
+            for idx, arg in enumerate(args):
+                suffix = "," if idx != len(args) - 1 else ""
+                if idx == 0:
+                    f.write(",\n")
+                f.write("            {}{}\n".format(arg, suffix))
+            f.write("        );\n")
+        else:
+            f.write("        __itf_trace_pkt_str = \"00000000\";\n")
+        f.write("    endfunction\n")
+        f.write("`endif\n")
+
+        # modports
         mst_outs = []
         mst_ins  = []
         slv_outs = []
@@ -276,6 +414,14 @@ def gen_rtl_itf(itf_name, desc):
             f.write("    modport mst ({});\n".format(mst_ports))
         if slv_ports:
             f.write("    modport slv ({});\n".format(slv_ports))
+
+        trace_when = _rtl_trace_when(desc, itf_type, payloads, ctrl_sigs)
+        if trace_when is not None:
+            suffix0, suffix1 = _rtl_trace_suffixes(desc, itf_type, ctrl_sigs)
+            macro = "RVB_ITF_TRACE_WHEN_UPDATE" if trace_has_state else "RVB_ITF_TRACE_WHEN"
+            f.write("\n")
+            f.write("    `{}(\"{}\", \"{}\", {})\n".format(
+                macro, suffix0, suffix1, trace_when))
 
         f.write("endinterface\n")
 

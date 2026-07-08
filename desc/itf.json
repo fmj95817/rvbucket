@@ -209,6 +209,7 @@
 
         "apb_req": {
             "type": "none",
+            "trace_when": "__itf_trace_ctrl_changed()",
             "payloads": [
                 { "name": "paddr", "width": 32 },
                 { "name": "pwrite", "width": 1 },
@@ -222,6 +223,7 @@
         },
         "apb_rsp": {
             "type": "none",
+            "trace_when": "__itf_trace_ctrl_changed()",
             "payloads": [
                 { "name": "prdata", "width": 32 },
                 { "name": "pslverr", "width": 1 }

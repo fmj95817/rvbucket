@@ -325,7 +325,7 @@ function build_sw_case {
         ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bootrom}"
         if [ "${2}" = "model" ]; then
             ${BIN2X} "${bootrom}" c_array > design/model/core/boot.c
-        elif [ "${2}" = "rtl" ]; then
+        elif [ "${2}" = "rtl" ] || [ "${2}" = "fpga" ]; then
             ${BIN2X} "${bootrom}" sv_rom_header > design/rtl/core/boot.svh
             ${BIN2X} "${bootrom}" sv_rom_src > design/rtl/core/boot.sv
         fi
@@ -396,6 +396,7 @@ function build_ut {
 
 function build_rtl {
     local simulator="${1}"
+    local mode="${2}"
     local wd="$(pwd)"
 
     local common_args=(
@@ -409,19 +410,25 @@ function build_rtl {
         $(find ${wd}/sim/rtl/model -name *.sv) \
         $(find ${wd}/sim/rtl/${simulator} -name *.sv) \
     )
+    local rtl_common_c_src=($(find ${wd}/sim/rtl/common -name *.c))
 
     mkdir -p "build/hw/${simulator}"
     cd "build/hw/${simulator}";
     if [ "${simulator}" = "vcs" ]; then
+        local vcs_debug_args=()
+        if [ "${mode}" = "debug" ]; then
+            vcs_debug_args=(-debug_access+r -kdb +define+FSDB)
+        fi
         vcs \
             -full64 \
             -sverilog +v2k \
-            -debug_access+r -kdb \
             -timescale=1ns/1ps \
             -o sim_top \
             -top sim_top \
+            ${vcs_debug_args[@]} \
             ${common_args[@]} \
-            ${rtl_sim_src[@]};
+            ${rtl_sim_src[@]} \
+            ${rtl_common_c_src[@]};
     elif [ "${simulator}" = "verilator" ]; then
         verilator \
             --sc --exe --build \
@@ -430,6 +437,7 @@ function build_rtl {
             -CFLAGS '-std=gnu++17' \
             ${common_args[@]} \
             ${rtl_sim_src[@]} \
+            ${rtl_common_c_src[@]} \
             $(find ${wd}/sim/rtl/verilator -name *.cc);
     fi
     cd ../../..
@@ -472,25 +480,22 @@ function build_sw {
 }
 
 function build_hw {
+    build_sw_case boot "${1}"
     if [ "${1}" = "model" ]; then
-        build_sw_case boot "${1}"
-        build_model
+        build_model "${@:2}"
     elif [ "${1}" = "rtl" ]; then
-        if [ "${SKIP_BOOT_BUILD}" != "1" ]; then
-            build_sw_case boot "${1}"
-        fi
-        build_rtl "${2}"
+        build_rtl "${@:2}"
     elif [ "${1}" = "fpga" ]; then
-        build_fpga "${2}"
+        build_fpga "${@:2}"
     fi
 }
 
 build_tools
 
 if [ "${1}" = "hw" ]; then
-    build_hw "${2}" "${3}"
+    build_hw "${@:2}"
 elif [ "${1}" = "sw" ]; then
-    build_sw "${2}" "${3}"
+    build_sw "${@:2}"
 elif [ "${1}" = "ut" ]; then
-    build_ut "${2}" "${3}"
+    build_ut "${@:2}"
 fi

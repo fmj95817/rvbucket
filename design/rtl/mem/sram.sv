@@ -189,10 +189,15 @@ module axi_sram #(
     bti_rsp_if_t bti_rsp();
 
     axi2bti u_axi2bti(
-        clk, rst_n,
-        axi4_aw_slv, axi4_w_slv, axi4_b_mst,
-        axi4_ar_slv, axi4_r_mst,
-        bti_req, bti_rsp
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .axi4_aw_slv  (axi4_aw_slv),
+        .axi4_w_slv   (axi4_w_slv),
+        .axi4_b_mst   (axi4_b_mst),
+        .axi4_ar_slv  (axi4_ar_slv),
+        .axi4_r_mst   (axi4_r_mst),
+        .bti_req_mst  (bti_req),
+        .bti_rsp_slv  (bti_rsp)
     );
 
     bti_sram #(

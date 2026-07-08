@@ -50,6 +50,7 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 |---------|-------------|
 | `./build.sh hw model` | Build C-Model simulation |
 | `./build.sh hw rtl vcs` | Build RTL simulation (VCS) |
+| `./build.sh hw rtl vcs debug` | Build RTL simulation (VCS debug + FSDB) |
 | `./build.sh hw rtl verilator` | Build RTL simulation (Verilator) |
 | `./build.sh hw fpga xilinx` | Generate Vivado FPGA project |
 | `./build.sh sw` | Build all bare-metal C test cases |

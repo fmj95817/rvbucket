@@ -1,27 +1,39 @@
-`include "itf/bti_req_if.svh"
-
 module plic(
-    input logic clk,
-    input logic rst_n,
-    bti_req_if_t.slv bti_req_slv,
-    bti_rsp_if_t.mst bti_rsp_mst,
-    ext_irq_if_t.slv uart_irq_slv,
-    ext_irq_if_t.mst core_irq_mst
+    input logic        clk,
+    input logic        rst_n,
+    apb_req_if_t.slv   apb_req_slv,
+    apb_rsp_if_t.mst   apb_rsp_mst,
+    ext_irq_if_t.slv   uart_irq_slv,
+    ext_irq_if_t.slv   gpio_irq_slv,
+    ext_irq_if_t.slv   gtimer_irq_slv,
+    ext_irq_if_t.mst   core_irq_mst
 );
     localparam SOURCE_NUM = 33;
     localparam BASE = 32'h31100000;
+
     logic [2:0] priorities[0:SOURCE_NUM-1];
     logic [SOURCE_NUM-1:0] pending;
     logic [SOURCE_NUM-1:0] claimed;
     logic [SOURCE_NUM-1:0] enable;
     logic [2:0] threshold;
     logic rsp_pending;
-    logic [15:0] rsp_id;
     logic [31:0] rsp_data;
     logic rsp_ok;
+    logic [31:0] rsp_data_dec;
+    logic rsp_ok_dec;
+    logic priority_wen;
+    logic [5:0] priority_waddr;
+    logic [2:0] priority_wdata;
+    logic enable_lo_wen;
+    logic enable_hi_wen;
+    logic threshold_wen;
+    logic complete_wen;
+    logic [5:0] complete_source;
+    logic claim_ren;
 
     logic [5:0] best_source;
     logic [2:0] best_priority;
+
     always_comb begin
         best_source = 0;
         best_priority = threshold;
@@ -34,10 +46,64 @@ module plic(
         end
     end
 
-    wire req_hsk = bti_req_slv.vld && bti_req_slv.rdy;
-    wire rsp_hsk = bti_rsp_mst.vld && bti_rsp_mst.rdy;
-    wire [31:0] offset = bti_req_slv.pkt.addr - BASE;
+    wire req_hsk = apb_req_slv.psel && apb_req_slv.penable && !rsp_pending;
+    wire rsp_hsk = rsp_pending;
+    wire req_write = apb_req_slv.pkt.pwrite;
+    wire [31:0] offset = apb_req_slv.pkt.paddr - BASE;
     integer i;
+
+    always_comb begin
+        rsp_data_dec = '0;
+        rsp_ok_dec = 1'b1;
+        priority_wen = 1'b0;
+        priority_waddr = offset[7:2];
+        priority_wdata = apb_req_slv.pkt.pwdata[2:0];
+        enable_lo_wen = 1'b0;
+        enable_hi_wen = 1'b0;
+        threshold_wen = 1'b0;
+        complete_wen = 1'b0;
+        complete_source = apb_req_slv.pkt.pwdata[5:0];
+        claim_ren = 1'b0;
+
+        if (offset < SOURCE_NUM * 4) begin
+            if (req_write && offset[31:2] != 0)
+                priority_wen = 1'b1;
+            else if (!req_write)
+                rsp_data_dec = {29'b0, priorities[offset[7:2]]};
+        end else if (offset == 32'h00001000) begin
+            if (!req_write)
+                rsp_data_dec = pending[31:0] & 32'hfffffffe;
+        end else if (offset == 32'h00001004) begin
+            if (!req_write)
+                rsp_data_dec = {31'b0, pending[32]};
+        end else if (offset == 32'h00002000) begin
+            if (req_write)
+                enable_lo_wen = 1'b1;
+            else
+                rsp_data_dec = enable[31:0];
+        end else if (offset == 32'h00002004) begin
+            if (req_write)
+                enable_hi_wen = 1'b1;
+            else
+                rsp_data_dec = {31'b0, enable[32]};
+        end else if (offset == 32'h00200000) begin
+            if (req_write)
+                threshold_wen = 1'b1;
+            else
+                rsp_data_dec = {29'b0, threshold};
+        end else if (offset == 32'h00200004) begin
+            if (req_write) begin
+                complete_wen = apb_req_slv.pkt.pwdata > 0 &&
+                    apb_req_slv.pkt.pwdata < SOURCE_NUM;
+            end else begin
+                rsp_data_dec = {26'b0, best_source};
+                claim_ren = best_source != 0;
+            end
+        end else begin
+            rsp_ok_dec = 1'b0;
+        end
+    end
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             for (i = 0; i < SOURCE_NUM; i++) priorities[i] <= 0;
@@ -46,62 +112,39 @@ module plic(
             enable <= 0;
             threshold <= 0;
             rsp_pending <= 0;
-            rsp_id <= 0;
             rsp_data <= 0;
             rsp_ok <= 1'b1;
         end else begin
             if (uart_irq_slv.pkt.irq && !claimed[1]) pending[1] <= 1'b1;
+            if (gpio_irq_slv.pkt.irq && !claimed[2]) pending[2] <= 1'b1;
+            if (gtimer_irq_slv.pkt.irq && !claimed[3]) pending[3] <= 1'b1;
             if (rsp_hsk) rsp_pending <= 1'b0;
+
             if (req_hsk) begin
                 rsp_pending <= 1'b1;
-                rsp_id <= bti_req_slv.pkt.trans_id;
-                rsp_data <= 0;
-                rsp_ok <= 1'b1;
-                if (offset < SOURCE_NUM * 4) begin
-                    if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE && offset[31:2] != 0)
-                        priorities[offset[7:2]] <= bti_req_slv.pkt.data[2:0];
-                    else if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_READ)
-                        rsp_data <= {29'b0, priorities[offset[7:2]]};
-                end else if (offset == 32'h00001000) begin
-                    if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_READ)
-                        rsp_data <= pending[31:0] & 32'hfffffffe;
-                end else if (offset == 32'h00001004) begin
-                    if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_READ)
-                        rsp_data <= {31'b0, pending[32]};
-                end else if (offset == 32'h00002000) begin
-                    if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE)
-                        enable[31:0] <= bti_req_slv.pkt.data & 32'hfffffffe;
-                    else rsp_data <= enable[31:0];
-                end else if (offset == 32'h00002004) begin
-                    if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE)
-                        enable[32] <= bti_req_slv.pkt.data[0];
-                    else rsp_data <= {31'b0, enable[32]};
-                end else if (offset == 32'h00200000) begin
-                    if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE)
-                        threshold <= bti_req_slv.pkt.data[2:0];
-                    else rsp_data <= {29'b0, threshold};
-                end else if (offset == 32'h00200004) begin
-                    if (bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE) begin
-                        if (bti_req_slv.pkt.data > 0 && bti_req_slv.pkt.data < SOURCE_NUM)
-                            claimed[bti_req_slv.pkt.data[5:0]] <= 1'b0;
-                    end else begin
-                        rsp_data <= {26'b0, best_source};
-                        if (best_source != 0) begin
-                            pending[best_source] <= 1'b0;
-                            claimed[best_source] <= 1'b1;
-                        end
-                    end
-                end else begin
-                    rsp_ok <= 1'b0;
+                rsp_data <= rsp_data_dec;
+                rsp_ok <= rsp_ok_dec;
+
+                if (priority_wen)
+                    priorities[priority_waddr] <= priority_wdata;
+                if (enable_lo_wen)
+                    enable[31:0] <= apb_req_slv.pkt.pwdata & 32'hfffffffe;
+                if (enable_hi_wen)
+                    enable[32] <= apb_req_slv.pkt.pwdata[0];
+                if (threshold_wen)
+                    threshold <= apb_req_slv.pkt.pwdata[2:0];
+                if (complete_wen)
+                    claimed[complete_source] <= 1'b0;
+                if (claim_ren) begin
+                    pending[best_source] <= 1'b0;
+                    claimed[best_source] <= 1'b1;
                 end
             end
         end
     end
 
-    assign bti_req_slv.rdy = !rsp_pending;
-    assign bti_rsp_mst.vld = rsp_pending;
-    assign bti_rsp_mst.pkt.trans_id = rsp_id;
-    assign bti_rsp_mst.pkt.data = rsp_data;
-    assign bti_rsp_mst.pkt.ok = rsp_ok;
+    assign apb_rsp_mst.pready = rsp_pending;
+    assign apb_rsp_mst.pkt.prdata = rsp_data;
+    assign apb_rsp_mst.pkt.pslverr = !rsp_ok;
     assign core_irq_mst.pkt.irq = best_source != 0;
 endmodule

@@ -50,6 +50,7 @@
 |------|------|
 | `./build.sh hw model` | 编译C模型仿真 |
 | `./build.sh hw rtl vcs` | 编译RTL仿真（VCS） |
+| `./build.sh hw rtl vcs debug` | 编译RTL仿真（VCS debug + FSDB） |
 | `./build.sh hw rtl verilator` | 编译RTL仿真（Verilator） |
 | `./build.sh hw fpga xilinx` | 生成Vivado FPGA工程 |
 | `./build.sh sw` | 编译全部裸机C测试用例 |

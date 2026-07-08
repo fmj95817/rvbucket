@@ -1,3 +1,5 @@
+`include "dbg/itf_trace.svh"
+
 interface ex_rsp_if_t;
     logic vld;
     logic rdy;
@@ -9,6 +11,20 @@ interface ex_rsp_if_t;
         logic [31:0] target_pc;
     } pkt;
 
+`ifdef RVB_ITF_TRACE_ENABLED
+
+    function automatic string __itf_trace_pkt_str;
+        __itf_trace_pkt_str = $sformatf(
+            "%08x %01x %01x %08x",
+            pkt.pc,
+            pkt.taken,
+            pkt.pred_true,
+            pkt.target_pc
+        );
+    endfunction
+`endif
     modport mst (output vld, pkt, input rdy);
     modport slv (input vld, pkt, output rdy);
+
+    `RVB_ITF_TRACE_WHEN("mst", "slv", vld && rdy)
 endinterface

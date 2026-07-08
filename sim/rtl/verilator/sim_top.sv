@@ -1,29 +1,45 @@
 `include "spec/core/isa.svh"
 
+import "DPI-C" function int uart_stdin_read();
+
 module sim_top(
     input logic clk,
     input logic rst_n
 );
     logic uart_tx;
     logic uart_rx;
+    logic [23:0] gpio_in;
+    logic [23:0] gpio_out;
+    logic [23:0] gpio_oe;
     logic uart_rx_ch_vld;
     logic [7:0] uart_rx_ch;
-    logic itf_dump_en;
-    logic progress_en;
-    logic user_trace_en;
-    logic fast_linux_en;
-    int unsigned itf_dump_count;
-    int unsigned itf_dump_cycle;
-    int unsigned kmem_trace_left;
-    int unsigned user_trace_cycle;
-    int unsigned user_trace_inst_count;
-    assign uart_rx = 1'b1;
+    logic uart_stdin_ch_vld;
+    logic [7:0] uart_stdin_ch;
+    logic uart_stdin_tx_done;
+    logic uart_stdin_tx_busy;
+    int uart_stdin_ret;
+    logic fast_load_linux_en = 1'b0;
+    logic program_valid = 1'b0;
+    string program_path;
+
+    localparam logic [31:0] DDR_BASE = 32'h40000000;
+    localparam logic [31:0] BIN_TYPE_LINUX = 32'd1;
+    localparam int unsigned BIN_HEADER_WORDS = 10;
+    localparam int unsigned STAGING_WORD_AW = 23;
+    localparam int unsigned STAGING_WORD_NUM = 32'd1 << STAGING_WORD_AW;
+
+    logic [31:0] staging_mem[0:STAGING_WORD_NUM-1];
+
+    assign gpio_in = 24'b0;
 
     soc u_soc(
         .clk     (clk),
         .rst_n   (rst_n),
         .uart_tx (uart_tx),
-        .uart_rx (uart_rx)
+        .uart_rx (uart_rx),
+        .gpio_in (gpio_in),
+        .gpio_out(gpio_out),
+        .gpio_oe (gpio_oe)
     );
 
     uart_rx u_uart_rx(
@@ -35,294 +51,159 @@ module sim_top(
         .rx      (uart_tx)
     );
 
-    always @(negedge clk) begin
-        if (uart_rx_ch_vld) begin
-            if (uart_rx_ch != 8'h10)
-                $write("%c", uart_rx_ch);
-            else
-                $finish;
+    uart_tx u_uart_stdin_tx(
+        .clk     (clk),
+        .rst_n   (rst_n),
+        .bc      (16'd9),
+        .ch_vld  (uart_stdin_ch_vld),
+        .ch      (uart_stdin_ch),
+        .done    (uart_stdin_tx_done),
+        .tx      (uart_rx)
+    );
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            uart_stdin_ch_vld <= 1'b0;
+            uart_stdin_ch <= 8'b0;
+            uart_stdin_tx_busy <= 1'b0;
+            uart_stdin_ret <= -1;
+        end else begin
+            uart_stdin_ch_vld <= 1'b0;
+
+            if (uart_stdin_tx_done) begin
+                uart_stdin_tx_busy <= 1'b0;
+            end
+
+            if (!uart_stdin_tx_busy) begin
+                uart_stdin_ret = uart_stdin_read();
+                if (uart_stdin_ret >= 0) begin
+                    uart_stdin_ch <= uart_stdin_ret[7:0];
+                    uart_stdin_ch_vld <= 1'b1;
+                    uart_stdin_tx_busy <= 1'b1;
+                end
+            end
         end
     end
 
-    always @(posedge clk) begin
-        if (progress_en && rst_n) begin
-            itf_dump_cycle <= itf_dump_cycle + 1;
-            if (u_soc.u_rv32g.u_hart.ex_req_if.vld && u_soc.u_rv32g.u_hart.ex_req_if.rdy &&
-                u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc == 32'hc00e9be8 &&
-                itf_dump_cycle > 297700000)
-                kmem_trace_left <= 200;
-            else if (kmem_trace_left != 0 &&
-                u_soc.u_rv32g.u_hart.ex_req_if.vld && u_soc.u_rv32g.u_hart.ex_req_if.rdy)
-                kmem_trace_left <= kmem_trace_left - 1;
-            if ((kmem_trace_left != 0 ||
-                (u_soc.u_rv32g.u_hart.ex_req_if.vld && u_soc.u_rv32g.u_hart.ex_req_if.rdy &&
-                 u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc == 32'hc00e9be8 &&
-                 itf_dump_cycle > 297700000)) &&
-                u_soc.u_rv32g.u_hart.ex_req_if.vld &&
-                u_soc.u_rv32g.u_hart.ex_req_if.rdy) begin
-                $display("KMEM_SEQ_TRACE cycle=%0d pc=%08x ex_rdy=%0b raw=%08x opcode=%02x x1=%08x x5=%08x x6=%08x x10=%08x x11=%08x x12=%08x x13=%08x x14=%08x x15=%08x br_rs1=%08x target=%08x taken=%0b ifu_state=%0d wfi=%0b irqv=%0b",
-                    itf_dump_cycle,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc,
-                    u_soc.u_rv32g.u_hart.ex_req_if.rdy,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.base.opcode,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[1],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[5],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[6],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[10],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[11],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[12],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[13],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[14],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[15],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_branch_handler.gpr_mst.rd1,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_branch_handler.ex_rsp_mst.pkt.target_pc,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_branch_handler.ex_rsp_mst.pkt.taken,
-                    u_soc.u_rv32g.u_hart.u_ifu.state,
-                    u_soc.u_rv32g.u_hart.u_exu.wfi,
-                    u_soc.u_rv32g.u_hart.u_trap.irq_valid);
-            end
-            if (u_soc.u_rv32g.u_hart.ex_req_if.vld &&
-                u_soc.u_rv32g.u_hart.ex_req_if.rdy &&
-                itf_dump_cycle > 473360000 && itf_dump_cycle < 473413000 &&
-                u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc >= 32'hc011a58c &&
-                u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc <= 32'hc011a5c4) begin
-                $display("DLOOKUP_TRACE cycle=%0d pc=%08x raw=%08x x1=%08x x10=%08x x11=%08x x12=%08x x13=%08x x14=%08x x15=%08x x16=%08x x28=%08x x30=%08x x31=%08x gpr_wen=%0b gpr_wa=%0d gpr_wd=%08x ldst_state=%0d mmu_state=%0d va=%08x pa_req=%0b/%0b pa_rsp=%0b/%0b pa_data=%08x irqv=%0b",
-                    itf_dump_cycle,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[1],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[10],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[11],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[12],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[13],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[14],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[15],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[16],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[28],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[30],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[31],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gpr_slv.wen,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gpr_slv.wa,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gpr_slv.wd,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_ldst_handler.state,
-                    u_soc.u_rv32g.u_hart.u_mmu.state,
-                    u_soc.u_rv32g.u_hart.u_mmu.va,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.vld,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.rdy,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.vld,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.rdy,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.pkt.data,
-                    u_soc.u_rv32g.u_hart.u_trap.irq_valid);
-            end
-            if (u_soc.u_rv32g.u_hart.ex_req_if.vld &&
-                u_soc.u_rv32g.u_hart.ex_req_if.rdy &&
-                itf_dump_cycle > 473360000 && itf_dump_cycle < 473413000 &&
-                (u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc == 32'hc02e7f04 ||
-                 u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc == 32'hc02e8030 ||
-                 u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc == 32'hc02e8074)) begin
-                $display("TRAPREG_TRACE cycle=%0d pc=%08x raw=%08x x2=%08x x16=%08x gpr_wen=%0b gpr_wa=%0d gpr_wd=%08x sepc=%08x sstatus=%08x scause=%08x stval=%08x ldst_state=%0d va=%08x pa_rsp=%0b/%0b pa_data=%08x",
-                    itf_dump_cycle,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[2],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[16],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gpr_slv.wen,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gpr_slv.wa,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gpr_slv.wd,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_sepc,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mstatus,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_scause,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_stval,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_ldst_handler.state,
-                    u_soc.u_rv32g.u_hart.u_mmu.va,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.vld,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.rdy,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.pkt.data);
-            end
-            if (itf_dump_cycle % 1000000 == 0)
-                $display("PROGRESS cycle=%0d pc=%08x state=%0d priv=%0d wfi=%0b irqv=%0b mip=%08x mie=%08x mstatus=%08x time=%08x_%08x stcmp=%08x_%08x mmu=%0d va=%08x l1d=%0d pa_d_req=%0b/%0b d_ar=%0b/%0b l2_rd=%0b/%0b mm_ar=%0b/%0b ddr_ar=%0b/%0b d_r=%0b/%0b",
-                    itf_dump_cycle,
-                    u_soc.u_rv32g.u_hart.u_ifu.pc,
-                    u_soc.u_rv32g.u_hart.u_ifu.state,
-                    u_soc.u_rv32g.u_hart.u_exu.priv,
-                    u_soc.u_rv32g.u_hart.u_exu.wfi,
-                    u_soc.u_rv32g.u_hart.u_trap.irq_valid,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mip,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mie,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mstatus,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_timeh,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_time,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_stimecmph,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_stimecmp,
-                    u_soc.u_rv32g.u_hart.u_mmu.state,
-                    u_soc.u_rv32g.u_hart.u_mmu.va,
-                    u_soc.u_rv32g.u_hart.u_l1d.u_bti2axi.state,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.vld,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.rdy,
-                    u_soc.u_rv32g.hart_d_ar.vld,
-                    u_soc.u_rv32g.hart_d_ar.rdy,
-                    u_soc.u_rv32g.u_l2.rd_active,
-                    u_soc.u_rv32g.u_l2.rd_active_d,
-                    u_soc.mm_ar.vld,
-                    u_soc.mm_ar.rdy,
-                    u_soc.mm_gst_ar[0].vld,
-                    u_soc.mm_gst_ar[0].rdy,
-                    u_soc.u_rv32g.hart_d_r.vld,
-                    u_soc.u_rv32g.hart_d_r.rdy);
-        end
-        if (user_trace_en && rst_n) begin
-            user_trace_cycle <= user_trace_cycle + 1;
-            if ((user_trace_cycle % 20000000) == 0) begin
-                $display("USER_PROGRESS cycle=%0d pc=%08x raw=%08x ifu_state=%0d priv=%0d wfi=%0b trap_state=%0d irqv=%0b mip=%08x mie=%08x mstatus=%08x sepc=%08x scause=%08x stval=%08x mmu=%0d va=%08x l1d=%0d pa_d_req=%0b/%0b d_ar=%0b/%0b l2_rd=%0b/%0b mm_ar=%0b/%0b ddr_ar=%0b/%0b d_r=%0b/%0b a0=%08x a1=%08x a2=%08x a3=%08x a4=%08x a5=%08x a7=%08x",
-                    user_trace_cycle,
-                    u_soc.u_rv32g.u_hart.u_ifu.pc,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw,
-                    u_soc.u_rv32g.u_hart.u_ifu.state,
-                    u_soc.u_rv32g.u_hart.u_exu.priv,
-                    u_soc.u_rv32g.u_hart.u_exu.wfi,
-                    u_soc.u_rv32g.u_hart.u_trap.state,
-                    u_soc.u_rv32g.u_hart.u_trap.irq_valid,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mip,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mie,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mstatus,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_sepc,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_scause,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_stval,
-                    u_soc.u_rv32g.u_hart.u_mmu.state,
-                    u_soc.u_rv32g.u_hart.u_mmu.va,
-                    u_soc.u_rv32g.u_hart.u_l1d.u_bti2axi.state,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.vld,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.rdy,
-                    u_soc.u_rv32g.hart_d_ar.vld,
-                    u_soc.u_rv32g.hart_d_ar.rdy,
-                    u_soc.u_rv32g.u_l2.rd_active,
-                    u_soc.u_rv32g.u_l2.rd_active_d,
-                    u_soc.mm_ar.vld,
-                    u_soc.mm_ar.rdy,
-                    u_soc.mm_gst_ar[0].vld,
-                    u_soc.mm_gst_ar[0].rdy,
-                    u_soc.u_rv32g.hart_d_r.vld,
-                    u_soc.u_rv32g.hart_d_r.rdy,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[10],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[11],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[12],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[13],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[14],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[15],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[17]);
-            end
-            if (u_soc.u_rv32g.u_hart.ex_req_if.vld &&
-                u_soc.u_rv32g.u_hart.ex_req_if.rdy &&
-                u_soc.u_rv32g.u_hart.u_exu.priv == 2'b00) begin
-                if (user_trace_inst_count < 200 ||
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw == 32'h00000073) begin
-                    $display("USER_EX cycle=%0d idx=%0d pc=%08x raw=%08x a0=%08x a1=%08x a2=%08x a3=%08x a4=%08x a5=%08x a7=%08x sp=%08x ra=%08x",
-                        user_trace_cycle,
-                        user_trace_inst_count,
-                        u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc,
-                        u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw,
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[10],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[11],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[12],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[13],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[14],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[15],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[17],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[2],
-                        u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[1]);
-                end
-                user_trace_inst_count <= user_trace_inst_count + 1;
-            end
-            if (u_soc.u_rv32g.u_hart.trap_csr_write_req_if.vld &&
-                u_soc.u_rv32g.u_hart.trap_csr_write_req_if.pkt.addr == 12'h142 &&
-                !u_soc.u_rv32g.u_hart.trap_csr_write_req_if.pkt.val[31]) begin
-                $display("USER_TRAP cycle=%0d scause=%08x sepc=%08x stval=%08x priv=%0d pc=%08x raw=%08x a0=%08x a1=%08x a2=%08x a7=%08x",
-                    user_trace_cycle,
-                    u_soc.u_rv32g.u_hart.trap_csr_write_req_if.pkt.val,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_sepc,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_stval,
-                    u_soc.u_rv32g.u_hart.u_exu.priv,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.pc,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw,
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[10],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[11],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[12],
-                    u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[17]);
-            end
-        end
-        if (itf_dump_en && rst_n) begin
-            itf_dump_cycle <= itf_dump_cycle + 1;
-            if (itf_dump_cycle < 20 || itf_dump_cycle % 1000 == 0)
-                $display("ITF STATUS cycle=%0d i_req=%0b/%0b i_ar=%0b/%0b d_req=%0b/%0b",
-                    itf_dump_cycle,
-                    u_soc.u_rv32g.u_hart.hbi_i_bti_req_if.vld,
-                    u_soc.u_rv32g.u_hart.hbi_i_bti_req_if.rdy,
-                    u_soc.u_rv32g.hart_i_ar.vld,
-                    u_soc.u_rv32g.hart_i_ar.rdy,
-                    u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.vld,
-                    u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.rdy);
-            if (u_soc.u_rv32g.u_hart.hbi_i_bti_req_if.vld &&
-                u_soc.u_rv32g.u_hart.hbi_i_bti_req_if.rdy) begin
-                $display("ITF I_REQ addr=%08x", u_soc.u_rv32g.u_hart.hbi_i_bti_req_if.pkt.addr);
-                itf_dump_count <= itf_dump_count + 1;
-            end
-            if (u_soc.u_rv32g.u_hart.hbi_i_bti_rsp_if.vld &&
-                u_soc.u_rv32g.u_hart.hbi_i_bti_rsp_if.rdy)
-                $display("ITF I_RSP data=%08x", u_soc.u_rv32g.u_hart.hbi_i_bti_rsp_if.pkt.data);
-            if (u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.vld &&
-                u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.rdy) begin
-                $display("ITF D_REQ cmd=%0d addr=%08x data=%08x strb=%x",
-                    u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.pkt.cmd,
-                    u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.pkt.addr,
-                    u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.pkt.data,
-                    u_soc.u_rv32g.u_hart.hbi_d_bti_req_if.pkt.strobe);
-                itf_dump_count <= itf_dump_count + 1;
-            end
-            if (u_soc.u_rv32g.u_hart.hbi_d_bti_rsp_if.vld &&
-                u_soc.u_rv32g.u_hart.hbi_d_bti_rsp_if.rdy)
-                $display("ITF D_RSP data=%08x", u_soc.u_rv32g.u_hart.hbi_d_bti_rsp_if.pkt.data);
-            if (itf_dump_count >= 500 || itf_dump_cycle >= 10000) begin
-                $display("ITF dump limit reached");
+    always @(negedge clk) begin
+        if (uart_rx_ch_vld) begin
+            if (uart_rx_ch != 8'h10) begin
+                $write("%c", uart_rx_ch);
+                $fflush();
+            end else begin
                 $finish;
             end
         end
+    end
+
+    function automatic int unsigned align4(
+        input int unsigned val
+    );
+        align4 = (val + 3) & ~32'd3;
+    endfunction
+
+    function automatic int unsigned align4_words(
+        input int unsigned val
+    );
+        align4_words = align4(val) >> 2;
+    endfunction
+
+    task automatic copy_staging_to_flash(
+        input int unsigned word_num
+    );
+        begin
+            for (int unsigned i = 0; i < word_num; i++)
+                u_soc.u_flash.u_rom.mem[i] = staging_mem[i];
+        end
+    endtask
+
+    task automatic copy_staging_to_ddr(
+        input int unsigned src_word,
+        input int unsigned load_addr,
+        input int unsigned size
+    );
+        int unsigned base_word;
+        int unsigned word_num;
+        begin
+            base_word = (load_addr - DDR_BASE) >> 2;
+            word_num = align4_words(size);
+            for (int unsigned i = 0; i < word_num; i++)
+                u_soc.u_ddr.mem[base_word + i] = staging_mem[src_word + i];
+        end
+    endtask
+
+    task automatic load_program_image(
+        input string path
+    );
+        int unsigned image_type;
+        int unsigned itcm_size;
+        int unsigned dtcm_size;
+        int unsigned kernel_size;
+        int unsigned initrd_size;
+        int unsigned dtb_size;
+        int unsigned kernel_load;
+        int unsigned initrd_load;
+        int unsigned dtb_load;
+        int unsigned boot_words;
+        int unsigned image_words;
+        int unsigned payload_word;
+        begin
+            $readmemh(path, staging_mem);
+
+            image_type = staging_mem[0];
+            itcm_size = staging_mem[1];
+            dtcm_size = staging_mem[2];
+            kernel_size = staging_mem[3];
+            initrd_size = staging_mem[4];
+            dtb_size = staging_mem[5];
+            kernel_load = staging_mem[6];
+            initrd_load = staging_mem[7];
+            dtb_load = staging_mem[8];
+
+            boot_words = BIN_HEADER_WORDS + align4_words(itcm_size) +
+                align4_words(dtcm_size);
+            image_words = boot_words;
+            if (image_type == BIN_TYPE_LINUX) begin
+                image_words += align4_words(kernel_size) +
+                    align4_words(initrd_size) + align4_words(dtb_size);
+            end
+
+            if (fast_load_linux_en && image_type == BIN_TYPE_LINUX)
+                copy_staging_to_flash(boot_words);
+            else
+                copy_staging_to_flash(image_words);
+
+            if (fast_load_linux_en && image_type == BIN_TYPE_LINUX) begin
+                payload_word = boot_words;
+                copy_staging_to_ddr(payload_word, kernel_load, kernel_size);
+                payload_word += align4_words(kernel_size);
+                copy_staging_to_ddr(payload_word, initrd_load, initrd_size);
+                payload_word += align4_words(initrd_size);
+                copy_staging_to_ddr(payload_word, dtb_load, dtb_size);
+
+                u_soc.u_flash.u_rom.mem[3] = 32'd0;
+                u_soc.u_flash.u_rom.mem[4] = 32'd0;
+                u_soc.u_flash.u_rom.mem[5] = 32'd0;
+
+                $display("sim_top: preloaded linux payloads to DDR: kernel %0d bytes @ 0x%08x, initrd %0d bytes @ 0x%08x, dtb %0d bytes @ 0x%08x",
+                    kernel_size, kernel_load, initrd_size, initrd_load,
+                    dtb_size, dtb_load);
+            end
+        end
+    endtask
+
+    always @(negedge rst_n) begin
+        fast_load_linux_en = $test$plusargs("fast_load_linux");
+        program_valid = $value$plusargs("program=%s", program_path);
+
+        if (program_valid)
+            load_program_image(program_path);
     end
 
     initial begin
-        string path;
-        itf_dump_en = $test$plusargs("itf_dump");
-        progress_en = $test$plusargs("progress");
-        user_trace_en = $test$plusargs("user_trace");
-        itf_dump_count = 0;
-        itf_dump_cycle = 0;
-        kmem_trace_left = 0;
-        user_trace_cycle = 0;
-        user_trace_inst_count = 0;
-        if ($value$plusargs("program=%s", path)) begin
-            $readmemh(path, u_soc.u_flash.u_rom.mem);
-        end
-        fast_linux_en = $test$plusargs("fast_linux");
         if ($test$plusargs("vcd")) begin
             $dumpfile("sim_top.vcd");
             $dumpvars(0, sim_top);
-        end
-    end
-
-    always @(negedge rst_n) begin
-        if (fast_linux_en) begin
-            $readmemh("../../sw/linux/kernel.0.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank0.mem, 0);
-            $readmemh("../../sw/linux/kernel.1.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank1.mem, 0);
-            $readmemh("../../sw/linux/kernel.2.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank2.mem, 0);
-            $readmemh("../../sw/linux/kernel.3.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank3.mem, 0);
-            $readmemh("../../sw/linux/initrd.0.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank0.mem, 26'h1400000);
-            $readmemh("../../sw/linux/initrd.1.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank1.mem, 26'h1400000);
-            $readmemh("../../sw/linux/initrd.2.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank2.mem, 26'h1400000);
-            $readmemh("../../sw/linux/initrd.3.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank3.mem, 26'h1400000);
-            $readmemh("../../sw/linux/dtb.0.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank0.mem, 26'h13c0000);
-            $readmemh("../../sw/linux/dtb.1.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank1.mem, 26'h13c0000);
-            $readmemh("../../sw/linux/dtb.2.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank2.mem, 26'h13c0000);
-            $readmemh("../../sw/linux/dtb.3.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank3.mem, 26'h13c0000);
         end
     end
 endmodule

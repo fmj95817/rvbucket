@@ -1,15 +1,34 @@
+import "DPI-C" function int uart_stdin_read();
+
 module sim_top;
     logic clk;
     logic rst_n;
 
     logic uart_tx;
     logic uart_rx;
+    logic [23:0] gpio_in;
+    logic [23:0] gpio_out;
+    logic [23:0] gpio_oe;
     logic uart_rx_ch_vld;
     logic [7:0] uart_rx_ch;
-    logic fast_linux_en;
-    logic progress_en;
-    longint unsigned progress_cycle;
-    assign uart_rx = 1'b1;
+    logic uart_stdin_ch_vld;
+    logic [7:0] uart_stdin_ch;
+    logic uart_stdin_tx_done;
+    logic uart_stdin_tx_busy;
+    int uart_stdin_ret;
+    logic fast_load_linux_en = 1'b0;
+    logic program_valid = 1'b0;
+    string program_path;
+
+    localparam logic [31:0] DDR_BASE = 32'h40000000;
+    localparam logic [31:0] BIN_TYPE_LINUX = 32'd1;
+    localparam int unsigned BIN_HEADER_WORDS = 10;
+    localparam int unsigned STAGING_WORD_AW = 23;
+    localparam int unsigned STAGING_WORD_NUM = 32'd1 << STAGING_WORD_AW;
+
+    logic [31:0] staging_mem[0:STAGING_WORD_NUM-1];
+
+    assign gpio_in = 24'b0;
 
     clk_rst u_clk_rst(
         .clk     (clk),
@@ -20,7 +39,10 @@ module sim_top;
         .clk     (clk),
         .rst_n   (rst_n),
         .uart_tx (uart_tx),
-        .uart_rx (uart_rx)
+        .uart_rx (uart_rx),
+        .gpio_in (gpio_in),
+        .gpio_out(gpio_out),
+        .gpio_oe (gpio_oe)
     );
 
     uart_rx u_uart_rx(
@@ -32,82 +54,161 @@ module sim_top;
         .rx      (uart_tx)
     );
 
-    always @(posedge clk) begin
-        if (uart_rx_ch_vld) begin
-            if (uart_rx_ch != 8'h10)
-                $write("%c", uart_rx_ch);
-            else
-                $finish;
-        end
-    end
+    uart_tx u_uart_stdin_tx(
+        .clk     (clk),
+        .rst_n   (rst_n),
+        .bc      (16'd9),
+        .ch_vld  (uart_stdin_ch_vld),
+        .ch      (uart_stdin_ch),
+        .done    (uart_stdin_tx_done),
+        .tx      (uart_rx)
+    );
 
-    always @(posedge clk) begin
-        if (progress_en && rst_n) begin
-            progress_cycle <= progress_cycle + 1;
-            if ((progress_cycle % 10000000) == 0) begin
-                $display("VCS_PROGRESS cycle=%0d pc=%08x raw=%08x ifu_state=%0d priv=%0d wfi=%0b trap_state=%0d irqv=%0b mip=%08x mie=%08x mstatus=%08x mmu=%0d va=%08x l1d=%0d pa_d_req=%0b/%0b pa_d_rsp=%0b/%0b d_ar=%0b/%0b l2_rd=%0b/%0b mm_ar=%0b/%0b ddr_ar=%0b/%0b d_r=%0b/%0b",
-                    progress_cycle,
-                    u_soc.u_rv32g.u_hart.u_ifu.pc,
-                    u_soc.u_rv32g.u_hart.ex_req_if.pkt.inst.raw,
-                    u_soc.u_rv32g.u_hart.u_ifu.state,
-                    u_soc.u_rv32g.u_hart.u_exu.priv,
-                    u_soc.u_rv32g.u_hart.u_exu.wfi,
-                    u_soc.u_rv32g.u_hart.u_trap.state,
-                    u_soc.u_rv32g.u_hart.u_trap.irq_valid,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mip,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mie,
-                    u_soc.u_rv32g.u_hart.u_csr.csr_mstatus,
-                    u_soc.u_rv32g.u_hart.u_mmu.state,
-                    u_soc.u_rv32g.u_hart.u_mmu.va,
-                    u_soc.u_rv32g.u_hart.u_l1d.u_bti2axi.state,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.vld,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_req_if.rdy,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.vld,
-                    u_soc.u_rv32g.u_hart.pa_d_bti_rsp_if.rdy,
-                    u_soc.u_rv32g.hart_d_ar.vld,
-                    u_soc.u_rv32g.hart_d_ar.rdy,
-                    u_soc.u_rv32g.u_l2.rd_active,
-                    u_soc.u_rv32g.u_l2.rd_active_d,
-                    u_soc.mm_ar.vld,
-                    u_soc.mm_ar.rdy,
-                    u_soc.mm_gst_ar[0].vld,
-                    u_soc.mm_gst_ar[0].rdy,
-                    u_soc.u_rv32g.hart_d_r.vld,
-                    u_soc.u_rv32g.hart_d_r.rdy);
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            uart_stdin_ch_vld <= 1'b0;
+            uart_stdin_ch <= 8'b0;
+            uart_stdin_tx_busy <= 1'b0;
+            uart_stdin_ret <= -1;
+        end else begin
+            uart_stdin_ch_vld <= 1'b0;
+
+            if (uart_stdin_tx_done) begin
+                uart_stdin_tx_busy <= 1'b0;
+            end
+
+            if (!uart_stdin_tx_busy) begin
+                uart_stdin_ret = uart_stdin_read();
+                if (uart_stdin_ret >= 0) begin
+                    uart_stdin_ch <= uart_stdin_ret[7:0];
+                    uart_stdin_ch_vld <= 1'b1;
+                    uart_stdin_tx_busy <= 1'b1;
+                end
             end
         end
     end
 
-    initial begin
-        string path;
-        if ($value$plusargs("program=%s", path)) begin
-            $readmemh(path, u_soc.u_flash.u_rom.mem);
+    always @(posedge clk) begin
+        if (uart_rx_ch_vld) begin
+            if (uart_rx_ch != 8'h10) begin
+                $write("%c", uart_rx_ch);
+                $fflush();
+            end else begin
+                $finish;
+            end
         end
-        fast_linux_en = $test$plusargs("fast_linux");
-        progress_en = $test$plusargs("progress");
-        progress_cycle = 0;
+    end
+
+    function automatic int unsigned align4(
+        input int unsigned val
+    );
+        align4 = (val + 3) & ~32'd3;
+    endfunction
+
+    function automatic int unsigned align4_words(
+        input int unsigned val
+    );
+        align4_words = align4(val) >> 2;
+    endfunction
+
+    task automatic copy_staging_to_flash(
+        input int unsigned word_num
+    );
+        begin
+            for (int unsigned i = 0; i < word_num; i++)
+                u_soc.u_flash.u_rom.mem[i] = staging_mem[i];
+        end
+    endtask
+
+    task automatic copy_staging_to_ddr(
+        input int unsigned src_word,
+        input int unsigned load_addr,
+        input int unsigned size
+    );
+        int unsigned base_word;
+        int unsigned word_num;
+        begin
+            base_word = (load_addr - DDR_BASE) >> 2;
+            word_num = align4_words(size);
+            for (int unsigned i = 0; i < word_num; i++)
+                u_soc.u_ddr.mem[base_word + i] = staging_mem[src_word + i];
+        end
+    endtask
+
+    task automatic load_program_image(
+        input string path
+    );
+        int unsigned image_type;
+        int unsigned itcm_size;
+        int unsigned dtcm_size;
+        int unsigned kernel_size;
+        int unsigned initrd_size;
+        int unsigned dtb_size;
+        int unsigned kernel_load;
+        int unsigned initrd_load;
+        int unsigned dtb_load;
+        int unsigned boot_words;
+        int unsigned image_words;
+        int unsigned payload_word;
+        begin
+            $readmemh(path, staging_mem);
+
+            image_type = staging_mem[0];
+            itcm_size = staging_mem[1];
+            dtcm_size = staging_mem[2];
+            kernel_size = staging_mem[3];
+            initrd_size = staging_mem[4];
+            dtb_size = staging_mem[5];
+            kernel_load = staging_mem[6];
+            initrd_load = staging_mem[7];
+            dtb_load = staging_mem[8];
+
+            boot_words = BIN_HEADER_WORDS + align4_words(itcm_size) +
+                align4_words(dtcm_size);
+            image_words = boot_words;
+            if (image_type == BIN_TYPE_LINUX) begin
+                image_words += align4_words(kernel_size) +
+                    align4_words(initrd_size) + align4_words(dtb_size);
+            end
+
+            if (fast_load_linux_en && image_type == BIN_TYPE_LINUX)
+                copy_staging_to_flash(boot_words);
+            else
+                copy_staging_to_flash(image_words);
+
+            if (fast_load_linux_en && image_type == BIN_TYPE_LINUX) begin
+                payload_word = boot_words;
+                copy_staging_to_ddr(payload_word, kernel_load, kernel_size);
+                payload_word += align4_words(kernel_size);
+                copy_staging_to_ddr(payload_word, initrd_load, initrd_size);
+                payload_word += align4_words(initrd_size);
+                copy_staging_to_ddr(payload_word, dtb_load, dtb_size);
+
+                u_soc.u_flash.u_rom.mem[3] = 32'd0;
+                u_soc.u_flash.u_rom.mem[4] = 32'd0;
+                u_soc.u_flash.u_rom.mem[5] = 32'd0;
+
+                $display("sim_top: preloaded linux payloads to DDR: kernel %0d bytes @ 0x%08x, initrd %0d bytes @ 0x%08x, dtb %0d bytes @ 0x%08x",
+                    kernel_size, kernel_load, initrd_size, initrd_load,
+                    dtb_size, dtb_load);
+            end
+        end
+    endtask
+
+    always @(negedge rst_n) begin
+        fast_load_linux_en = $test$plusargs("fast_load_linux");
+        program_valid = $value$plusargs("program=%s", program_path);
+
+        if (program_valid)
+            load_program_image(program_path);
+    end
+
+    initial begin
 `ifdef FSDB
         if ($test$plusargs("fsdb")) begin
             $fsdbDumpfile("sim_top.fsdb");
             $fsdbDumpvars(0, sim_top, "+all");
         end
 `endif
-    end
-
-    always @(negedge rst_n) begin
-        if (fast_linux_en) begin
-            $readmemh("../../sw/linux/kernel.0.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank0.mem, 0);
-            $readmemh("../../sw/linux/kernel.1.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank1.mem, 0);
-            $readmemh("../../sw/linux/kernel.2.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank2.mem, 0);
-            $readmemh("../../sw/linux/kernel.3.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank3.mem, 0);
-            $readmemh("../../sw/linux/initrd.0.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank0.mem, 26'h1400000);
-            $readmemh("../../sw/linux/initrd.1.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank1.mem, 26'h1400000);
-            $readmemh("../../sw/linux/initrd.2.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank2.mem, 26'h1400000);
-            $readmemh("../../sw/linux/initrd.3.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank3.mem, 26'h1400000);
-            $readmemh("../../sw/linux/dtb.0.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank0.mem, 26'h13c0000);
-            $readmemh("../../sw/linux/dtb.1.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank1.mem, 26'h13c0000);
-            $readmemh("../../sw/linux/dtb.2.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank2.mem, 26'h13c0000);
-            $readmemh("../../sw/linux/dtb.3.hex", u_soc.u_ddr.u_bti_sram.u_sram_bank3.mem, 26'h13c0000);
-        end
     end
 endmodule
