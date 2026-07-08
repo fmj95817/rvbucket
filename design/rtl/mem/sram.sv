@@ -53,9 +53,17 @@ module bti_to_sram #(
     assign sram_bank3_rw_mst.cs = cs;
 
     tri [BTI_AW-1:0] addr = bti_req_slv.pkt.addr;
+    logic [1:0] rsp_addr_low;
     tri [SRAM_WORD_AW-1:0] sram_addr = addr[SRAM_WORD_AW+1:2];
     tri [SRAM_WORD_AW-1:0] sram_addr_nxt = sram_addr + 1'b1;
     tri [BTI_DW-1:0] wdata = bti_req_slv.pkt.data;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            rsp_addr_low <= 2'b0;
+        else if (cs)
+            rsp_addr_low <= addr[1:0];
+    end
 
     always_comb begin
         case (addr[1:0])
@@ -133,7 +141,7 @@ module bti_to_sram #(
     end
 
     always_comb begin
-        case (addr[1:0])
+        case (rsp_addr_low)
             2'b00: bti_rsp_mst.pkt.data = {
                 sram_bank3_rw_mst.rdata,
                 sram_bank2_rw_mst.rdata,
@@ -164,6 +172,39 @@ module bti_to_sram #(
 
     assign bti_rsp_mst.pkt.ok = 1'b1;
 
+endmodule
+
+module axi_sram #(
+    parameter SRAM_AW = 20
+)(
+    input logic clk,
+    input logic rst_n,
+    axi4_aw_if_t.slv axi4_aw_slv,
+    axi4_w_if_t.slv axi4_w_slv,
+    axi4_b_if_t.mst axi4_b_mst,
+    axi4_ar_if_t.slv axi4_ar_slv,
+    axi4_r_if_t.mst axi4_r_mst
+);
+    bti_req_if_t bti_req();
+    bti_rsp_if_t bti_rsp();
+
+    axi2bti u_axi2bti(
+        clk, rst_n,
+        axi4_aw_slv, axi4_w_slv, axi4_b_mst,
+        axi4_ar_slv, axi4_r_mst,
+        bti_req, bti_rsp
+    );
+
+    bti_sram #(
+        .BTI_AW  (32),
+        .BTI_DW  (32),
+        .SRAM_AW (SRAM_AW)
+    ) u_bti_sram(
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (bti_req),
+        .bti_rsp_mst (bti_rsp)
+    );
 endmodule
 
 module bti_sram #(

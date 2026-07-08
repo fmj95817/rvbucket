@@ -33,11 +33,18 @@ module hart(
     trap_csr_write_req_if_t trap_csr_write_req_if();
     csr_trap_write_rsp_if_t csr_trap_write_rsp_if();
     trap_send_if_t trap_send_if();
+    csr_mmu_state_if_t csr_mmu_state_if();
+    hart_expt_if_t fch_expt_if();
+    hart_expt_if_t ldst_expt_if();
 
     bti_req_if_t hbi_i_bti_req_if();
     bti_rsp_if_t hbi_i_bti_rsp_if();
     bti_req_if_t hbi_d_bti_req_if();
     bti_rsp_if_t hbi_d_bti_rsp_if();
+    bti_req_if_t pa_i_bti_req_if();
+    bti_rsp_if_t pa_i_bti_rsp_if();
+    bti_req_if_t pa_d_bti_req_if();
+    bti_rsp_if_t pa_d_bti_rsp_if();
 
     ifu u_ifu(
         .clk         (clk),
@@ -79,19 +86,39 @@ module hart(
         .ext_irq_slv            (ext_irq_slv),
         .trap_csr_write_req_slv (trap_csr_write_req_if),
         .csr_trap_write_rsp_mst (csr_trap_write_rsp_if),
-        .csr_trap_state_mst     (csr_trap_state_if)
+        .csr_trap_state_mst     (csr_trap_state_if),
+        .csr_mmu_state_mst      (csr_mmu_state_if)
     );
 
     trap u_trap(
         .clk                    (clk),
         .rst_n                  (rst_n),
         .ex_expt_slv            (ex_expt_if),
+        .fch_expt_slv           (fch_expt_if),
+        .ldst_expt_slv          (ldst_expt_if),
         .exu_state_slv          (exu_state_if),
         .trap_exu_ctrl_mst      (trap_exu_ctrl_if),
         .csr_trap_state_slv     (csr_trap_state_if),
         .trap_csr_write_req_mst (trap_csr_write_req_if),
         .csr_trap_write_rsp_slv (csr_trap_write_rsp_if),
         .trap_send_mst          (trap_send_if)
+    );
+
+    mmu u_mmu(
+        .clk               (clk),
+        .rst_n             (rst_n),
+        .va_i_req_slv      (hbi_i_bti_req_if),
+        .va_i_rsp_mst      (hbi_i_bti_rsp_if),
+        .va_d_req_slv      (hbi_d_bti_req_if),
+        .va_d_rsp_mst      (hbi_d_bti_rsp_if),
+        .pa_i_req_mst      (pa_i_bti_req_if),
+        .pa_i_rsp_slv      (pa_i_bti_rsp_if),
+        .pa_d_req_mst      (pa_d_bti_req_if),
+        .pa_d_rsp_slv      (pa_d_bti_rsp_if),
+        .exu_state_slv     (exu_state_if),
+        .csr_mmu_state_slv (csr_mmu_state_if),
+        .fch_expt_mst      (fch_expt_if),
+        .ldst_expt_mst     (ldst_expt_if)
     );
 
     hbi u_hbi(
@@ -110,8 +137,8 @@ module hart(
     l1 u_l1i(
         .clk              (clk),
         .rst_n            (rst_n),
-        .host_bti_req_slv (hbi_i_bti_req_if),
-        .host_bti_rsp_mst (hbi_i_bti_rsp_if),
+        .host_bti_req_slv (pa_i_bti_req_if),
+        .host_bti_rsp_mst (pa_i_bti_rsp_if),
         .mem_axi4_aw_mst   (i_axi4_aw_mst),
         .mem_axi4_w_mst    (i_axi4_w_mst),
         .mem_axi4_b_slv    (i_axi4_b_slv),
@@ -122,8 +149,8 @@ module hart(
     l1 u_l1d(
         .clk              (clk),
         .rst_n            (rst_n),
-        .host_bti_req_slv (hbi_d_bti_req_if),
-        .host_bti_rsp_mst (hbi_d_bti_rsp_if),
+        .host_bti_req_slv (pa_d_bti_req_if),
+        .host_bti_rsp_mst (pa_d_bti_rsp_if),
         .mem_axi4_aw_mst   (d_axi4_aw_mst),
         .mem_axi4_w_mst    (d_axi4_w_mst),
         .mem_axi4_b_slv    (d_axi4_b_slv),

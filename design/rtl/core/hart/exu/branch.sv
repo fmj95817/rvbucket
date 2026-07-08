@@ -50,6 +50,7 @@ module exu_branch_handler(
     end
 
     tri [`RV_PC_SIZE-1:0] link_pc = pc + `RV_PC_SIZE'd4;
+    wire rsp_hsk = ex_rsp_mst.vld && ex_rsp_mst.rdy;
     always_comb begin
         gpr_mst.ra1 = {`RV_GPR_AW{1'bx}};
         gpr_mst.ra2 = {`RV_GPR_AW{1'bx}};
@@ -62,7 +63,7 @@ module exu_branch_handler(
         ex_rsp_mst.pkt.pred_true = 1'b0;
 
         if (sel && (inst.base.opcode == OPCODE_JAL)) begin
-            gpr_mst.wen = 1'b1;
+            gpr_mst.wen = rsp_hsk;
             gpr_mst.wa = inst.j.rd;
             gpr_mst.wd = link_pc;
             ex_rsp_mst.pkt.taken = 1'b1;
@@ -70,11 +71,11 @@ module exu_branch_handler(
             ex_rsp_mst.pkt.pred_true = pred_taken && (ex_rsp_mst.pkt.target_pc == pred_pc);
         end else if (sel && (inst.base.opcode == OPCODE_JALR)) begin
             gpr_mst.ra1 = inst.i.rs1;
-            gpr_mst.wen = 1'b1;
+            gpr_mst.wen = rsp_hsk;
             gpr_mst.wa = inst.i.rd;
             gpr_mst.wd = link_pc;
             ex_rsp_mst.pkt.taken = 1'b1;
-            ex_rsp_mst.pkt.target_pc = gpr_mst.rd1 + i_imm;
+            ex_rsp_mst.pkt.target_pc = (gpr_mst.rd1 + i_imm) & 32'hfffffffe;
             ex_rsp_mst.pkt.pred_true = pred_taken && (ex_rsp_mst.pkt.target_pc == pred_pc);
         end else if (sel && (inst.base.opcode == OPCODE_BRANCH)) begin
             gpr_mst.ra1 = inst.b.rs1;
@@ -89,6 +90,6 @@ module exu_branch_handler(
     end
 
     assign ex_rsp_mst.vld = sel;
-    assign done = ex_rsp_mst.vld & ex_rsp_mst.rdy;
+    assign done = rsp_hsk;
 
 endmodule

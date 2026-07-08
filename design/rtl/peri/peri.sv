@@ -4,7 +4,8 @@ module peri(
     bti_req_if_t.slv bti_req_slv,
     bti_rsp_if_t.mst bti_rsp_mst,
     output logic     uart_tx,
-    input logic      uart_rx
+    input logic      uart_rx,
+    ext_irq_if_t.mst uart_irq_mst
 );
     typedef enum logic [1:0] {
         SEL_UART,
@@ -63,7 +64,8 @@ module peri(
         .bti_req_slv (uart_req),
         .bti_rsp_mst (uart_rsp),
         .tx          (uart_tx),
-        .rx          (uart_rx)
+        .rx          (uart_rx),
+        .irq         (uart_irq_mst.pkt.irq)
     );
 
     gpio u_gpio(

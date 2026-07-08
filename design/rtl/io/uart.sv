@@ -158,40 +158,48 @@ module bti_to_uart #(
     output logic [7:0]          tx_ch,
     input  logic                tx_done,
     input  logic                rx_ch_vld,
-    input  logic [7:0]          rx_ch
+    input  logic [7:0]          rx_ch,
+    output logic                irq
 );
     localparam REG_AW = UART_AW - 2;
     localparam logic [REG_AW-1:0] REG_BC_ADDR = 'd0;
     localparam logic [REG_AW-1:0] REG_TX_ADDR = 'd1;
     localparam logic [REG_AW-1:0] REG_RX_ADDR = 'd2;
+    localparam logic [REG_AW-1:0] REG_STS_ADDR = 'd3;
 
     logic reg_bc_set;
     logic [UART_BCW-1:0] reg_bc;
     logic [UART_BCW-1:0] reg_bc_nxt;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            reg_bc <= {UART_BCW{1'b1}};
+            reg_bc <= UART_BCW'(9);
         else if (reg_bc_set)
             reg_bc <= reg_bc_nxt;
     end
 
-    logic reg_rx_set;
-    logic [7:0] reg_rx;
-    logic [7:0] reg_rx_nxt;
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (~rst_n)
-            reg_rx <= 8'd0;
-        else if (reg_rx_set)
-            reg_rx <= reg_rx_nxt;
-    end
-
     tri bti_req_hsk = bti_req_slv.vld & bti_req_slv.rdy;
     tri bti_rsp_hsk = bti_rsp_mst.vld & bti_rsp_mst.rdy;
-
     tri [REG_AW-1:0] reg_addr = bti_req_slv.pkt.addr[REG_AW+1:2];
     tri [BTI_DW-1:0] reg_data = bti_req_slv.pkt.data;
     tri bti_req_cmd = bti_req_slv.pkt.cmd;
     tri bti_wr = (bti_req_cmd == BTI_REQ_CMD_WRITE) && bti_req_hsk;
+
+    logic reg_rx_set;
+    logic [7:0] reg_rx;
+    logic [7:0] reg_rx_nxt;
+    logic rx_valid;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n) begin
+            reg_rx <= 8'd0;
+            rx_valid <= 1'b0;
+        end else begin
+            if (reg_rx_set)
+                reg_rx <= reg_rx_nxt;
+            if (rx_ch_vld) rx_valid <= 1'b1;
+            else if (bti_req_hsk && bti_req_slv.pkt.cmd == BTI_REQ_CMD_READ &&
+                reg_addr == REG_RX_ADDR) rx_valid <= 1'b0;
+        end
+    end
 
     logic bti_req_cmd_pend;
     tri bti_rd_pend = (bti_req_cmd_pend == BTI_REQ_CMD_READ);
@@ -207,6 +215,7 @@ module bti_to_uart #(
             case (reg_addr)
                 REG_BC_ADDR: reg_rdata <= { {(BTI_DW-UART_BCW){1'b0}}, reg_bc };
                 REG_RX_ADDR: reg_rdata <= { {(BTI_DW-8){1'b0}}, reg_rx };
+                REG_STS_ADDR: reg_rdata <= {{(BTI_DW-1){1'b0}}, rx_valid};
                 default: reg_rdata <= {BTI_DW{1'b0}};
             endcase
         end
@@ -281,6 +290,7 @@ module bti_to_uart #(
     assign bti_rsp_mst.pkt.data = bti_rd_pend ? reg_rdata : {BTI_DW{1'b0}};
 
     assign bc = reg_bc;
+    assign irq = rx_valid;
 
 endmodule
 
@@ -295,7 +305,8 @@ module bti_uart #(
     bti_req_if_t.slv    bti_req_slv,
     bti_rsp_if_t.mst    bti_rsp_mst,
     input  logic        rx,
-    output logic        tx
+    output logic        tx,
+    output logic        irq
 );
     logic [UART_BCW-1:0] bc;
     logic                tx_ch_vld;
@@ -318,7 +329,8 @@ module bti_uart #(
         .tx_ch       (tx_ch),
         .tx_done     (tx_done),
         .rx_ch_vld   (rx_ch_vld),
-        .rx_ch       (rx_ch)
+        .rx_ch       (rx_ch),
+        .irq         (irq)
     );
 
     uart_tx #(

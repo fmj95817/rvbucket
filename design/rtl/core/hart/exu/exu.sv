@@ -22,6 +22,9 @@ module exu(
 
     tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.inst.base.opcode;
     wire sys_hsk = ex_req_slv.vld && ex_req_slv.rdy && opcode == OPCODE_SYSTEM;
+    logic [31:0] ex_req_next_pc;
+    wire ex_req_hsk = ex_req_slv.vld && ex_req_slv.rdy;
+    wire branch_redirect;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -33,8 +36,8 @@ module exu(
             wfi <= trap_exu_ctrl_slv.pkt.wfi;
             irq_epc <= trap_exu_ctrl_slv.pkt.irq_epc;
         end else begin
-            if (ex_req_slv.vld && ex_req_slv.rdy)
-                irq_epc <= ex_req_slv.pkt.pc + 4;
+            if (ex_req_hsk)
+                irq_epc <= ex_req_next_pc;
             if (sys_hsk && ex_req_slv.pkt.inst.i.funct3 == 3'b000 &&
                 ex_req_slv.pkt.inst.i.imm_11_0 == 12'h105)
                 wfi <= 1'b1;
@@ -43,7 +46,7 @@ module exu(
 
     assign exu_state_mst.pkt.priv = priv;
     assign exu_state_mst.pkt.pc = ex_req_slv.pkt.pc;
-    assign exu_state_mst.pkt.irq_epc = irq_epc;
+    assign exu_state_mst.pkt.irq_epc = ex_req_hsk ? ex_req_next_pc : irq_epc;
     assign exu_state_mst.pkt.irq_defer = !wfi && !ex_req_slv.rdy;
     assign exu_state_mst.pkt.wfi = wfi;
     assign exu_state_mst.pkt.wfi_resume_pc = irq_epc;
@@ -77,16 +80,23 @@ module exu(
     tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MISC_MEM);
     tri is_sys = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
 
-    tri alu_sel = (~need_fl) & (is_alu | is_alui);
-    tri branch_sel = (~need_fl) & (is_jal | is_jalr | is_branch);
-    tri ldst_sel = (~need_fl) & (is_load | is_store | is_amo);
-    tri misc_sel = (~need_fl) & (is_lui | is_auipc);
-    tri sys_sel = (~need_fl) & (is_mem | is_sys);
+    tri inst_fire_en = (~need_fl) & (~wfi);
+    tri alu_sel = inst_fire_en & (is_alu | is_alui);
+    tri branch_sel = inst_fire_en & (is_jal | is_jalr | is_branch);
+    tri ldst_sel = inst_fire_en & (is_load | is_store | is_amo);
+    tri misc_sel = inst_fire_en & (is_lui | is_auipc);
+    tri sys_sel = inst_fire_en & (is_mem | is_sys);
 
     tri branch_done;
     tri ldst_done;
 
     logic ex_req_rdy;
+
+    assign branch_redirect = branch_sel && ex_rsp_mst.vld && ex_rsp_mst.rdy &&
+        ex_rsp_mst.pkt.taken;
+    assign ex_req_next_pc = branch_redirect ? ex_rsp_mst.pkt.target_pc :
+        ex_req_slv.pkt.pc + 32'd4;
+
     assign ex_req_slv.rdy = wfi ? 1'b0 : (need_fl ? 1'b1 : ex_req_rdy);
 
     always_comb begin

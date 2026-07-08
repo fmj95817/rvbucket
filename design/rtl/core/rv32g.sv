@@ -15,7 +15,8 @@ module rv32g(
     axi4_w_if_t.mst   mm_axi4_w_mst,
     axi4_b_if_t.slv   mm_axi4_b_slv,
     axi4_ar_if_t.mst  mm_axi4_ar_mst,
-    axi4_r_if_t.slv   mm_axi4_r_slv
+    axi4_r_if_t.slv   mm_axi4_r_slv,
+    ext_irq_if_t.slv  uart_irq_slv
 );
     axi4_aw_if_t hart_i_aw();
     axi4_w_if_t hart_i_w();
@@ -74,8 +75,7 @@ module rv32g(
     );
 
     aclint u_aclint(clk, rst_n, aclint_req, aclint_rsp, core_timer, core_m_irq);
-    gpio u_plic_stub(clk, rst_n, plic_req, plic_rsp);
-    assign ext_irq.pkt.irq = 1'b0;
+    plic u_plic(clk, rst_n, plic_req, plic_rsp, uart_irq_slv, ext_irq);
 
     l2 u_l2(
         clk, rst_n,

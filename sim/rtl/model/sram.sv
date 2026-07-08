@@ -31,8 +31,6 @@ module dp_sram #(
     sram_rw_if_t.slv sram_r_slv,
     sram_rw_if_t.slv sram_w_slv
 );
-    assign sram_w_slv.rdata = {DW{1'b0}};
-
     logic [DW-1:0] mem[0:2**AW-1];
 
     initial begin
@@ -46,6 +44,9 @@ module dp_sram #(
     always @(posedge clk) begin
         if (sram_r_slv.cs & ~sram_r_slv.wen) begin
             sram_r_slv.rdata <= mem[sram_r_slv.addr];
+        end
+        if (sram_w_slv.cs & ~sram_w_slv.wen) begin
+            sram_w_slv.rdata <= mem[sram_w_slv.addr];
         end
     end
 

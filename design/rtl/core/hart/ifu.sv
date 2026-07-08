@@ -30,12 +30,13 @@ module ifu(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= FETCH_REQ;
-            pc <= 32'h40000000;
+            pc <= 32'h00000000;
             req_pc <= '0;
             ir_raw <= '0;
         end else if (trap_send_slv.vld) begin
             pc <= trap_send_slv.pkt.target_pc;
-            if (state == FETCH_RESP || (state == FETCH_REQ && fch_req_hsk))
+            if ((state == FETCH_REQ && fch_req_hsk) ||
+                ((state == FETCH_RESP || state == FETCH_DROP) && !fch_rsp_hsk))
                 state <= FETCH_DROP;
             else
                 state <= FETCH_REQ;
