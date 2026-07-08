@@ -6,7 +6,7 @@
 #include "base/def.h"
 #include "dbg/vcd.h"
 
-#define FCH_REQ_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
+#define FCH_REQ_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) do { \
     itf_conf_t conf = { \
         .cycle = module->mod.cycle, \
         .hier_name = module->mod.hier_name, \
@@ -14,7 +14,7 @@
         .pkt_size = sizeof(fch_req_if_t), \
         .pkt2str = &fch_req_if_to_str, \
         .reg_vcd = &fch_req_if_reg_vcd, \
-        .force_disable_dump = dis_dump, \
+        .force_disable_trace = dis_trace, \
         .ext_sig_src = ext_src \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
@@ -28,7 +28,7 @@
         .pkt_size = sizeof(fch_req_if_t), \
         .pkt2str = &fch_req_if_to_str, \
         .reg_vcd = &fch_req_if_reg_vcd, \
-        .force_disable_dump = false, \
+        .force_disable_trace = false, \
         .fifo_depth = depth \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
