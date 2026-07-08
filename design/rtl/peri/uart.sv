@@ -143,7 +143,8 @@ endmodule
 
 module apb_to_uart #(
     parameter UART_AW = 4,
-    parameter UART_BCW = 16
+    parameter UART_BCW = 16,
+    parameter UART_RX_FIFO_DEPTH = 16
 )(
     input  logic                clk,
     input  logic                rst_n,
@@ -179,20 +180,52 @@ module apb_to_uart #(
     tri [31:0] reg_data = apb_req_slv.pkt.pwdata;
     tri apb_wr = apb_req_slv.pkt.pwrite & apb_req_hsk;
 
-    logic reg_rx_set;
-    logic [7:0] reg_rx;
-    logic [7:0] reg_rx_nxt;
-    logic rx_valid;
+    localparam UART_RX_FIFO_PTR_W =
+        (UART_RX_FIFO_DEPTH <= 1) ? 1 : $clog2(UART_RX_FIFO_DEPTH);
+    localparam UART_RX_FIFO_CNT_W = $clog2(UART_RX_FIFO_DEPTH + 1);
+
+    logic [7:0] rx_fifo[UART_RX_FIFO_DEPTH];
+    logic [UART_RX_FIFO_PTR_W-1:0] rx_fifo_rd_ptr;
+    logic [UART_RX_FIFO_PTR_W-1:0] rx_fifo_wr_ptr;
+    logic [UART_RX_FIFO_CNT_W-1:0] rx_fifo_count;
+    logic rx_fifo_push;
+    logic rx_fifo_pop;
+    logic rx_fifo_push_accept;
+    tri rx_valid = rx_fifo_count != 0;
+    tri rx_fifo_full = rx_fifo_count == UART_RX_FIFO_CNT_W'(UART_RX_FIFO_DEPTH);
+    tri [7:0] rx_fifo_rdata = rx_valid ? rx_fifo[rx_fifo_rd_ptr] : 8'b0;
+
+    assign rx_fifo_pop = apb_req_hsk && !apb_req_slv.pkt.pwrite &&
+        reg_addr == REG_RX_ADDR && rx_valid;
+    assign rx_fifo_push = rx_ch_vld;
+    assign rx_fifo_push_accept = rx_fifo_push && (!rx_fifo_full || rx_fifo_pop);
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n) begin
-            reg_rx <= 8'd0;
-            rx_valid <= 1'b0;
+            rx_fifo_rd_ptr <= '0;
+            rx_fifo_wr_ptr <= '0;
+            rx_fifo_count <= '0;
         end else begin
-            if (reg_rx_set)
-                reg_rx <= reg_rx_nxt;
-            if (rx_ch_vld) rx_valid <= 1'b1;
-            else if (apb_req_hsk && !apb_req_slv.pkt.pwrite &&
-                reg_addr == REG_RX_ADDR) rx_valid <= 1'b0;
+            if (rx_fifo_push_accept) begin
+                rx_fifo[rx_fifo_wr_ptr] <= rx_ch;
+                if (rx_fifo_wr_ptr == UART_RX_FIFO_PTR_W'(UART_RX_FIFO_DEPTH - 1))
+                    rx_fifo_wr_ptr <= '0;
+                else
+                    rx_fifo_wr_ptr <= rx_fifo_wr_ptr + 1'b1;
+            end
+
+            if (rx_fifo_pop) begin
+                if (rx_fifo_rd_ptr == UART_RX_FIFO_PTR_W'(UART_RX_FIFO_DEPTH - 1))
+                    rx_fifo_rd_ptr <= '0;
+                else
+                    rx_fifo_rd_ptr <= rx_fifo_rd_ptr + 1'b1;
+            end
+
+            case ({rx_fifo_push_accept, rx_fifo_pop})
+                2'b10: rx_fifo_count <= rx_fifo_count + 1'b1;
+                2'b01: rx_fifo_count <= rx_fifo_count - 1'b1;
+                default: rx_fifo_count <= rx_fifo_count;
+            endcase
         end
     end
 
@@ -209,7 +242,7 @@ module apb_to_uart #(
         if (apb_req_hsk) begin
             case (reg_addr)
                 REG_BC_ADDR: reg_rdata <= { {(32-UART_BCW){1'b0}}, reg_bc };
-                REG_RX_ADDR: reg_rdata <= { 24'b0, reg_rx };
+                REG_RX_ADDR: reg_rdata <= { 24'b0, rx_fifo_rdata };
                 REG_STS_ADDR: reg_rdata <= { 31'b0, rx_valid };
                 default: reg_rdata <= 32'b0;
             endcase
@@ -268,9 +301,6 @@ module apb_to_uart #(
 
     assign reg_bc_set = apb_wr && (reg_addr == REG_BC_ADDR);
     assign reg_bc_nxt = reg_data[UART_BCW-1:0];
-
-    assign reg_rx_set = rx_ch_vld;
-    assign reg_rx_nxt = rx_ch;
 
     assign tx_ch_vld = apb_wr && (reg_addr == REG_TX_ADDR);
     assign tx_ch = reg_data[7:0];

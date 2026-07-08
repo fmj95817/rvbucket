@@ -1,13 +1,13 @@
-# RVBucket: 一个32位RISC-V架构SoC的C-Model及RTL实现
+# RVBucket: 一个32位RISC-V架构SoC的ASM及RTL实现
 
 ## 概述
 
-这是一个开源的32位RISC-V处理器，包含一个2级流水线的RV32G指令集CPU、一个简单的MCU类SoC，采用C-Model方式和RTL方式实现。
+这是一个开源的32位RISC-V处理器，包含一个2级流水线的RV32G指令集CPU、一个简单的MCU类SoC，采用ASM（Architecture Simulation Model，架构仿真模型）和RTL方式实现。
 
 ## 系统规格
 
-- **CPU核心**: 2级流水线的RV32G (RV32IMACZicsr) CPU，含MMU和TLB
-- **L1 Cache**: 可配置组相联L1指令缓存和数据缓存，支持写回
+- **CPU核心**: 2级流水线的RV32G (RV32IMACZicsr) CPU，含Sv32 MMU；ASM已包含TLB，RTL当前采用直接页表遍历
+- **L1 Cache**: ASM中支持可配置组相联L1指令缓存和数据缓存，支持写回；RTL缓存优化仍在开发中
 - **Boot ROM**: 2 KB
 - **Flash**: 32 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
@@ -24,11 +24,11 @@
 
 - **RV32G指令集**: 支持 RV32I + M + A + Zicsr + Zifencei。
 - **2级流水线**: IF/EX流水线，含分支预测（BHT）。
-- **MMU与Sv32分页**: TLB支持，页表遍历器，可启动Linux内核。
-- **L1缓存**: 可配置组相联L1指令/数据缓存，支持bypass模式。
+- **MMU与Sv32分页**: ASM支持TLB和页表遍历器；RTL当前通过直接页表遍历到达Linux smoke阶段。
+- **L1缓存**: ASM支持可配置组相联L1指令/数据缓存和bypass模式；RTL缓存优化待实现。
 - **陷阱处理**: 机器态/监管态陷阱、中断、委托机制。
 - **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、GTimer、ACLINT、PLIC。
-- **C模型**: 精确到时钟周期的仿真，支持VCD波形和接口事务trace。
+- **ASM（架构仿真模型）**: 精确到时钟周期的仿真，支持VCD波形和接口事务trace。
 - **双UI**: Web UI Dashboard（xterm.js终端 + GPIO面板）和 Terminal UI（vim风格命令模式）。
 - **RTL实现**: SystemVerilog实现，接口由 `itfgen.py` 自动生成，支持VCS/Verilator/FPGA。
 - **单元测试框架**: 模块化UT框架，彩色输出，计分板，接口trace验证。
@@ -48,7 +48,7 @@
 
 | 命令 | 说明 |
 |------|------|
-| `./build.sh hw model` | 编译C模型仿真 |
+| `./build.sh hw model` | 编译ASM仿真 |
 | `./build.sh hw rtl vcs` | 编译RTL仿真（VCS） |
 | `./build.sh hw rtl vcs debug` | 编译RTL仿真（VCS debug + FSDB） |
 | `./build.sh hw rtl verilator` | 编译RTL仿真（Verilator） |
@@ -57,14 +57,14 @@
 | `./build.sh sw <名称>` | 编译单个C测试用例 |
 | `./build.sh sw linux` | 编译Linux内核 + OpenSBI |
 | `./build.sh sw linux clean` | 清理Linux内核 + OpenSBI编译 |
-| `./build.sh ut model` | 编译全部C模型单元测试 |
+| `./build.sh ut model` | 编译全部ASM单元测试 |
 | `./build.sh ut model <名称>` | 编译单个UT或UT子目录 |
 
 *备注：FPGA需要在 `fpga/xilinx/boards` 下添加开发板描述文件，并在 `fpga/xilinx/proj.json` 中更新 `board` 项。*
 
 ### 运行仿真
 
-**C模型:**
+**ASM:**
 ```bash
 cd build/hw/model
 
@@ -100,7 +100,7 @@ cd build/hw/model
 ./run.sh model                 # 全量 SW + UT 回归
 ```
 
-**C模型单元测试（独立编译）:**
+**ASM单元测试（独立编译）:**
 ```bash
 ./build.sh ut model            # 编译全部UT
 ./run.sh model ut axi2bti      # 运行单个UT（自动cd到对应目录）
@@ -122,12 +122,12 @@ cd build/hw/verilator
 
 ```
 .
-├── base/                    共享基础库（C模型 + RTL）
+├── base/                    共享基础库（ASM + RTL）
 │   ├── model/base/          types, itf, fifo, 仲裁器
 │   ├── model/dbg/           调试: vcd, log, pcm, chk
 │   └── rtl/                 RTL基础
 ├── design/
-│   ├── model/               C模型源码
+│   ├── model/               ASM源码
 │   │   ├── bus/             总线架构: bridge, mux, demux
 │   │   ├── core/            CPU与外设
 │   │   ├── itf/             接口定义
@@ -136,9 +136,9 @@ cd build/hw/verilator
 │   │   └── spec/            ISA, CSR, SoC配置
 │   └── rtl/                 RTL源码（SystemVerilog）
 ├── sim/
-│   ├── model/               C仿真顶层及UI
+│   ├── model/               ASM仿真顶层及UI
 │   └── rtl/                 RTL仿真顶层
-├── ut/model/                单元测试（镜像 design/model/）
+├── ut/model/                ASM单元测试（镜像 design/model/）
 ├── cases/                   软件测试用例
 ├── sdk/                     软件SDK（CRT, 驱动）
 ├── tools/                   构建工具, Web UI, itfgen
@@ -148,24 +148,25 @@ cd build/hw/verilator
 
 ## 开发状态
 
-- [x] C-Model RV32G (I/M/A/Zicsr/Zifencei) 指令集
-- [x] C-Model MMU 含 Sv32 分页和 TLB
-- [x] C-Model L1 指令/数据缓存，支持bypass
-- [x] C-Model 启动 Linux 内核
-- [x] C-Model 总线架构含 BTI/AXI4/APB 协议桥接、多路选择及地址路由
-- [x] C-Model GPIO（24位双向，输出/输入/中断三种模式）
-- [x] C-Model GTimer（通用递减计时器）
-- [x] C-Model Web UI Dashboard（xterm.js, GPIO LED/按钮/开关, reset, 主题切换）
-- [x] C-Model Terminal UI（vim风格cmd模式, ESC键复位）
-- [x] C-Model 模块级单元测试框架
-- [x] C-Model 回归套件（run.sh）
+- [x] ASM RV32G (I/M/A/Zicsr/Zifencei) 指令集
+- [x] ASM MMU 含 Sv32 分页和 TLB
+- [x] ASM L1 指令/数据缓存，支持bypass
+- [x] ASM 启动 Linux 内核
+- [x] ASM 总线架构含 BTI/AXI4/APB 协议桥接、多路选择及地址路由
+- [x] ASM GPIO（24位双向，输出/输入/中断三种模式）
+- [x] ASM GTimer（通用递减计时器）
+- [x] ASM Web UI Dashboard（xterm.js, GPIO LED/按钮/开关, reset, 主题切换）
+- [x] ASM Terminal UI（vim风格cmd模式, ESC键复位）
+- [x] ASM 模块级单元测试框架
+- [x] ASM 回归套件（run.sh）
 - [x] Linux RVBucket GPIO 驱动（gpio-rvbucket, sysfs接口）
-- [ ] RTL RV32G 指令集
-- [ ] RTL MMU 分页
-- [ ] RTL L1 缓存
-- [ ] RTL 启动 Linux 内核
+- [x] RTL RV32G 指令集
+- [x] RTL Sv32 MMU 直接页表遍历
+- [x] RTL 到达 Linux smoke 阶段
+- [ ] RTL TLB 优化
+- [ ] RTL L1 缓存优化
 - [ ] FPGA 启动 Linux 内核
-- [ ] C-Model/RTL F/D 指令集扩展
+- [ ] ASM/RTL F/D 指令集扩展
 
 ## 贡献
 
