@@ -6,15 +6,20 @@ module soc(
     input logic         uart_rx,
     input logic [23:0]  gpio_in,
     output logic [23:0] gpio_out,
-    output logic [23:0] gpio_oe
+    output logic [23:0] gpio_oe,
+    axi4_aw_if_t.mst   ddr_axi4_aw_mst,
+    axi4_w_if_t.mst    ddr_axi4_w_mst,
+    axi4_b_if_t.slv    ddr_axi4_b_slv,
+    axi4_ar_if_t.mst   ddr_axi4_ar_mst,
+    axi4_r_if_t.slv    ddr_axi4_r_slv,
+    axi4_aw_if_t.mst   flash_axi4_aw_mst,
+    axi4_w_if_t.mst    flash_axi4_w_mst,
+    axi4_b_if_t.slv    flash_axi4_b_slv,
+    axi4_ar_if_t.mst   flash_axi4_ar_mst,
+    axi4_r_if_t.slv    flash_axi4_r_slv
 );
-    localparam FLASH_AW = 25;
-    localparam DDR_AW = 28;
-
     apb_req_if_t peri_req();
     apb_rsp_if_t peri_rsp();
-    bti_req_if_t flash_bti_req();
-    bti_rsp_if_t flash_bti_rsp();
     axi4_aw_if_t mm_aw();
     axi4_w_if_t mm_w();
     axi4_b_if_t mm_b();
@@ -70,39 +75,30 @@ module soc(
         .gst_axi4_r_slvs    (mm_gst_r)
     );
 
-    axi_ddr #(
-        .DDR_AW (DDR_AW)
-    ) u_ddr(
-        .clk          (clk),
-        .rst_n        (rst_n),
-        .axi4_aw_slv  (mm_gst_aw[0]),
-        .axi4_w_slv   (mm_gst_w[0]),
-        .axi4_b_mst   (mm_gst_b[0]),
-        .axi4_ar_slv  (mm_gst_ar[0]),
-        .axi4_r_mst   (mm_gst_r[0])
+    axi_link u_ddr_axi_link(
+        .host_axi4_aw_slv (mm_gst_aw[0]),
+        .host_axi4_w_slv  (mm_gst_w[0]),
+        .host_axi4_b_mst  (mm_gst_b[0]),
+        .host_axi4_ar_slv (mm_gst_ar[0]),
+        .host_axi4_r_mst  (mm_gst_r[0]),
+        .gst_axi4_aw_mst  (ddr_axi4_aw_mst),
+        .gst_axi4_w_mst   (ddr_axi4_w_mst),
+        .gst_axi4_b_slv   (ddr_axi4_b_slv),
+        .gst_axi4_ar_mst  (ddr_axi4_ar_mst),
+        .gst_axi4_r_slv   (ddr_axi4_r_slv)
     );
 
-    axi2bti u_flash_axi2bti(
-        .clk          (clk),
-        .rst_n        (rst_n),
-        .axi4_aw_slv  (mm_gst_aw[1]),
-        .axi4_w_slv   (mm_gst_w[1]),
-        .axi4_b_mst   (mm_gst_b[1]),
-        .axi4_ar_slv  (mm_gst_ar[1]),
-        .axi4_r_mst   (mm_gst_r[1]),
-        .bti_req_mst  (flash_bti_req),
-        .bti_rsp_slv  (flash_bti_rsp)
-    );
-
-    bti_rom #(
-        .BTI_AW (`RV_AW),
-        .BTI_DW (`RV_XLEN),
-        .ROM_AW (FLASH_AW)
-    ) u_flash(
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .bti_req_slv (flash_bti_req),
-        .bti_rsp_mst (flash_bti_rsp)
+    axi_link u_flash_axi_link(
+        .host_axi4_aw_slv (mm_gst_aw[1]),
+        .host_axi4_w_slv  (mm_gst_w[1]),
+        .host_axi4_b_mst  (mm_gst_b[1]),
+        .host_axi4_ar_slv (mm_gst_ar[1]),
+        .host_axi4_r_mst  (mm_gst_r[1]),
+        .gst_axi4_aw_mst  (flash_axi4_aw_mst),
+        .gst_axi4_w_mst   (flash_axi4_w_mst),
+        .gst_axi4_b_slv   (flash_axi4_b_slv),
+        .gst_axi4_ar_mst  (flash_axi4_ar_mst),
+        .gst_axi4_r_slv   (flash_axi4_r_slv)
     );
 
     peri u_peri(

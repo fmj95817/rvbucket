@@ -4,26 +4,24 @@
 #include "base/types.h"
 #include "base/mod.h"
 #include "core/rv32g.h"
-#include "mem/ram.h"
-#include "mem/rom.h"
+#include "itf/axi4_if.h"
 #include "peri/peri.h"
 #include "bus/demux.h"
 
 typedef struct soc {
     mod_t mod;
     AXI4_MST_DECL(ddr_);
+    AXI4_MST_DECL(flash_);
     itf_t *uart_tx_mst;
     itf_t *uart_rx_slv;
     itf_t *gpio_inout;
     itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
 
     rv32g_t cpu;
-    rom_t flash;
     peri_t peri;
     axi_demux_t mm_axi_demux;
 
     AXI4_IF_DECL(mm_);
-    AXI4_IF_DECL(flash_);
     APB_IF_DECL(peri_);
     itf_t peri_uart_irq_itf;
     itf_t peri_gpio_irq_itf;

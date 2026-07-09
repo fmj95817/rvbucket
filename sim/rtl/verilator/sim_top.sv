@@ -24,11 +24,25 @@ module sim_top(
 
     localparam logic [31:0] DDR_BASE = 32'h40000000;
     localparam logic [31:0] BIN_TYPE_LINUX = 32'd1;
+    localparam int unsigned FLASH_AW = 25;
+    localparam int unsigned DDR_AW = 28;
     localparam int unsigned BIN_HEADER_WORDS = 10;
     localparam int unsigned STAGING_WORD_AW = 23;
     localparam int unsigned STAGING_WORD_NUM = 32'd1 << STAGING_WORD_AW;
 
     logic [31:0] staging_mem[0:STAGING_WORD_NUM-1];
+    bti_req_if_t flash_bti_req();
+    bti_rsp_if_t flash_bti_rsp();
+    axi4_aw_if_t ddr_axi4_aw();
+    axi4_w_if_t ddr_axi4_w();
+    axi4_b_if_t ddr_axi4_b();
+    axi4_ar_if_t ddr_axi4_ar();
+    axi4_r_if_t ddr_axi4_r();
+    axi4_aw_if_t flash_axi4_aw();
+    axi4_w_if_t flash_axi4_w();
+    axi4_b_if_t flash_axi4_b();
+    axi4_ar_if_t flash_axi4_ar();
+    axi4_r_if_t flash_axi4_r();
 
     assign gpio_in = 24'b0;
 
@@ -39,7 +53,52 @@ module sim_top(
         .uart_rx (uart_rx),
         .gpio_in (gpio_in),
         .gpio_out(gpio_out),
-        .gpio_oe (gpio_oe)
+        .gpio_oe (gpio_oe),
+        .ddr_axi4_aw_mst   (ddr_axi4_aw),
+        .ddr_axi4_w_mst    (ddr_axi4_w),
+        .ddr_axi4_b_slv    (ddr_axi4_b),
+        .ddr_axi4_ar_mst   (ddr_axi4_ar),
+        .ddr_axi4_r_slv    (ddr_axi4_r),
+        .flash_axi4_aw_mst (flash_axi4_aw),
+        .flash_axi4_w_mst  (flash_axi4_w),
+        .flash_axi4_b_slv  (flash_axi4_b),
+        .flash_axi4_ar_mst (flash_axi4_ar),
+        .flash_axi4_r_slv  (flash_axi4_r)
+    );
+
+    axi_ddr #(
+        .DDR_AW (DDR_AW)
+    ) u_ddr(
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .axi4_aw_slv  (ddr_axi4_aw),
+        .axi4_w_slv   (ddr_axi4_w),
+        .axi4_b_mst   (ddr_axi4_b),
+        .axi4_ar_slv  (ddr_axi4_ar),
+        .axi4_r_mst   (ddr_axi4_r)
+    );
+
+    axi2bti u_flash_axi2bti(
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .axi4_aw_slv  (flash_axi4_aw),
+        .axi4_w_slv   (flash_axi4_w),
+        .axi4_b_mst   (flash_axi4_b),
+        .axi4_ar_slv  (flash_axi4_ar),
+        .axi4_r_mst   (flash_axi4_r),
+        .bti_req_mst  (flash_bti_req),
+        .bti_rsp_slv  (flash_bti_rsp)
+    );
+
+    bti_rom #(
+        .BTI_AW (`RV_AW),
+        .BTI_DW (`RV_XLEN),
+        .ROM_AW (FLASH_AW)
+    ) u_flash(
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .bti_req_slv (flash_bti_req),
+        .bti_rsp_mst (flash_bti_rsp)
     );
 
     uart_rx u_uart_rx(
@@ -126,7 +185,7 @@ module sim_top(
     );
         begin
             for (int unsigned i = 0; i < word_num; i++)
-                u_soc.u_flash.u_rom.mem[i] = staging_mem[i];
+                u_flash.u_rom.mem[i] = staging_mem[i];
         end
     endtask
 
@@ -141,7 +200,7 @@ module sim_top(
             base_word = (load_addr - DDR_BASE) >> 2;
             word_num = align4_words(size);
             for (int unsigned i = 0; i < word_num; i++)
-                u_soc.u_ddr.mem[base_word + i] = staging_mem[src_word + i];
+                u_ddr.mem[base_word + i] = staging_mem[src_word + i];
         end
     endtask
 
@@ -194,9 +253,9 @@ module sim_top(
                 payload_word += align4_words(initrd_size);
                 copy_staging_to_ddr(payload_word, dtb_load, dtb_size);
 
-                u_soc.u_flash.u_rom.mem[3] = 32'd0;
-                u_soc.u_flash.u_rom.mem[4] = 32'd0;
-                u_soc.u_flash.u_rom.mem[5] = 32'd0;
+                u_flash.u_rom.mem[3] = 32'd0;
+                u_flash.u_rom.mem[4] = 32'd0;
+                u_flash.u_rom.mem[5] = 32'd0;
 
                 $display("sim_top: preloaded linux payloads to DDR: kernel %0d bytes @ 0x%08x, initrd %0d bytes @ 0x%08x, dtb %0d bytes @ 0x%08x",
                     kernel_size, kernel_load, initrd_size, initrd_load,

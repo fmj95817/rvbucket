@@ -10,7 +10,6 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
     DBG_VCD_MODULE_SCOPE(name);
 
     AXI4_IF_CONSTRUCT(soc, mm_, 2);
-    AXI4_IF_CONSTRUCT(soc, flash_, 1);
     APB_IF_CONSTRUCT(soc, peri_, 1);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_uart_irq_itf, false, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_gpio_irq_itf, false, false);
@@ -54,11 +53,6 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
     };
     rv32g_construct(&soc->cpu, soc->mod.hier_name, "u_rv32g_cpu", &rv32g_conf);
 
-    AXI4_SLV_CONNECT(&soc->flash, , soc, flash_);
-    soc->flash.mod.cycle = soc->mod.cycle;
-    rom_construct(&soc->flash, soc->mod.hier_name, "u_flash", ROM_MODE_AXI,
-        FLASH_SIZE, NULL, 0, FLASH_BASE);
-
     soc->peri.mod.cycle = soc->mod.cycle;
     APB_SLV_CONNECT(&soc->peri, , soc, peri_);
     soc->peri.uart_tx_mst = soc->uart_tx_mst;
@@ -71,7 +65,7 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
 
     AXI4_SLV_CONNECT(&soc->mm_axi_demux, host_, soc, mm_);
     AXI4_MST_ARR_IMPORT(&soc->mm_axi_demux, gst_, 0, soc, ddr_);
-    AXI4_MST_ARR_CONNECT(&soc->mm_axi_demux, gst_, 1, soc, flash_);
+    AXI4_MST_ARR_IMPORT(&soc->mm_axi_demux, gst_, 1, soc, flash_);
     const u32 mm_axi_gst_bases[] = { DDR_BASE, FLASH_BASE };
     const u32 mm_axi_gst_sizes[] = { DDR_SIZE, FLASH_SIZE };
     soc->mm_axi_demux.mod.cycle = soc->mod.cycle;
@@ -83,12 +77,10 @@ void soc_reset(soc_t *soc)
 {
     mod_reset(&soc->mod);
     rv32g_reset(&soc->cpu);
-    rom_reset(&soc->flash);
     peri_reset(&soc->peri);
     axi_demux_reset(&soc->mm_axi_demux);
 
     AXI4_IF_RESET(soc, mm_);
-    AXI4_IF_RESET(soc, flash_);
     APB_IF_RESET(soc, peri_);
     itf_reset(&soc->peri_uart_irq_itf);
     itf_reset(&soc->peri_gpio_irq_itf);
@@ -99,12 +91,10 @@ void soc_clock(soc_t *soc)
 {
     mod_clock(&soc->mod);
     rv32g_clock(&soc->cpu);
-    rom_clock(&soc->flash);
     peri_clock(&soc->peri);
     axi_demux_clock(&soc->mm_axi_demux);
 
     AXI4_IF_DBG_CLOCK(soc, mm_);
-    AXI4_IF_DBG_CLOCK(soc, flash_);
     APB_IF_DBG_CLOCK(soc, peri_);
     itf_dbg_clock(&soc->peri_uart_irq_itf);
     itf_dbg_clock(&soc->peri_gpio_irq_itf);
@@ -115,12 +105,10 @@ void soc_free(soc_t *soc)
 {
     mod_free(&soc->mod);
     rv32g_free(&soc->cpu);
-    rom_free(&soc->flash);
     peri_free(&soc->peri);
     axi_demux_free(&soc->mm_axi_demux);
 
     AXI4_IF_FREE(soc, mm_);
-    AXI4_IF_FREE(soc, flash_);
     APB_IF_FREE(soc, peri_);
     itf_free(&soc->peri_uart_irq_itf);
     itf_free(&soc->peri_gpio_irq_itf);

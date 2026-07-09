@@ -8,6 +8,7 @@
 #include "itf/uart_if.h"
 #include "itf/gpio_if.h"
 #include "mem/ram.h"
+#include "mem/rom.h"
 #include "dbg/chk.h"
 #include "dbg/log.h"
 #include "dbg/env.h"
@@ -46,11 +47,13 @@ typedef struct sim_top {
     itf_t uart_rx_itf;
     itf_t uart_tx_itf;
     AXI4_IF_DECL(ddr_);
+    AXI4_IF_DECL(flash_);
 
     itf_t gpio_inout_itf;
     gpio_if_t *gpio_inout_io;
 
     ram_t ddr;
+    rom_t flash;
     soc_t soc;
 
     bool end_sim;
@@ -142,7 +145,7 @@ static void sim_top_burn_program(sim_top_t *sim_top)
     if (sim_top->fast_load_linux) {
         sim_top_preload_linux(sim_top, &program);
     }
-    rom_burn(&sim_top->soc.flash, program.code, 0, program.size);
+    rom_burn(&sim_top->flash, program.code, 0, program.size);
 
     free(program.code);
 }
@@ -158,6 +161,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     UART_IF_CONSTRUCT(sim_top, uart_rx_itf, 1);
     UART_IF_CONSTRUCT(sim_top, uart_tx_itf, 1);
     AXI4_IF_CONSTRUCT(sim_top, ddr_, 1);
+    AXI4_IF_CONSTRUCT(sim_top, flash_, 1);
     GPIO_SIGNAL_IF_CONSTRUCT(sim_top, gpio_inout_itf, false, false);
 
     sim_top->gpio_inout_io = itf_signal_get_src_and_chk(&sim_top->gpio_inout_itf);
@@ -165,6 +169,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
 
     sim_top->soc.mod.cycle = sim_top->mod.cycle;
     AXI4_MST_CONNECT(&sim_top->soc, ddr_, sim_top, ddr_);
+    AXI4_MST_CONNECT(&sim_top->soc, flash_, sim_top, flash_);
     sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
     sim_top->soc.uart_rx_slv = &sim_top->uart_tx_itf;
     sim_top->soc.gpio_inout = &sim_top->gpio_inout_itf;
@@ -177,6 +182,11 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     sim_top->ddr.mod.cycle = sim_top->mod.cycle;
     ram_construct(&sim_top->ddr, sim_top->mod.hier_name, "u_ddr", 1,
         RAM_MODE_AXI, DDR_SIZE, DDR_BASE);
+
+    AXI4_SLV_CONNECT(&sim_top->flash, , sim_top, flash_);
+    sim_top->flash.mod.cycle = sim_top->mod.cycle;
+    rom_construct(&sim_top->flash, sim_top->mod.hier_name, "u_flash",
+        ROM_MODE_AXI, FLASH_SIZE, NULL, 0, FLASH_BASE);
 
     dbg_vcd_set_clk(sim_top->mod.cycle);
     dbg_vcd_add_sig("cycle", DBG_SIG_TYPE_REG, 64, sim_top->mod.cycle);
@@ -205,11 +215,13 @@ static void sim_top_reset(sim_top_t *sim_top)
     sim_top->ui->reset(sim_top->ui);
     soc_reset(&sim_top->soc);
     ram_reset(&sim_top->ddr);
+    rom_reset(&sim_top->flash);
     dbg_vcd_reset();
 
     itf_reset(&sim_top->uart_rx_itf);
     itf_reset(&sim_top->uart_tx_itf);
     AXI4_IF_RESET(sim_top, ddr_);
+    AXI4_IF_RESET(sim_top, flash_);
     itf_reset(&sim_top->gpio_inout_itf);
 
     u32 gpio_val = sim_top->ui->gpio_in_read(sim_top->ui);
@@ -246,10 +258,12 @@ static void sim_top_clock(sim_top_t *sim_top)
 
     soc_clock(&sim_top->soc);
     ram_clock(&sim_top->ddr);
+    rom_clock(&sim_top->flash);
 
     itf_dbg_clock(&sim_top->uart_rx_itf);
     itf_dbg_clock(&sim_top->uart_tx_itf);
     AXI4_IF_DBG_CLOCK(sim_top, ddr_);
+    AXI4_IF_DBG_CLOCK(sim_top, flash_);
     itf_dbg_clock(&sim_top->gpio_inout_itf);
 
     (*(u64 *)sim_top->mod.cycle)++;
@@ -288,10 +302,12 @@ static void sim_top_free(sim_top_t *sim_top)
 
     soc_free(&sim_top->soc);
     ram_free(&sim_top->ddr);
+    rom_free(&sim_top->flash);
 
     itf_free(&sim_top->uart_rx_itf);
     itf_free(&sim_top->uart_tx_itf);
     AXI4_IF_FREE(sim_top, ddr_);
+    AXI4_IF_FREE(sim_top, flash_);
     itf_free(&sim_top->gpio_inout_itf);
 }
 
