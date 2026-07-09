@@ -19,6 +19,7 @@ module exu(
     logic [1:0] priv;
     logic wfi;
     logic [31:0] irq_epc;
+    logic irq_defer;
 
     tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.inst.base.opcode;
     wire sys_hsk = ex_req_slv.vld && ex_req_slv.rdy && opcode == OPCODE_SYSTEM;
@@ -31,13 +32,16 @@ module exu(
             priv <= 2'b11;
             wfi <= 1'b0;
             irq_epc <= 0;
+            irq_defer <= 1'b0;
         end else if (trap_exu_ctrl_slv.vld) begin
             priv <= trap_exu_ctrl_slv.pkt.priv;
             wfi <= trap_exu_ctrl_slv.pkt.wfi;
             irq_epc <= trap_exu_ctrl_slv.pkt.irq_epc;
+            irq_defer <= 1'b0;
         end else begin
             if (ex_req_hsk)
                 irq_epc <= ex_req_next_pc;
+            irq_defer <= !wfi && !ex_req_slv.rdy;
             if (sys_hsk && ex_req_slv.pkt.inst.i.funct3 == 3'b000 &&
                 ex_req_slv.pkt.inst.i.imm_11_0 == 12'h105)
                 wfi <= 1'b1;
@@ -46,8 +50,8 @@ module exu(
 
     assign exu_state_mst.pkt.priv = priv;
     assign exu_state_mst.pkt.pc = ex_req_slv.pkt.pc;
-    assign exu_state_mst.pkt.irq_epc = ex_req_hsk ? ex_req_next_pc : irq_epc;
-    assign exu_state_mst.pkt.irq_defer = !wfi && !ex_req_slv.rdy;
+    assign exu_state_mst.pkt.irq_epc = irq_epc;
+    assign exu_state_mst.pkt.irq_defer = irq_defer;
     assign exu_state_mst.pkt.wfi = wfi;
     assign exu_state_mst.pkt.wfi_resume_pc = irq_epc;
     localparam INST_HANDLER_NUM = 5;
@@ -87,6 +91,7 @@ module exu(
     tri misc_sel = inst_fire_en & (is_lui | is_auipc);
     tri sys_sel = inst_fire_en & (is_mem | is_sys);
 
+    tri alu_done;
     tri branch_done;
     tri ldst_done;
 
@@ -109,8 +114,8 @@ module exu(
             OPCODE_LOAD: ex_req_rdy = ldst_done;
             OPCODE_STORE: ex_req_rdy = ldst_done;
             OPCODE_AMO: ex_req_rdy = ldst_done;
-            OPCODE_ALUI: ex_req_rdy = 1'b1;
-            OPCODE_ALU: ex_req_rdy = 1'b1;
+            OPCODE_ALUI: ex_req_rdy = alu_done;
+            OPCODE_ALU: ex_req_rdy = alu_done;
             OPCODE_MISC_MEM: ex_req_rdy = 1'b1;
             OPCODE_SYSTEM: ex_req_rdy = 1'b1;
             default: ex_req_rdy = 1'b0;
@@ -145,7 +150,8 @@ module exu(
         .rst_n        (rst_n),
         .sel          (alu_sel),
         .inst         (ex_req_slv.pkt.inst),
-        .gpr_mst      (gpr_src_if_arr[ALU_CHN_IDX])
+        .gpr_mst      (gpr_src_if_arr[ALU_CHN_IDX]),
+        .done         (alu_done)
     );
 
     exu_branch_handler u_exu_branch_handler(

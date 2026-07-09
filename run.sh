@@ -23,6 +23,8 @@ SW_EXCLUDE=(
     gpio_test
 )
 
+RTL_SW_TIMEOUT="${RTL_SW_TIMEOUT:-300}"
+
 function pass {
     printf "  ${GRN}PASS${RST}  %s\n" "$1"
     PASS=$((PASS + 1))
@@ -77,6 +79,15 @@ function run_with_timeout {
     return "${status}"
 }
 
+function get_sw_case_input {
+    local name="${1}"
+
+    SW_CASE_INPUT=""
+    case "${name}" in
+        calc) SW_CASE_INPUT=$'1+2*3\n' ;;
+    esac
+}
+
 function find_ut_bins {
     local ut_dir="$1"
 
@@ -92,6 +103,7 @@ function find_ut_bins {
 function run_single_sw {
     local name="${1}"
     local bin="${BUILD_DIR}/sw/${name}/${name}.bin"
+    local input=""
 
     if [[ ! -f "${bin}" ]]; then
         echo "error: binary not found: ${bin}"
@@ -100,7 +112,13 @@ function run_single_sw {
 
     local cwd="${BUILD_DIR}/hw/model"
     echo "  cd ${cwd} && ./sim_top ../../sw/${name}/${name}.bin"
-    cd "${cwd}" && "${cwd}/sim_top" "../../sw/${name}/${name}.bin"
+    get_sw_case_input "${name}"
+    input="${SW_CASE_INPUT}"
+    if [[ -n "${input}" ]]; then
+        cd "${cwd}" && printf '%s' "${input}" | "${cwd}/sim_top" "../../sw/${name}/${name}.bin"
+    else
+        cd "${cwd}" && "${cwd}/sim_top" "../../sw/${name}/${name}.bin"
+    fi
 }
 
 function run_single_ut {
@@ -127,21 +145,8 @@ function run_single_ut {
 function run_single_rtl_sw {
     local simulator="${1}"
     local name="${2}"
-    local hex="${BUILD_DIR}/sw/${name}/${name}.hex"
-    local cwd="${BUILD_DIR}/hw/${simulator}"
 
-    if [[ ! -d "${cwd}" ]]; then
-        echo "error: RTL build dir not found: ${cwd}"
-        exit 1
-    fi
-
-    if [[ ! -f "${hex}" ]]; then
-        echo "error: hex not found: ${hex}"
-        exit 1
-    fi
-
-    echo "  cd ${cwd} && ./sim_top +program=../../sw/${name}/${name}.hex"
-    cd "${cwd}" && "${cwd}/sim_top" "+program=../../sw/${name}/${name}.hex"
+    run_rtl_cases "${simulator}" "${name}"
 }
 
 function run_single_rtl_ut {
@@ -188,10 +193,30 @@ function run_sw_cases {
             continue
         fi
 
-        if run_with_timeout 60 "${sim}" "${bin}" </dev/null >/dev/null 2>&1; then
+        local input=""
+        local status=0
+
+        get_sw_case_input "${name}"
+        input="${SW_CASE_INPUT}"
+        if [[ -n "${input}" ]]; then
+            if printf '%s' "${input}" |
+                run_with_timeout 60 "${sim}" "${bin}" >/dev/null 2>&1; then
+                status=0
+            else
+                status=$?
+            fi
+        else
+            if run_with_timeout 60 "${sim}" "${bin}" </dev/null >/dev/null 2>&1; then
+                status=0
+            else
+                status=$?
+            fi
+        fi
+
+        if [[ ${status} -eq 0 ]]; then
             pass "${name}"
         else
-            fail "${name}" "exit=${?}"
+            fail "${name}" "exit=${status}"
         fi
     done
 }
@@ -226,14 +251,108 @@ function run_ut_tests {
 
 function run_rtl_cases {
     local simulator="${1}"
-    local suite="${2}"
+    local case_name="${2}"
+    local cwd="${BUILD_DIR}/hw/${simulator}"
+    local sim_cmd=""
 
     printf "${CYN}=== RTL regression (${simulator}) ===${RST}\n"
 
-    if [[ -n "${suite}" ]]; then
-        skip "rtl/${simulator}/${suite}" "not yet implemented"
+    case "${simulator}" in
+        verilator) sim_cmd="./obj_dir/Vsim_top" ;;
+        vcs) sim_cmd="./sim_top" ;;
+        *)
+            fail "rtl/${simulator}" "unknown simulator"
+            return
+            ;;
+    esac
+
+    if [[ ! -x "${cwd}/${sim_cmd#./}" ]]; then
+        skip "rtl/${simulator}" "simulator not found: ${cwd}/${sim_cmd#./}"
+        return
+    fi
+
+    mkdir -p "${BUILD_DIR}/logs/rtl/${simulator}"
+
+    if [[ -n "${case_name}" ]]; then
+        run_one_rtl_case "${simulator}" "${sim_cmd}" "${case_name}" false
+        return
+    fi
+
+    for case_dir in "${ROOT}"/cases/bare/*/; do
+        [[ -d "${case_dir}" ]] || continue
+
+        local name="$(basename "${case_dir}")"
+        local excluded=false
+
+        for ex in "${SW_EXCLUDE[@]}"; do
+            if [[ "${name}" == "${ex}" ]]; then
+                skip "${name}" "excluded"
+                excluded=true
+                break
+            fi
+        done
+        [[ "${excluded}" == true ]] && continue
+
+        run_one_rtl_case "${simulator}" "${sim_cmd}" "${name}" true
+    done
+}
+
+function run_one_rtl_case {
+    local simulator="${1}"
+    local sim_cmd="${2}"
+    local name="${3}"
+    local quiet="${4}"
+    local cwd="${BUILD_DIR}/hw/${simulator}"
+    local hex="${BUILD_DIR}/sw/${name}/${name}.hex"
+    local log="${BUILD_DIR}/logs/rtl/${simulator}/${name}.log"
+    local status=0
+
+    if [[ ! -f "${hex}" ]]; then
+        fail "${name}" "hex not found"
+        return
+    fi
+
+    local rel_hex="../../sw/${name}/${name}.hex"
+    local input=""
+
+    get_sw_case_input "${name}"
+    input="${SW_CASE_INPUT}"
+
+    if [[ "${quiet}" != true ]]; then
+        echo "  cd ${cwd} && ${sim_cmd} +program=${rel_hex}"
+    fi
+
+    if [[ -n "${input}" ]]; then
+        if (cd "${cwd}" && printf '%s' "${input}" |
+            run_with_timeout "${RTL_SW_TIMEOUT}" "${sim_cmd}" "+program=${rel_hex}") \
+            >"${log}" 2>&1; then
+            status=0
+        else
+            status=$?
+        fi
     else
-        skip "rtl/${simulator}" "not yet implemented"
+        if (cd "${cwd}" &&
+            run_with_timeout "${RTL_SW_TIMEOUT}" "${sim_cmd}" "+program=${rel_hex}" </dev/null) \
+            >"${log}" 2>&1; then
+            status=0
+        else
+            status=$?
+        fi
+    fi
+
+    if [[ ${status} -ne 0 ]]; then
+        fail "${name}" "exit=${status} log=${log}"
+        return
+    fi
+
+    if grep -q '^sim_top: PASS t0=0x00000000$' "${log}"; then
+        pass "${name}"
+    elif grep -q '^sim_top: FAIL ' "${log}"; then
+        local verdict
+        verdict="$(grep '^sim_top: FAIL ' "${log}" | tail -1)"
+        fail "${name}" "${verdict} log=${log}"
+    else
+        fail "${name}" "no sim_top verdict log=${log}"
     fi
 }
 
@@ -244,6 +363,40 @@ function main {
     local arg2="${2:-}"
     local arg3="${3:-}"
     local arg4="${4:-}"
+
+    if [[ "${target}" == "rtl" ]]; then
+        local simulator="${arg2}"
+        local case_name=""
+
+        if [[ -z "${simulator}" ]]; then
+            echo "usage: $0 rtl <vcs|verilator> [case_name]"
+            exit 1
+        fi
+
+        if [[ "${arg3}" == "sw" ]]; then
+            case_name="${arg4}"
+        elif [[ "${arg3}" == "ut" ]]; then
+            echo "usage: $0 rtl <vcs|verilator> [case_name]"
+            exit 1
+        else
+            case_name="${arg3}"
+        fi
+
+        run_rtl_cases "${simulator}" "${case_name}"
+
+        local total=$((PASS + FAIL + SKIP))
+        echo
+        printf "${CYN}=== summary ===${RST}\n"
+        printf "  total: %d  |  ${GRN}pass: %d${RST}  |  ${RED}fail: %d${RST}  |  ${YLW}skip: %d${RST}\n" \
+            "${total}" "${PASS}" "${FAIL}" "${SKIP}"
+
+        if [[ ${FAIL} -gt 0 ]]; then
+            echo
+            printf "${RED}FAILURES:${RST}\n%s" "${FAIL_LOG}"
+            exit 1
+        fi
+        return
+    fi
 
     local single_name=""
     local suite=""

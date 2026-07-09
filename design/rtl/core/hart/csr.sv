@@ -256,6 +256,15 @@ module csr(
     logic [31:0] csr_mhartid;
     logic [31:0] csr_mtopi;
 
+    assign csr_instret = 32'h00000000;
+    assign csr_cycleh = 32'h00000000;
+    assign csr_scountovf = 32'h00000000;
+    assign csr_mvendorid = 32'h00000000;
+    assign csr_marchid = 32'h00000000;
+    assign csr_mimpid = 32'h00000000;
+    assign csr_mhartid = 32'h00000000;
+    assign csr_mtopi = 32'h00000000;
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             csr_stvec <= 32'h00000000;
@@ -490,15 +499,7 @@ module csr(
             csr_mhpmcounter31h <= 32'h00000000;
             csr_cycle <= 32'h00000000;
             csr_time <= 32'h00000000;
-            csr_instret <= 32'h00000000;
-            csr_cycleh <= 32'h00000000;
             csr_timeh <= 32'h00000000;
-            csr_scountovf <= 32'h00000000;
-            csr_mvendorid <= 32'h00000000;
-            csr_marchid <= 32'h00000000;
-            csr_mimpid <= 32'h00000000;
-            csr_mhartid <= 32'h00000000;
-            csr_mtopi <= 32'h00000000;
         end else begin
             csr_cycle <= csr_cycle + 1'b1;
             csr_time <= core_timer_slv.pkt.mtime[31:0];

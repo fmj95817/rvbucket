@@ -173,6 +173,8 @@ asm(
     "    la a0, fail_msg\n"
     "12:\n"
     "    call uart_puts_raw\n"
+    "    la t0, test_fail\n"
+    "    lw t0, 0(t0)\n"
     "    li t2, 0x30000004\n"
     "    li t1, 0x10\n"
     "    sw t1, 0(t2)\n"

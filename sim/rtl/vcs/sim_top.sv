@@ -88,13 +88,26 @@ module sim_top;
         end
     end
 
+    task automatic sim_finish;
+        logic [31:0] exit_code;
+        begin
+            exit_code = u_soc.u_rv32g.u_hart.u_exu.u_exu_gpr.gprs[5];
+            if (exit_code == 32'd0) begin
+                $display("\nsim_top: PASS t0=0x%08x", exit_code);
+            end else begin
+                $display("\nsim_top: FAIL t0=0x%08x", exit_code);
+            end
+            $finish;
+        end
+    endtask
+
     always @(posedge clk) begin
         if (uart_rx_ch_vld) begin
             if (uart_rx_ch != 8'h10) begin
                 $write("%c", uart_rx_ch);
                 $fflush();
             end else begin
-                $finish;
+                sim_finish();
             end
         end
     end

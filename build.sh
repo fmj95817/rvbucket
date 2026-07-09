@@ -457,6 +457,47 @@ function build_fpga {
     fi
 }
 
+function build_asic {
+    local flow="${1}"
+    local conf="${2:-soc_cmos28lp}"
+    local wd="$(pwd)"
+
+    if [ "${flow}" = "syn" ]; then
+        local conf_json=""
+        if [ -f "${conf}" ]; then
+            conf_json="${conf}"
+        else
+            conf_json="asic/conf/${conf}.json"
+        fi
+        if [ ! -f "${conf_json}" ]; then
+            echo "build_asic: ASIC config not found: ${conf_json}"
+            exit 1
+        fi
+        local conf_name="$(basename "${conf_json}" .json)"
+
+        if [ -f /etc/profile.d/edaenv.sh ]; then
+            source /etc/profile.d/edaenv.sh
+        fi
+        build_sw_case boot rtl
+        mkdir -p build/hw/asic/syn/logs
+        python3 tools/asic_config.py \
+            --root "${wd}" \
+            --rtl-file "${wd}/build/hw/asic/syn/${conf_name}.rtl.f" \
+            "${conf_json}" > "build/hw/asic/syn/${conf_name}.config.tcl"
+        echo "build_asic: using ASIC config ${conf_json}"
+        cd build/hw/asic/syn
+        RVBUCKET_ROOT="${wd}" \
+        RVBUCKET_ASIC_CONFIG_TCL="${wd}/build/hw/asic/syn/${conf_name}.config.tcl" \
+            dc_shell \
+            -f "${wd}/asic/syn/synth.tcl" \
+            | tee "logs/${conf_name}.log"
+        cd "${wd}"
+    else
+        echo "usage: $0 hw asic syn [conf_name|conf_json]"
+        exit 1
+    fi
+}
+
 function build_sw {
     if [ -n "${1}" ]; then
         if [ "${1}" != "boot" ]; then
@@ -487,6 +528,8 @@ function build_hw {
         build_rtl "${@:2}"
     elif [ "${1}" = "fpga" ]; then
         build_fpga "${@:2}"
+    elif [ "${1}" = "asic" ]; then
+        build_asic "${@:2}"
     fi
 }
 

@@ -9,6 +9,7 @@ module plic(
     ext_irq_if_t.mst   core_irq_mst
 );
     localparam SOURCE_NUM = 33;
+    localparam ACTIVE_SOURCE_NUM = 4;
     localparam BASE = 32'h31100000;
 
     logic [2:0] priorities[0:SOURCE_NUM-1];
@@ -32,16 +33,17 @@ module plic(
     logic claim_ren;
 
     logic [5:0] best_source;
-    logic [2:0] best_priority;
+    logic [5:0] best_source_nxt;
+    logic [2:0] best_priority_nxt;
 
     always_comb begin
-        best_source = 0;
-        best_priority = threshold;
-        for (int source = 1; source < SOURCE_NUM; source++) begin
+        best_source_nxt = 0;
+        best_priority_nxt = threshold;
+        for (int source = 1; source < ACTIVE_SOURCE_NUM; source++) begin
             if (pending[source] && !claimed[source] && enable[source] &&
-                priorities[source] > best_priority) begin
-                best_source = source[5:0];
-                best_priority = priorities[source];
+                priorities[source] > best_priority_nxt) begin
+                best_source_nxt = source[5:0];
+                best_priority_nxt = priorities[source];
             end
         end
     end
@@ -111,10 +113,13 @@ module plic(
             claimed <= 0;
             enable <= 0;
             threshold <= 0;
+            best_source <= 0;
             rsp_pending <= 0;
             rsp_data <= 0;
             rsp_ok <= 1'b1;
         end else begin
+            best_source <= best_source_nxt;
+
             if (uart_irq_slv.pkt.irq && !claimed[1]) pending[1] <= 1'b1;
             if (gpio_irq_slv.pkt.irq && !claimed[2]) pending[2] <= 1'b1;
             if (gtimer_irq_slv.pkt.irq && !claimed[3]) pending[3] <= 1'b1;
