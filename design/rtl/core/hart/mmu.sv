@@ -1,5 +1,6 @@
 `include "itf/bti_req_if.svh"
 `include "itf/hart_expt_if.svh"
+`include "spec/core/hart.svh"
 
 module mmu(
     input logic clk,
@@ -14,11 +15,12 @@ module mmu(
     bti_rsp_if_t.slv pa_d_rsp_slv,
     exu_state_if_t.slv exu_state_slv,
     csr_mmu_state_if_t.slv csr_mmu_state_slv,
+    tlb_flush_if_t.slv tlb_flush_slv,
     hart_expt_if_t.mst fch_expt_mst,
     hart_expt_if_t.mst ldst_expt_mst
 );
     typedef enum logic [3:0] {
-        IDLE, SEND_BARE, WAIT_BARE, SEND_PTE, WAIT_PTE,
+        IDLE, SEND_BARE, WAIT_BARE, LOOKUP_TLB, SEND_PTE, WAIT_PTE,
         SEND_FINAL, WAIT_FINAL, FAULT_EVENT, FAULT_RSP
     } state_t;
     typedef struct packed {
@@ -40,17 +42,29 @@ module mmu(
     logic [31:0] fault_pc;
     logic [31:0] root_base;
     logic [31:0] last_pte;
+    logic [21:0] req_satp_ppn;
+    logic [8:0] req_satp_asid;
     logic level;
+    logic fill_tlb_q;
+    logic fill_tlb_is_inst_q;
+    logic [31:0] fill_tlb_va_q;
+    logic [21:0] fill_tlb_satp_ppn_q;
+    logic [8:0] fill_tlb_satp_asid_q;
+    logic fill_tlb_level_q;
+    logic [31:0] fill_tlb_pte_q;
     hart_expt_cause_t fault_cause;
 
     wire data_write = va_d_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE;
+    wire [21:0] csr_satp_ppn = csr_mmu_state_slv.pkt.satp[21:0];
+    wire [8:0] csr_satp_asid = csr_mmu_state_slv.pkt.satp[30:22];
+    wire tlb_flush = tlb_flush_slv.vld;
     wire [1:0] data_priv = exu_state_slv.pkt.priv == 2'b11 &&
         csr_mmu_state_slv.pkt.mstatus[17] ? csr_mmu_state_slv.pkt.mstatus[12:11] :
         exu_state_slv.pkt.priv;
     wire i_translate = exu_state_slv.pkt.priv != 2'b11 && csr_mmu_state_slv.pkt.satp[31];
     wire d_translate = data_priv != 2'b11 && csr_mmu_state_slv.pkt.satp[31];
-    wire accept_d = state == IDLE && va_d_req_slv.vld;
-    wire accept_i = state == IDLE && !va_d_req_slv.vld && va_i_req_slv.vld;
+    wire accept_d = state == IDLE && !tlb_flush && va_d_req_slv.vld;
+    wire accept_i = state == IDLE && !tlb_flush && !va_d_req_slv.vld && va_i_req_slv.vld;
 
     wire use_d_req = state == SEND_PTE ||
         ((state == SEND_BARE || state == SEND_FINAL) && !is_inst);
@@ -61,6 +75,20 @@ module mmu(
     wire i_rsp_hsk = pa_i_rsp_slv.vld && pa_i_rsp_slv.rdy;
     wire fault_rsp_hsk = is_inst ? (va_i_rsp_mst.vld && va_i_rsp_mst.rdy) :
         (va_d_rsp_mst.vld && va_d_rsp_mst.rdy);
+    wire itlb_lookup_vld = accept_i && i_translate;
+    wire dtlb_lookup_vld = accept_d && d_translate;
+    logic itlb_rsp_vld;
+    logic itlb_hit;
+    logic [31:0] itlb_pte;
+    logic itlb_level;
+    logic dtlb_rsp_vld;
+    logic dtlb_hit;
+    logic [31:0] dtlb_pte;
+    logic dtlb_level;
+    wire tlb_rsp_vld = is_inst ? itlb_rsp_vld : dtlb_rsp_vld;
+    wire tlb_hit = is_inst ? itlb_hit : dtlb_hit;
+    wire [31:0] tlb_pte = is_inst ? itlb_pte : dtlb_pte;
+    wire tlb_level = is_inst ? itlb_level : dtlb_level;
 
     function automatic logic pte_valid(input logic [31:0] pte);
         pte_valid = pte[0] && !(pte[2] && !pte[1]);
@@ -105,6 +133,57 @@ module mmu(
         end
     end
 
+    wire fill_tlb = state == WAIT_PTE && d_rsp_hsk &&
+        pa_d_rsp_slv.pkt.ok &&
+        pte_valid(pa_d_rsp_slv.pkt.data) &&
+        pte_leaf(pa_d_rsp_slv.pkt.data) &&
+        pte_permits(pa_d_rsp_slv.pkt.data) &&
+        leaf_addr_ok;
+
+    tlb #(
+        .ENTRY_NUM (`MMU_ITLB_SIZE)
+    ) u_itlb(
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .flush            (tlb_flush),
+        .lookup_vld       (itlb_lookup_vld),
+        .lookup_va        (va_i_req_slv.pkt.addr),
+        .lookup_satp_ppn  (csr_satp_ppn),
+        .lookup_satp_asid (csr_satp_asid),
+        .lookup_rsp_vld   (itlb_rsp_vld),
+        .lookup_hit       (itlb_hit),
+        .lookup_pte       (itlb_pte),
+        .lookup_level     (itlb_level),
+        .fill_vld         (fill_tlb_q && fill_tlb_is_inst_q),
+        .fill_va          (fill_tlb_va_q),
+        .fill_satp_ppn    (fill_tlb_satp_ppn_q),
+        .fill_satp_asid   (fill_tlb_satp_asid_q),
+        .fill_level       (fill_tlb_level_q),
+        .fill_pte         (fill_tlb_pte_q)
+    );
+
+    tlb #(
+        .ENTRY_NUM (`MMU_DTLB_SIZE)
+    ) u_dtlb(
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .flush            (tlb_flush),
+        .lookup_vld       (dtlb_lookup_vld),
+        .lookup_va        (va_d_req_slv.pkt.addr),
+        .lookup_satp_ppn  (csr_satp_ppn),
+        .lookup_satp_asid (csr_satp_asid),
+        .lookup_rsp_vld   (dtlb_rsp_vld),
+        .lookup_hit       (dtlb_hit),
+        .lookup_pte       (dtlb_pte),
+        .lookup_level     (dtlb_level),
+        .fill_vld         (fill_tlb_q && !fill_tlb_is_inst_q),
+        .fill_va          (fill_tlb_va_q),
+        .fill_satp_ppn    (fill_tlb_satp_ppn_q),
+        .fill_satp_asid   (fill_tlb_satp_asid_q),
+        .fill_level       (fill_tlb_level_q),
+        .fill_pte         (fill_tlb_pte_q)
+    );
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= IDLE;
@@ -117,9 +196,28 @@ module mmu(
             fault_pc <= 0;
             root_base <= 0;
             last_pte <= 0;
+            req_satp_ppn <= 0;
+            req_satp_asid <= 0;
             level <= 1'b1;
+            fill_tlb_q <= 1'b0;
+            fill_tlb_is_inst_q <= 1'b0;
+            fill_tlb_va_q <= 32'b0;
+            fill_tlb_satp_ppn_q <= 22'b0;
+            fill_tlb_satp_asid_q <= 9'b0;
+            fill_tlb_level_q <= 1'b0;
+            fill_tlb_pte_q <= 32'b0;
             fault_cause <= HART_EXPT_CAUSE_INST_PAGE_FAULT;
         end else begin
+            fill_tlb_q <= fill_tlb;
+            if (fill_tlb) begin
+                fill_tlb_is_inst_q <= is_inst;
+                fill_tlb_va_q <= va;
+                fill_tlb_satp_ppn_q <= req_satp_ppn;
+                fill_tlb_satp_asid_q <= req_satp_asid;
+                fill_tlb_level_q <= level;
+                fill_tlb_pte_q <= pa_d_rsp_slv.pkt.data;
+            end
+
             case (state)
                 IDLE: begin
                     if (accept_d) begin
@@ -130,11 +228,13 @@ module mmu(
                         req_mxr <= csr_mmu_state_slv.pkt.mstatus[19];
                         va <= va_d_req_slv.pkt.addr;
                         fault_pc <= exu_state_slv.pkt.pc;
-                        root_base <= {csr_mmu_state_slv.pkt.satp[19:0], 12'b0};
+                        root_base <= {csr_satp_ppn[19:0], 12'b0};
+                        req_satp_ppn <= csr_satp_ppn;
+                        req_satp_asid <= csr_satp_asid;
                         level <= 1'b1;
                         fault_cause <= data_write ? HART_EXPT_CAUSE_STORE_AMO_PAGE_FAULT :
                             HART_EXPT_CAUSE_LOAD_PAGE_FAULT;
-                        state <= d_translate ? SEND_PTE : SEND_BARE;
+                        state <= d_translate ? LOOKUP_TLB : SEND_BARE;
                     end else if (accept_i) begin
                         req <= va_i_req_slv.pkt;
                         is_inst <= 1'b1;
@@ -143,14 +243,32 @@ module mmu(
                         req_mxr <= csr_mmu_state_slv.pkt.mstatus[19];
                         va <= va_i_req_slv.pkt.addr;
                         fault_pc <= va_i_req_slv.pkt.addr;
-                        root_base <= {csr_mmu_state_slv.pkt.satp[19:0], 12'b0};
+                        root_base <= {csr_satp_ppn[19:0], 12'b0};
+                        req_satp_ppn <= csr_satp_ppn;
+                        req_satp_asid <= csr_satp_asid;
                         level <= 1'b1;
                         fault_cause <= HART_EXPT_CAUSE_INST_PAGE_FAULT;
-                        state <= i_translate ? SEND_PTE : SEND_BARE;
+                        state <= i_translate ? LOOKUP_TLB : SEND_BARE;
                     end
                 end
                 SEND_BARE: if (is_inst ? i_req_hsk : d_req_hsk) state <= WAIT_BARE;
                 WAIT_BARE: if (is_inst ? i_rsp_hsk : d_rsp_hsk) state <= IDLE;
+                LOOKUP_TLB: if (tlb_rsp_vld) begin
+                    if (!tlb_hit) begin
+                        state <= SEND_PTE;
+                    end else begin
+                        last_pte <= tlb_pte;
+                        if (!pte_permits(tlb_pte) ||
+                            (tlb_level && tlb_pte[19:10] != 10'b0)) begin
+                            state <= FAULT_EVENT;
+                        end else begin
+                            req.addr <= tlb_level ?
+                                {tlb_pte[29:20], va[21:0]} :
+                                {tlb_pte[29:10], va[11:0]};
+                            state <= SEND_FINAL;
+                        end
+                    end
+                end
                 SEND_PTE: if (d_req_hsk) state <= WAIT_PTE;
                 WAIT_PTE: if (d_rsp_hsk) begin
                     last_pte <= pa_d_rsp_slv.pkt.data;

@@ -12,6 +12,7 @@ module exu(
     csr_exu_read_rsp_if_t.slv csr_exu_read_rsp_slv,
     exu_csr_write_req_if_t.mst exu_csr_write_req_mst,
     csr_exu_write_rsp_if_t.slv csr_exu_write_rsp_slv,
+    tlb_flush_if_t.mst tlb_flush_mst,
     hart_expt_if_t.mst ex_expt_mst,
     exu_state_if_t.mst exu_state_mst,
     trap_exu_ctrl_if_t.slv trap_exu_ctrl_slv
@@ -197,6 +198,7 @@ module exu(
         .csr_read_rsp_slv  (csr_exu_read_rsp_slv),
         .csr_write_req_mst (exu_csr_write_req_mst),
         .csr_write_rsp_slv (csr_exu_write_rsp_slv),
+        .tlb_flush_mst     (tlb_flush_mst),
         .priv              (priv),
         .pc                (ex_req_slv.pkt.pc),
         .ex_expt_mst       (ex_expt_mst)

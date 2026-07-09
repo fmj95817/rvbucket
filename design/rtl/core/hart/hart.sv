@@ -37,6 +37,7 @@ module hart(
     trap_send_if_t trap_send_if();
     csr_mmu_state_if_t csr_mmu_state_if();
     csr_lsu_state_if_t csr_lsu_state_if();
+    tlb_flush_if_t tlb_flush_if();
     hart_expt_if_t fch_expt_if();
     hart_expt_if_t ldst_expt_if();
 
@@ -72,6 +73,7 @@ module hart(
         .csr_exu_read_rsp_slv  (csr_exu_read_rsp_if),
         .exu_csr_write_req_mst (exu_csr_write_req_if),
         .csr_exu_write_rsp_slv (csr_exu_write_rsp_if),
+        .tlb_flush_mst         (tlb_flush_if),
         .ex_expt_mst           (ex_expt_if),
         .exu_state_mst         (exu_state_if),
         .trap_exu_ctrl_slv     (trap_exu_ctrl_if)
@@ -131,6 +133,7 @@ module hart(
         .pa_d_rsp_slv      (pa_d_bti_rsp_if),
         .exu_state_slv     (exu_state_if),
         .csr_mmu_state_slv (csr_mmu_state_if),
+        .tlb_flush_slv     (tlb_flush_if),
         .fch_expt_mst      (fch_expt_if),
         .ldst_expt_mst     (ldst_expt_if)
     );
