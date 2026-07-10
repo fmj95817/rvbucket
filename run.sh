@@ -24,6 +24,23 @@ SW_EXCLUDE=(
 )
 
 RTL_SW_TIMEOUT="${RTL_SW_TIMEOUT:-300}"
+MODEL_SW_TIMEOUT="${MODEL_SW_TIMEOUT:-60}"
+MODEL_SW_PERF_SIM_TIMEOUT="${MODEL_SW_PERF_SIM_TIMEOUT:-300}"
+MODEL_SW_PERF_SIM=false
+
+function print_usage {
+    cat <<EOF
+usage: $0 [--perf-sim] [model|rtl <vcs|verilator>] [sw|ut] [<name>]
+
+Options:
+  --perf-sim  Run model SW with sim_top --perf-sim
+
+Environment:
+  MODEL_SW_TIMEOUT           Timeout for each model SW case, default 60s
+  MODEL_SW_PERF_SIM_TIMEOUT  Timeout for each model SW case in --perf-sim mode, default 300s
+  RTL_SW_TIMEOUT             Timeout for each RTL SW case, default 300s
+EOF
+}
 
 function pass {
     printf "  ${GRN}PASS${RST}  %s\n" "$1"
@@ -104,6 +121,7 @@ function run_single_sw {
     local name="${1}"
     local bin="${BUILD_DIR}/sw/${name}/${name}.bin"
     local input=""
+    local sim_args=()
 
     if [[ ! -f "${bin}" ]]; then
         echo "error: binary not found: ${bin}"
@@ -111,13 +129,23 @@ function run_single_sw {
     fi
 
     local cwd="${BUILD_DIR}/hw/model"
-    echo "  cd ${cwd} && ./sim_top ../../sw/${name}/${name}.bin"
+    local rel_bin="../../sw/${name}/${name}.bin"
+    if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
+        sim_args+=(--perf-sim)
+    fi
+
+    local sim_cmd="./sim_top"
+    if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
+        sim_cmd+=" --perf-sim"
+    fi
+
+    echo "  cd ${cwd} && ${sim_cmd} ${rel_bin}"
     get_sw_case_input "${name}"
     input="${SW_CASE_INPUT}"
     if [[ -n "${input}" ]]; then
-        cd "${cwd}" && printf '%s' "${input}" | "${cwd}/sim_top" "../../sw/${name}/${name}.bin"
+        cd "${cwd}" && printf '%s' "${input}" | "${cwd}/sim_top" "${sim_args[@]}" "${rel_bin}"
     else
-        cd "${cwd}" && "${cwd}/sim_top" "../../sw/${name}/${name}.bin"
+        cd "${cwd}" && "${cwd}/sim_top" "${sim_args[@]}" "${rel_bin}"
     fi
 }
 
@@ -165,7 +193,16 @@ function run_single_rtl_ut {
 function run_sw_cases {
     local sw_dir="${BUILD_DIR}/sw"
     local sim="${BUILD_DIR}/hw/model/sim_top"
-    printf "${CYN}=== bare-metal C cases ===${RST}\n"
+    local sim_args=()
+    local timeout="${MODEL_SW_TIMEOUT}"
+
+    if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
+        sim_args+=(--perf-sim)
+        timeout="${MODEL_SW_PERF_SIM_TIMEOUT}"
+        printf "${CYN}=== bare-metal C cases (--perf-sim) ===${RST}\n"
+    else
+        printf "${CYN}=== bare-metal C cases ===${RST}\n"
+    fi
 
     if [[ ! -x "${sim}" ]]; then
         skip "all SW cases" "simulator not found: ${sim}"
@@ -200,13 +237,13 @@ function run_sw_cases {
         input="${SW_CASE_INPUT}"
         if [[ -n "${input}" ]]; then
             if printf '%s' "${input}" |
-                run_with_timeout 60 "${sim}" "${bin}" >/dev/null 2>&1; then
+                run_with_timeout "${timeout}" "${sim}" "${sim_args[@]}" "${bin}" >/dev/null 2>&1; then
                 status=0
             else
                 status=$?
             fi
         else
-            if run_with_timeout 60 "${sim}" "${bin}" </dev/null >/dev/null 2>&1; then
+            if run_with_timeout "${timeout}" "${sim}" "${sim_args[@]}" "${bin}" </dev/null >/dev/null 2>&1; then
                 status=0
             else
                 status=$?
@@ -359,6 +396,39 @@ function run_one_rtl_case {
 # ── main ──────────────────────────────────────────────────────────────────
 
 function main {
+    local parsed_args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --perf-sim)
+                MODEL_SW_PERF_SIM=true
+                ;;
+            -h|--help)
+                print_usage
+                exit 0
+                ;;
+            --)
+                shift
+                while [[ $# -gt 0 ]]; do
+                    parsed_args+=("$1")
+                    shift
+                done
+                break
+                ;;
+            --*)
+                echo "error: unknown option: $1"
+                print_usage
+                exit 1
+                ;;
+            *)
+                parsed_args+=("$1")
+                ;;
+        esac
+        shift
+    done
+
+    set -- "${parsed_args[@]}"
+
     local target="${1:-model}"
     local arg2="${2:-}"
     local arg3="${3:-}"
@@ -369,14 +439,19 @@ function main {
         local case_name=""
 
         if [[ -z "${simulator}" ]]; then
-            echo "usage: $0 rtl <vcs|verilator> [case_name]"
+            print_usage
+            exit 1
+        fi
+
+        if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
+            echo "error: --perf-sim is only supported for model SW cases"
             exit 1
         fi
 
         if [[ "${arg3}" == "sw" ]]; then
             case_name="${arg4}"
         elif [[ "${arg3}" == "ut" ]]; then
-            echo "usage: $0 rtl <vcs|verilator> [case_name]"
+            print_usage
             exit 1
         else
             case_name="${arg3}"
@@ -422,7 +497,7 @@ function main {
                 elif [[ "${suite}" == "ut" ]]; then
                     run_single_ut "${single_name}"
                 else
-                    echo "usage: $0 model sw|ut <name>"
+                    print_usage
                     exit 1
                 fi
                 ;;
@@ -432,12 +507,12 @@ function main {
                 elif [[ "${suite}" == "ut" ]]; then
                     run_single_rtl_ut "${arg2}" "${single_name}"
                 else
-                    echo "usage: $0 rtl <vcs|verilator> sw|ut <name>"
+                    print_usage
                     exit 1
                 fi
                 ;;
             *)
-                echo "usage: $0 [model|rtl] sw|ut <name>"
+                print_usage
                 exit 1
                 ;;
         esac
@@ -453,12 +528,17 @@ function main {
             suite="${arg3}"
 
             if [[ -z "${simulator}" ]]; then
-                echo "usage: $0 rtl <vcs|verilator> [sw|ut]"
+                print_usage
+                exit 1
+            fi
+
+            if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
+                echo "error: --perf-sim is only supported for model SW cases"
                 exit 1
             fi
             ;;
         *)
-            echo "usage: $0 [model|rtl <vcs|verilator>] [sw|ut] [<name>]"
+            print_usage
             exit 1
             ;;
     esac
