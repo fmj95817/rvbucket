@@ -34,6 +34,7 @@ typedef struct hart_conf {
     u32 mmu_i_stg_fifo_depth;
     u32 mmu_d_stg_fifo_depth;
     u32 mmu_ost_depth;
+    u32 l1_latency;
     u32 l1i_stg_fifo_depth;
     u32 l1d_stg_fifo_depth;
     u32 l1_ost_depth;

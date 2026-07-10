@@ -18,6 +18,7 @@ typedef struct l1_conf {
     bool ro;
     u32 size;
     u32 way_num;
+    u32 latency;
     u32 stg_fifo_depth;
     u32 ost_depth;
     u32 bypass_bases[L1_BYPASS_RANGE_NUM];
@@ -44,8 +45,10 @@ typedef struct l1_ost_ctx {
     u32 trans_id;
     l1_ost_kind_t kind;
     bool rsp_vld;
+    bool rsp_delay_pend;
     bool ok;
     u32 data;
+    u32 delay;
 } l1_ost_ctx_t;
 
 typedef struct l1 {
@@ -92,6 +95,8 @@ typedef struct l1 {
     u64 *perf_bypass;
     u64 *perf_writeback;
     u64 *perf_stg_full;
+    u64 *perf_ost_full;
+    u64 *perf_miss_busy;
 } l1_t;
 
 extern void l1_construct(l1_t *l1, const char *parent, const char *name, const l1_conf_t *conf);

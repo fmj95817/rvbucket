@@ -55,7 +55,8 @@ static void tb_construct_bti(ram_tb_t *tb)
     tb->dut.bti_req_slvs[0] = &tb->bti_req_itf;
     tb->dut.bti_rsp_msts[0] = &tb->bti_rsp_itf;
     tb->dut.mod.cycle = tb->mod.cycle;
-    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_BTI, RAM_SIZE, RAM_BASE);
+    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_BTI,
+        RAM_SIZE, RAM_BASE, 1);
 }
 
 static void tb_construct_axi(ram_tb_t *tb)
@@ -66,7 +67,8 @@ static void tb_construct_axi(ram_tb_t *tb)
     tb->dut.axi4_ar_slv = &tb->axi4_ar_itf;
     tb->dut.axi4_r_mst = &tb->axi4_r_itf;
     tb->dut.mod.cycle = tb->mod.cycle;
-    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_AXI, RAM_SIZE, RAM_BASE);
+    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_AXI,
+        RAM_SIZE, RAM_BASE, 1);
 }
 
 static void tb_dut_reset(ram_tb_t *tb)

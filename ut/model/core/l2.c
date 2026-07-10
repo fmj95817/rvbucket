@@ -59,7 +59,7 @@ static void tb_construct_with_conf(l2_tb_t *tb, const char *name,
     AXI4_SLV_CONNECT(&tb->ram, , tb, mem_);
     tb->ram.mod.cycle = tb->mod.cycle;
     ram_construct(&tb->ram, tb->mod.hier_name, "u_ram", 1, RAM_MODE_AXI,
-        TB_MEM_SIZE, 0);
+        TB_MEM_SIZE, 0, 1);
     ut_sbd_init(&tb->sbd);
 }
 
@@ -68,6 +68,7 @@ static void tb_construct(l2_tb_t *tb, const char *name)
     l2_conf_t conf = {
         .size = L2_LINE_SIZE,
         .way_num = 1,
+        .latency = 1,
         .stg_fifo_depth = TB_L2_STG_FIFO_DEPTH,
         .bypass_ost_depth = TB_L2_BYPASS_OST_DEPTH
     };
@@ -270,6 +271,7 @@ int main(void)
     l2_conf_t hit_under_miss_conf = {
         .size = L2_LINE_SIZE * 2,
         .way_num = 1,
+        .latency = 1,
         .stg_fifo_depth = TB_L2_STG_FIFO_DEPTH,
         .bypass_ost_depth = TB_L2_BYPASS_OST_DEPTH
     };

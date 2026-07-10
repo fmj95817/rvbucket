@@ -6,6 +6,9 @@
 #define HART_NUM       1u
 #define L2_SIZE        (128u * KiB)
 #define L2_WAY_NUM     4u
+#define L2_LATENCY     5u
+#define ITCM_LATENCY   2u
+#define DTCM_LATENCY   2u
 
 #define CORE_BUS_STG_FIFO_DEPTH 16u
 #define CORE_BUS_OST_DEPTH 8u

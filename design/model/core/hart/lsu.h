@@ -48,6 +48,7 @@ typedef struct lsu {
     u32 rsp_data;
 
     u64 *perf_stg_full;
+    u64 *perf_ost_full;
 } lsu_t;
 
 extern void lsu_construct(lsu_t *lsu, const char *parent, const char *name,

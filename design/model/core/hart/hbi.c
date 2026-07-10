@@ -26,6 +26,10 @@ void hbi_construct(hbi_t *hbi, const char *parent, const char *name,
         "i_stg_full");
     hbi->perf_d_stg_full = dbg_pcm_reg_perf_cnt(hbi->mod.hier_name,
         "d_stg_full");
+    hbi->perf_i_ost_full = dbg_pcm_reg_perf_cnt(hbi->mod.hier_name,
+        "i_ost_full");
+    hbi->perf_d_ost_full = dbg_pcm_reg_perf_cnt(hbi->mod.hier_name,
+        "d_ost_full");
 
     dbg_vcd_add_sig("fch_req_fifo_num", DBG_SIG_TYPE_REG, 32,
         &hbi->fch_req_fifo.num);
@@ -46,6 +50,8 @@ void hbi_reset(hbi_t *hbi)
     ostq_reset(&hbi->d_ost);
     *hbi->perf_i_stg_full = 0;
     *hbi->perf_d_stg_full = 0;
+    *hbi->perf_i_ost_full = 0;
+    *hbi->perf_d_ost_full = 0;
 }
 
 void hbi_free(hbi_t *hbi)
@@ -106,6 +112,7 @@ static void hbi_proc_i_req(hbi_t *hbi)
     }
 
     if (ostq_full(&hbi->i_ost)) {
+        (*hbi->perf_i_ost_full)++;
         return;
     }
 
@@ -141,6 +148,7 @@ static void hbi_proc_d_req(hbi_t *hbi)
     }
 
     if (ostq_full(&hbi->d_ost)) {
+        (*hbi->perf_d_ost_full)++;
         return;
     }
 

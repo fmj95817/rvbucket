@@ -16,6 +16,7 @@
 typedef struct l2_conf {
     u32 size;
     u32 way_num;
+    u32 latency;
     u32 stg_fifo_depth;
     u32 bypass_ost_depth;
 } l2_conf_t;
@@ -36,6 +37,8 @@ typedef struct l2_port {
     u32 addr;
     u32 beat_idx;
     bool miss_resolved;
+    bool latency_active;
+    u32 delay;
 } l2_port_t;
 
 typedef struct l2_bypass_rd_ctx {
@@ -112,6 +115,9 @@ typedef struct l2 {
     u64 *perf_miss;
     u64 *perf_bypass;
     u64 *perf_writeback;
+    u64 *perf_bypass_rd_ost_full;
+    u64 *perf_bypass_wr_ost_full;
+    u64 *perf_miss_busy;
     u64 *perf_stg_ar_full[L2_PORT_NUM];
     u64 *perf_stg_aw_full[L2_PORT_NUM];
     u64 *perf_stg_w_full[L2_PORT_NUM];

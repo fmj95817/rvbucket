@@ -5,10 +5,16 @@
 #include "spec/soc.h"
 #include "dbg/vcd.h"
 
-void soc_construct(soc_t *soc, const char *parent, const char *name)
+void soc_construct(soc_t *soc, const char *parent, const char *name,
+    bool perf_sim)
 {
     mod_construct(&soc->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
+
+    u32 hart_l1_latency = perf_sim ? HART_L1_LATENCY : 0u;
+    u32 l2_latency = perf_sim ? L2_LATENCY : 0u;
+    u32 itcm_latency = perf_sim ? ITCM_LATENCY : 0u;
+    u32 dtcm_latency = perf_sim ? DTCM_LATENCY : 0u;
 
     AXI4_IF_CONSTRUCT(soc, mm_, 2);
     APB_IF_CONSTRUCT(soc, peri_, 1);
@@ -61,6 +67,7 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
         .hart_mmu_i_stg_fifo_depth = HART_MMU_I_STG_FIFO_DEPTH,
         .hart_mmu_d_stg_fifo_depth = HART_MMU_D_STG_FIFO_DEPTH,
         .hart_mmu_ost_depth = HART_MMU_OST_DEPTH,
+        .hart_l1_latency = hart_l1_latency,
         .hart_l1i_stg_fifo_depth = HART_L1I_STG_FIFO_DEPTH,
         .hart_l1d_stg_fifo_depth = HART_L1D_STG_FIFO_DEPTH,
         .hart_l1_ost_depth = HART_L1_OST_DEPTH,
@@ -68,8 +75,11 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
         .hart_l1d_bti_mux_ost_depth = HART_L1D_BTI_MUX_OST_DEPTH,
         .cbi_bus_stg_fifo_depth = CORE_BUS_STG_FIFO_DEPTH,
         .cbi_bus_ost_depth = CORE_BUS_OST_DEPTH,
+        .l2_latency = l2_latency,
         .l2_stg_fifo_depth = CORE_L2_STG_FIFO_DEPTH,
-        .l2_bypass_ost_depth = CORE_L2_BYPASS_OST_DEPTH
+        .l2_bypass_ost_depth = CORE_L2_BYPASS_OST_DEPTH,
+        .itcm_latency = itcm_latency,
+        .dtcm_latency = dtcm_latency
     };
     rv32g_construct(&soc->cpu, soc->mod.hier_name, "u_rv32g_cpu", &rv32g_conf);
 

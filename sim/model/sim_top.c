@@ -64,6 +64,7 @@ typedef struct sim_top {
     bool web_ui;
     bool no_end_detect;
     bool boot_prog;
+    bool perf_sim;
 
     sim_ui_t *ui;
 } sim_top_t;
@@ -152,10 +153,11 @@ static void sim_top_burn_program(sim_top_t *sim_top)
 
 static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char *name,
     const char *prog_path, bool fast_load_linux, bool web_ui, bool no_end_detect,
-    bool boot_prog)
+    bool boot_prog, bool perf_sim)
 {
     mod_construct(&sim_top->mod, parent, name);
     sim_top->mod.cycle = dbg_pcm_reg_perf_cnt(sim_top->mod.hier_name, "cycles");
+    dbg_pcm_set_cycle(sim_top->mod.cycle);
     DBG_VCD_MODULE_SCOPE(name);
 
     UART_IF_CONSTRUCT(sim_top, uart_rx_itf, 1);
@@ -176,12 +178,14 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     for (u32 i = 0; i < PLIC_MAX_IRQ_NUM; i++) {
         sim_top->soc.ext_irq_ins[i] = NULL;
     }
-    soc_construct(&sim_top->soc, sim_top->mod.hier_name, "u_soc");
+    soc_construct(&sim_top->soc, sim_top->mod.hier_name, "u_soc",
+        perf_sim);
 
     AXI4_SLV_CONNECT(&sim_top->ddr, , sim_top, ddr_);
     sim_top->ddr.mod.cycle = sim_top->mod.cycle;
+    u32 ddr_latency = perf_sim ? DDR_LATENCY : 0u;
     ram_construct(&sim_top->ddr, sim_top->mod.hier_name, "u_ddr", 1,
-        RAM_MODE_AXI, DDR_SIZE, DDR_BASE);
+        RAM_MODE_AXI, DDR_SIZE, DDR_BASE, ddr_latency);
 
     AXI4_SLV_CONNECT(&sim_top->flash, , sim_top, flash_);
     sim_top->flash.mod.cycle = sim_top->mod.cycle;
@@ -196,6 +200,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     sim_top->web_ui = web_ui;
     sim_top->no_end_detect = no_end_detect;
     sim_top->boot_prog = boot_prog;
+    sim_top->perf_sim = perf_sim;
 
     sim_top_burn_program(sim_top);
 
@@ -267,6 +272,7 @@ static void sim_top_clock(sim_top_t *sim_top)
     itf_dbg_clock(&sim_top->gpio_inout_itf);
 
     (*(u64 *)sim_top->mod.cycle)++;
+    dbg_pcm_clock();
     dbg_vcd_clock();
 
     i32 ch_tx;
@@ -321,6 +327,7 @@ static void print_usage(const char *prog)
         "  --web-ui           Use web-based UI instead of terminal\n"
         "  --no-end-detect    Disable test-end detection (0x10 terminator)\n"
         "  --boot-prog        Enable bootloader progress output via UART\n"
+        "  --perf-sim         Enable configured memory/cache latency modeling\n"
         "\n"
         "Arguments:\n"
         "  <program.bin>      Path to the binary program image\n",
@@ -337,6 +344,7 @@ int main(int argc, char *argv[])
     bool web_ui = false;
     bool no_end_detect = false;
     bool boot_prog = false;
+    bool perf_sim = false;
     const char *prog_path = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--fast-load-linux") == 0) {
@@ -347,6 +355,8 @@ int main(int argc, char *argv[])
             no_end_detect = true;
         } else if (strcmp(argv[i], "--boot-prog") == 0) {
             boot_prog = true;
+        } else if (strcmp(argv[i], "--perf-sim") == 0) {
+            perf_sim = true;
         } else if (!prog_path) {
             prog_path = argv[i];
         } else {
@@ -361,7 +371,8 @@ int main(int argc, char *argv[])
 
     sim_top_t sim_top;
     sim_top_construct(&sim_top, NULL, "sim_top", prog_path,
-                      fast_load_linux, web_ui, no_end_detect, boot_prog);
+                      fast_load_linux, web_ui, no_end_detect, boot_prog,
+                      perf_sim);
     sim_top_reset(&sim_top);
 
     while (!sim_top.end_sim) {

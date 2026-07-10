@@ -125,6 +125,7 @@ typedef struct ifu {
         u64 *fch_rsp_inst;
         u64 *branch;
         u64 *pred_true;
+        u64 *fch_ost_full;
     } perf;
 } ifu_t;
 

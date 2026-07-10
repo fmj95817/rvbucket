@@ -28,7 +28,8 @@ typedef struct soc {
     itf_t peri_gtimer_irq_itf;
 } soc_t;
 
-extern void soc_construct(soc_t *soc, const char *parent, const char *name);
+extern void soc_construct(soc_t *soc, const char *parent, const char *name,
+    bool perf_sim);
 extern void soc_reset(soc_t *soc);
 extern void soc_clock(soc_t *soc);
 extern void soc_free(soc_t *soc);

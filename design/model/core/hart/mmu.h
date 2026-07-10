@@ -102,6 +102,8 @@ typedef struct mmu {
     u64 *perf_dtlb_miss;
     u64 *perf_i_stg_full;
     u64 *perf_d_stg_full;
+    u64 *perf_i_ost_full;
+    u64 *perf_d_ost_full;
 } mmu_t;
 
 extern void mmu_construct(mmu_t *mmu, const char *parent, const char *name, const mmu_conf_t *conf);

@@ -50,6 +50,8 @@ typedef struct hbi {
 
     u64 *perf_i_stg_full;
     u64 *perf_d_stg_full;
+    u64 *perf_i_ost_full;
+    u64 *perf_d_ost_full;
 } hbi_t;
 
 extern void hbi_construct(hbi_t *hbi, const char *parent, const char *name,

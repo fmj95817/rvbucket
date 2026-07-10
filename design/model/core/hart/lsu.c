@@ -59,7 +59,11 @@ static void lsu_capture_req(lsu_t *lsu)
 
 static void lsu_alloc_req(lsu_t *lsu)
 {
-    if (fifo_empty(&lsu->req_fifo) || ostq_full(&lsu->ost)) {
+    if (fifo_empty(&lsu->req_fifo)) {
+        return;
+    }
+    if (ostq_full(&lsu->ost)) {
+        (*lsu->perf_ost_full)++;
         return;
     }
 
@@ -245,6 +249,8 @@ void lsu_construct(lsu_t *lsu, const char *parent, const char *name,
 
     lsu->perf_stg_full = dbg_pcm_reg_perf_cnt(lsu->mod.hier_name,
         "stg_full");
+    lsu->perf_ost_full = dbg_pcm_reg_perf_cnt(lsu->mod.hier_name,
+        "ost_full");
 
     dbg_vcd_add_sig("busy", DBG_SIG_TYPE_REG, 1, &lsu->busy);
     dbg_vcd_add_sig("split", DBG_SIG_TYPE_REG, 1, &lsu->split);
@@ -272,6 +278,7 @@ void lsu_reset(lsu_t *lsu)
     fifo_reset(&lsu->req_fifo);
     ostq_reset(&lsu->ost);
     *lsu->perf_stg_full = 0;
+    *lsu->perf_ost_full = 0;
 }
 
 void lsu_clock(lsu_t *lsu)

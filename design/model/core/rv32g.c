@@ -49,6 +49,7 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
         .mmu_i_stg_fifo_depth = conf->hart_mmu_i_stg_fifo_depth,
         .mmu_d_stg_fifo_depth = conf->hart_mmu_d_stg_fifo_depth,
         .mmu_ost_depth = conf->hart_mmu_ost_depth,
+        .l1_latency = conf->hart_l1_latency,
         .l1i_stg_fifo_depth = conf->hart_l1i_stg_fifo_depth,
         .l1d_stg_fifo_depth = conf->hart_l1d_stg_fifo_depth,
         .l1_ost_depth = conf->hart_l1_ost_depth,
@@ -110,6 +111,7 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     l2_conf_t l2_conf = {
         .size = L2_SIZE,
         .way_num = L2_WAY_NUM,
+        .latency = conf->l2_latency,
         .stg_fifo_depth = conf->l2_stg_fifo_depth,
         .bypass_ost_depth = conf->l2_bypass_ost_depth
     };
@@ -126,12 +128,12 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     BTI_SLV_ARR_CONNECT(&s->itcm, , 1, s, itcm_d_);
     s->itcm.mod.cycle = s->mod.cycle;
     ram_construct(&s->itcm, s->mod.hier_name, "u_itcm", 2, RAM_MODE_BTI,
-        conf->itcm_size, conf->itcm_base);
+        conf->itcm_size, conf->itcm_base, conf->itcm_latency);
 
     BTI_SLV_ARR_CONNECT(&s->dtcm, , 0, s, dtcm_);
     s->dtcm.mod.cycle = s->mod.cycle;
     ram_construct(&s->dtcm, s->mod.hier_name, "u_dtcm", 1, RAM_MODE_BTI,
-        conf->dtcm_size, conf->dtcm_base);
+        conf->dtcm_size, conf->dtcm_base, conf->dtcm_latency);
 
     s->aclint.mod.cycle = s->mod.cycle;
     APB_SLV_CONNECT(&s->aclint, cfg_, s, aclint_cfg_);

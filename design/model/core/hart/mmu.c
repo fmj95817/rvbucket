@@ -87,6 +87,10 @@ void mmu_construct(mmu_t *mmu, const char *parent, const char *name, const mmu_c
         "i_stg_full");
     mmu->perf_d_stg_full = dbg_pcm_reg_perf_cnt(mmu->mod.hier_name,
         "d_stg_full");
+    mmu->perf_i_ost_full = dbg_pcm_reg_perf_cnt(mmu->mod.hier_name,
+        "i_ost_full");
+    mmu->perf_d_ost_full = dbg_pcm_reg_perf_cnt(mmu->mod.hier_name,
+        "d_ost_full");
 }
 
 void mmu_reset(mmu_t *mmu)
@@ -118,6 +122,17 @@ void mmu_reset(mmu_t *mmu)
     *mmu->perf_dtlb_miss = 0;
     *mmu->perf_i_stg_full = 0;
     *mmu->perf_d_stg_full = 0;
+    *mmu->perf_i_ost_full = 0;
+    *mmu->perf_d_ost_full = 0;
+}
+
+static void mmu_count_ost_full(mmu_t *mmu, bool is_inst)
+{
+    if (is_inst) {
+        (*mmu->perf_i_ost_full)++;
+    } else {
+        (*mmu->perf_d_ost_full)++;
+    }
 }
 
 static rv32g_priv_t mmu_effective_priv(const mmu_t *mmu, mmu_access_t access)
@@ -364,6 +379,7 @@ static bool mmu_alloc_ost_req(mmu_t *mmu, bool is_inst, const bti_req_if_t *req,
 {
     ostq_t *ost = mmu_ost(mmu, is_inst);
     if (ostq_full(ost)) {
+        mmu_count_ost_full(mmu, is_inst);
         return false;
     }
 
@@ -475,6 +491,9 @@ static bool mmu_accept_one_req(mmu_t *mmu, bool is_inst)
 
     if (!mmu_translation_enabled(mmu, access)) {
         if (itf_fifo_full(pa_req_mst) || ostq_full(mmu_ost(mmu, is_inst))) {
+            if (ostq_full(mmu_ost(mmu, is_inst))) {
+                mmu_count_ost_full(mmu, is_inst);
+            }
             return false;
         }
 
@@ -493,6 +512,9 @@ static bool mmu_accept_one_req(mmu_t *mmu, bool is_inst)
     mmu_tlb_entry_t *entry = NULL;
     if (mmu_lookup_tlb_entry(mmu, is_inst, &req, &entry)) {
         if (itf_fifo_full(pa_req_mst) || ostq_full(mmu_ost(mmu, is_inst))) {
+            if (ostq_full(mmu_ost(mmu, is_inst))) {
+                mmu_count_ost_full(mmu, is_inst);
+            }
             return false;
         }
         u32 slot;
@@ -507,6 +529,7 @@ static bool mmu_accept_one_req(mmu_t *mmu, bool is_inst)
         return false;
     }
     if (ostq_full(mmu_ost(mmu, is_inst))) {
+        mmu_count_ost_full(mmu, is_inst);
         return false;
     }
 

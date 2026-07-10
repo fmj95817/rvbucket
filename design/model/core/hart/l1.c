@@ -134,6 +134,9 @@ void l1_construct(l1_t *l1, const char *parent, const char *name, const l1_conf_
     l1->perf_bypass = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "bypass");
     l1->perf_writeback = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "writeback");
     l1->perf_stg_full = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "stg_full");
+    l1->perf_ost_full = dbg_pcm_reg_perf_cnt(l1->mod.hier_name, "ost_full");
+    l1->perf_miss_busy = dbg_pcm_reg_perf_cnt(l1->mod.hier_name,
+        "miss_busy");
 
     dbg_vcd_add_sig("state", DBG_SIG_TYPE_REG, 4, &l1->state);
     dbg_vcd_add_sig("req_addr", DBG_SIG_TYPE_REG, 32, &l1->req.addr);
@@ -160,6 +163,8 @@ void l1_reset(l1_t *l1)
     *l1->perf_bypass = 0;
     *l1->perf_writeback = 0;
     *l1->perf_stg_full = 0;
+    *l1->perf_ost_full = 0;
+    *l1->perf_miss_busy = 0;
     for (u32 i = 0; i < l1->line_num; i++) {
         l1->valids[i] = false;
         l1->dirtys[i] = false;
@@ -254,6 +259,7 @@ static bool l1_alloc_ost(l1_t *l1, const bti_req_if_t *req,
     l1_ost_kind_t kind, u32 *slot)
 {
     if (ostq_full(&l1->ost)) {
+        (*l1->perf_ost_full)++;
         return false;
     }
 
@@ -261,8 +267,10 @@ static bool l1_alloc_ost(l1_t *l1, const bti_req_if_t *req,
         .trans_id = req->trans_id,
         .kind = kind,
         .rsp_vld = false,
+        .rsp_delay_pend = false,
         .ok = false,
-        .data = 0
+        .data = 0,
+        .delay = 0
     };
     return ostq_alloc(&l1->ost, &ctx, slot);
 }
@@ -273,8 +281,36 @@ static void l1_complete_slot(l1_t *l1, u32 slot, bool ok, u32 data)
     ostq_read_slot(&l1->ost, slot, &ctx);
     ctx.ok = ok;
     ctx.data = data;
-    ctx.rsp_vld = true;
+    ctx.rsp_vld = l1->conf.latency == 0;
+    ctx.rsp_delay_pend = l1->conf.latency != 0;
+    ctx.delay = 0;
     ostq_write_slot(&l1->ost, slot, &ctx);
+}
+
+static void l1_tick_rsp_delay(l1_t *l1)
+{
+    if (l1->conf.latency == 0) {
+        return;
+    }
+
+    for (u32 i = 0; i < l1->ost.depth; i++) {
+        if (!ostq_slot_valid(&l1->ost, i)) {
+            continue;
+        }
+
+        l1_ost_ctx_t ctx;
+        ostq_read_slot(&l1->ost, i, &ctx);
+        if (!ctx.rsp_delay_pend) {
+            continue;
+        }
+
+        ctx.delay++;
+        if (ctx.delay >= l1->conf.latency) {
+            ctx.rsp_delay_pend = false;
+            ctx.rsp_vld = true;
+        }
+        ostq_write_slot(&l1->ost, i, &ctx);
+    }
 }
 
 static bool l1_has_bypass_ost(l1_t *l1)
@@ -443,7 +479,11 @@ static void l1_capture_req(l1_t *l1)
 
 static void l1_proc_accept_req(l1_t *l1)
 {
-    if (fifo_empty(&l1->req_fifo) || ostq_full(&l1->ost)) {
+    if (fifo_empty(&l1->req_fifo)) {
+        return;
+    }
+    if (ostq_full(&l1->ost)) {
+        (*l1->perf_ost_full)++;
         return;
     }
 
@@ -482,6 +522,7 @@ static void l1_proc_accept_req(l1_t *l1)
     }
 
     if (l1->state != L1_STATE_IDLE || l1_has_bypass_ost(l1)) {
+        (*l1->perf_miss_busy)++;
         return;
     }
 
@@ -553,7 +594,9 @@ static void l1_proc_bypass_rd_wait(l1_t *l1)
     DBG_CHECK(r.last);
     ctx.ok = (r.resp == AXI4_R_RESP_OKAY);
     ctx.data = r.data;
-    ctx.rsp_vld = true;
+    ctx.rsp_vld = l1->conf.latency == 0;
+    ctx.rsp_delay_pend = l1->conf.latency != 0;
+    ctx.delay = 0;
     ostq_write_slot(&l1->ost, slot, &ctx);
 }
 
@@ -574,7 +617,9 @@ static void l1_proc_bypass_wr_wait(l1_t *l1)
     itf_read(l1->axi4_b_slv, &b);
     ctx.ok = (b.resp == AXI4_B_RESP_OKAY);
     ctx.data = 0;
-    ctx.rsp_vld = true;
+    ctx.rsp_vld = l1->conf.latency == 0;
+    ctx.rsp_delay_pend = l1->conf.latency != 0;
+    ctx.delay = 0;
     ostq_write_slot(&l1->ost, slot, &ctx);
 }
 
@@ -744,6 +789,7 @@ void l1_clock(l1_t *l1)
 {
     mod_clock(&l1->mod);
     ostq_clock(&l1->ost);
+    l1_tick_rsp_delay(l1);
     l1_capture_req(l1);
     if (l1->state == L1_STATE_IDLE) {
         l1_proc_flush(l1);

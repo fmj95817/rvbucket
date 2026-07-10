@@ -443,6 +443,7 @@ int main(void)
         .ro = false,
         .size = L1_LINE_SIZE,
         .way_num = 1,
+        .latency = 1,
         .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
         .ost_depth = TB_L1_OST_DEPTH
     };
@@ -465,6 +466,7 @@ int main(void)
         .ro = false,
         .size = L1_LINE_SIZE * 2,
         .way_num = 1,
+        .latency = 1,
         .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
         .ost_depth = TB_L1_OST_DEPTH
     };
@@ -481,6 +483,7 @@ int main(void)
         .ro = false,
         .size = L1_LINE_SIZE,
         .way_num = 1,
+        .latency = 1,
         .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
         .ost_depth = TB_L1_OST_DEPTH,
         .bypass_bases = { 0x80 },

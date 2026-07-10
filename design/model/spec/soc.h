@@ -5,6 +5,7 @@
 
 #define DDR_BASE            0x40000000u
 #define DDR_SIZE            (1u * GiB)
+#define DDR_LATENCY         50u
 #define FLASH_BASE          0x80000000
 #define FLASH_SIZE          (32u * MiB)
 

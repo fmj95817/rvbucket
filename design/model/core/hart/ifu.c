@@ -36,6 +36,8 @@ void ifu_construct(ifu_t *ifu, const char *parent, const char *name,
         "fch_rsp_inst");
     ifu->perf.branch = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "branch");
     ifu->perf.pred_true = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "pred_true");
+    ifu->perf.fch_ost_full = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "fch_ost_full");
 
     dbg_vcd_add_sig("fch_pc", DBG_SIG_TYPE_REG, 32, &ifu->fch.pc);
     dbg_vcd_add_sig("fch_state", DBG_SIG_TYPE_REG, 2, &ifu->fch.state);
@@ -85,6 +87,7 @@ void ifu_reset(ifu_t *ifu)
     *ifu->perf.fch_rsp_inst = 0;
     *ifu->perf.branch = 0;
     *ifu->perf.pred_true = 0;
+    *ifu->perf.fch_ost_full = 0;
 }
 
 void ifu_free(ifu_t *ifu)
@@ -229,10 +232,12 @@ static void ifu_send_fch(ifu_t *ifu)
     }
 
     if (ifu_fch_ost_full(ifu)) {
+        (*ifu->perf.fch_ost_full)++;
         return;
     }
 
     if (ostq_full(&ifu->fch_ost)) {
+        (*ifu->perf.fch_ost_full)++;
         return;
     }
 

@@ -5,7 +5,7 @@
 #include "dbg/vcd.h"
 
 void ram_construct(ram_t *ram, const char *parent, const char *name, u32 port_num, ram_mode_t mode,
-                   u32 size, u32 base_addr)
+                   u32 size, u32 base_addr, u32 latency)
 {
     mod_construct(&ram->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
@@ -18,7 +18,24 @@ void ram_construct(ram_t *ram, const char *parent, const char *name, u32 port_nu
     ram->size = size;
     ram->data = malloc(size + 3);
     ram->base_addr = base_addr;
+    ram->latency = latency;
     DBG_CHECK(ram->data);
+    if (latency > 0) {
+        ram->bti_entries = malloc(sizeof(*ram->bti_entries) * RAM_PENDING_DEPTH);
+        ram->axi_rd_entries = malloc(sizeof(*ram->axi_rd_entries) * RAM_PENDING_DEPTH);
+        ram->axi_wr_entries = malloc(sizeof(*ram->axi_wr_entries) * RAM_PENDING_DEPTH);
+        DBG_CHECK(ram->bti_entries);
+        DBG_CHECK(ram->axi_rd_entries);
+        DBG_CHECK(ram->axi_wr_entries);
+    } else {
+        ram->bti_entries = NULL;
+        ram->axi_rd_entries = NULL;
+        ram->axi_wr_entries = NULL;
+    }
+
+    dbg_vcd_add_sig("bti_count", DBG_SIG_TYPE_REG, 32, &ram->bti_count);
+    dbg_vcd_add_sig("axi_rd_count", DBG_SIG_TYPE_REG, 32, &ram->axi_rd_count);
+    dbg_vcd_add_sig("axi_wr_count", DBG_SIG_TYPE_REG, 32, &ram->axi_wr_count);
 }
 
 void ram_reset(ram_t *ram)
@@ -27,12 +44,24 @@ void ram_reset(ram_t *ram)
     ram->rd_active = false;
     ram->wr_active = false;
     ram->wr_b_pending = false;
+    if (ram->latency > 0) {
+        memset(ram->bti_entries, 0, sizeof(*ram->bti_entries) * RAM_PENDING_DEPTH);
+        memset(ram->axi_rd_entries, 0, sizeof(*ram->axi_rd_entries) * RAM_PENDING_DEPTH);
+        memset(ram->axi_wr_entries, 0, sizeof(*ram->axi_wr_entries) * RAM_PENDING_DEPTH);
+    }
+    ram->bti_count = 0;
+    ram->axi_rd_count = 0;
+    ram->axi_wr_count = 0;
+    ram->next_seq = 0;
 }
 
 void ram_free(ram_t *ram)
 {
     mod_free(&ram->mod);
     free(ram->data);
+    free(ram->bti_entries);
+    free(ram->axi_rd_entries);
+    free(ram->axi_wr_entries);
 }
 
 void ram_load(ram_t *ram, const void *data, u32 addr, u32 size)
@@ -69,7 +98,7 @@ static bool ram_write(ram_t *ram, u32 addr, u32 byte_num, u32 data, u8 strobe)
     return true;
 }
 
-static u32 axi_burst_next_addr(u32 addr, u8 burst_type, u8 burst_size)
+static u32 axi_burst_next_addr(u32 addr, u32 burst_type, u32 burst_size)
 {
     u32 byte_step = (u32)1 << burst_size;
     if (burst_type == AXI4_AR_BURST_FIXED) {
@@ -79,19 +108,213 @@ static u32 axi_burst_next_addr(u32 addr, u8 burst_type, u8 burst_size)
     }
 }
 
-static void ram_proc_axi_ar(ram_t *ram)
+static void ram_tick_bti_entries(ram_t *ram)
 {
-    if (ram->rd_active) {
-        return;
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        ram_bti_entry_t *entry = &ram->bti_entries[i];
+        if (entry->vld && entry->delay < ram->latency) {
+            entry->delay++;
+        }
     }
-    if (itf_fifo_empty(ram->axi4_ar_slv)) {
+}
+
+static void ram_tick_axi_entries(ram_t *ram)
+{
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        ram_axi_rd_entry_t *rd = &ram->axi_rd_entries[i];
+        if (rd->vld && rd->delay < ram->latency) {
+            rd->delay++;
+        }
+
+        ram_axi_wr_entry_t *wr = &ram->axi_wr_entries[i];
+        if (wr->vld && wr->w_done && wr->delay < ram->latency) {
+            wr->delay++;
+        }
+    }
+}
+
+static bool ram_find_free_bti_slot(const ram_t *ram, u32 *slot)
+{
+    if (ram->bti_count == RAM_PENDING_DEPTH) {
+        return false;
+    }
+
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        if (!ram->bti_entries[i].vld) {
+            *slot = i;
+            return true;
+        }
+    }
+
+    DBG_CHECK(false);
+    return false;
+}
+
+static bool ram_find_free_axi_rd_slot(const ram_t *ram, u32 *slot)
+{
+    if (ram->axi_rd_count == RAM_PENDING_DEPTH) {
+        return false;
+    }
+
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        if (!ram->axi_rd_entries[i].vld) {
+            *slot = i;
+            return true;
+        }
+    }
+
+    DBG_CHECK(false);
+    return false;
+}
+
+static bool ram_find_free_axi_wr_slot(const ram_t *ram, u32 *slot)
+{
+    if (ram->axi_wr_count == RAM_PENDING_DEPTH) {
+        return false;
+    }
+
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        if (!ram->axi_wr_entries[i].vld) {
+            *slot = i;
+            return true;
+        }
+    }
+
+    DBG_CHECK(false);
+    return false;
+}
+
+static bool ram_find_oldest_ready_bti(const ram_t *ram, u32 port_idx, u32 *slot)
+{
+    bool found = false;
+    u32 best_slot = 0;
+    u64 best_seq = 0;
+
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        const ram_bti_entry_t *entry = &ram->bti_entries[i];
+        if (!entry->vld || entry->port_idx != port_idx ||
+            entry->delay < ram->latency) {
+            continue;
+        }
+
+        if (!found || entry->seq < best_seq) {
+            found = true;
+            best_slot = i;
+            best_seq = entry->seq;
+        }
+    }
+
+    if (found) {
+        *slot = best_slot;
+    }
+    return found;
+}
+
+static bool ram_find_oldest_ready_axi_rd(const ram_t *ram, u32 *slot)
+{
+    bool found = false;
+    u32 best_slot = 0;
+    u64 best_seq = 0;
+
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        const ram_axi_rd_entry_t *entry = &ram->axi_rd_entries[i];
+        if (!entry->vld || entry->delay < ram->latency) {
+            continue;
+        }
+
+        if (!found || entry->seq < best_seq) {
+            found = true;
+            best_slot = i;
+            best_seq = entry->seq;
+        }
+    }
+
+    if (found) {
+        *slot = best_slot;
+    }
+    return found;
+}
+
+static bool ram_find_oldest_ready_axi_wr(const ram_t *ram, u32 *slot)
+{
+    bool found = false;
+    u32 best_slot = 0;
+    u64 best_seq = 0;
+
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        const ram_axi_wr_entry_t *entry = &ram->axi_wr_entries[i];
+        if (!entry->vld || !entry->w_done || entry->delay < ram->latency) {
+            continue;
+        }
+
+        if (!found || entry->seq < best_seq) {
+            found = true;
+            best_slot = i;
+            best_seq = entry->seq;
+        }
+    }
+
+    if (found) {
+        *slot = best_slot;
+    }
+    return found;
+}
+
+static bool ram_find_oldest_axi_wr_need_w(const ram_t *ram, u32 *slot)
+{
+    bool found = false;
+    u32 best_slot = 0;
+    u64 best_seq = 0;
+
+    for (u32 i = 0; i < RAM_PENDING_DEPTH; i++) {
+        const ram_axi_wr_entry_t *entry = &ram->axi_wr_entries[i];
+        if (!entry->vld || entry->w_done) {
+            continue;
+        }
+
+        if (!found || entry->seq < best_seq) {
+            found = true;
+            best_slot = i;
+            best_seq = entry->seq;
+        }
+    }
+
+    if (found) {
+        *slot = best_slot;
+    }
+    return found;
+}
+
+static bti_rsp_if_t ram_build_bti_rsp(ram_t *ram, const bti_req_if_t *req)
+{
+    bti_rsp_if_t rsp = {
+        .trans_id = req->trans_id,
+        .data = 0,
+        .ok = false
+    };
+    u32 addr = req->addr - ram->base_addr;
+    u32 byte_num = 1u << req->size;
+
+    if (req->size > BTI_REQ_SIZE_B4) {
+        rsp.ok = false;
+    } else if (req->cmd == BTI_REQ_CMD_READ) {
+        rsp.ok = ram_read(ram, addr, byte_num, &rsp.data);
+    } else if (req->cmd == BTI_REQ_CMD_WRITE) {
+        rsp.ok = ram_write(ram, addr, byte_num, req->data, req->strobe);
+    }
+    return rsp;
+}
+
+static void ram_fast_proc_axi_ar(ram_t *ram)
+{
+    if (ram->rd_active || itf_fifo_empty(ram->axi4_ar_slv)) {
         return;
     }
 
     axi4_ar_if_t ar;
     itf_read(ram->axi4_ar_slv, &ar);
-
     DBG_CHECK(ar.addr >= ram->base_addr);
+
     ram->rd_active = true;
     ram->rd_burst_addr = ar.addr - ram->base_addr;
     ram->rd_burst_id = ar.id;
@@ -101,27 +324,21 @@ static void ram_proc_axi_ar(ram_t *ram)
     ram->rd_burst_cnt = 0;
 }
 
-static void ram_proc_axi_r(ram_t *ram)
+static void ram_fast_proc_axi_r(ram_t *ram)
 {
-    if (!ram->rd_active) {
-        return;
-    }
-    if (itf_fifo_full(ram->axi4_r_mst)) {
+    if (!ram->rd_active || itf_fifo_full(ram->axi4_r_mst)) {
         return;
     }
 
-    u32 addr = ram->rd_burst_addr;
     u32 data = 0;
     u32 byte_num = 1u << ram->rd_burst_size;
-    bool ok = ram_read(ram, addr, byte_num, &data);
-    axi4_r_resp_t resp = ok ? AXI4_R_RESP_OKAY : AXI4_R_RESP_SLVERR;
-
-    bool last = (ram->rd_burst_cnt == ram->rd_burst_len);
+    bool ok = ram_read(ram, ram->rd_burst_addr, byte_num, &data);
+    bool last = ram->rd_burst_cnt == ram->rd_burst_len;
 
     axi4_r_if_t r = {
         .id = ram->rd_burst_id,
         .data = data,
-        .resp = resp,
+        .resp = ok ? AXI4_R_RESP_OKAY : AXI4_R_RESP_SLVERR,
         .last = last
     };
     itf_write(ram->axi4_r_mst, &r);
@@ -129,25 +346,22 @@ static void ram_proc_axi_r(ram_t *ram)
     if (last) {
         ram->rd_active = false;
     } else {
-        ram->rd_burst_addr = axi_burst_next_addr(addr, ram->rd_burst_type,
-                                                  ram->rd_burst_size);
+        ram->rd_burst_addr = axi_burst_next_addr(ram->rd_burst_addr,
+            ram->rd_burst_type, ram->rd_burst_size);
         ram->rd_burst_cnt++;
     }
 }
 
-static void ram_proc_axi_aw(ram_t *ram)
+static void ram_fast_proc_axi_aw(ram_t *ram)
 {
-    if (ram->wr_active) {
-        return;
-    }
-    if (itf_fifo_empty(ram->axi4_aw_slv)) {
+    if (ram->wr_active || itf_fifo_empty(ram->axi4_aw_slv)) {
         return;
     }
 
     axi4_aw_if_t aw;
     itf_read(ram->axi4_aw_slv, &aw);
-
     DBG_CHECK(aw.addr >= ram->base_addr);
+
     ram->wr_active = true;
     ram->wr_burst_addr = aw.addr - ram->base_addr;
     ram->wr_burst_id = aw.id;
@@ -158,46 +372,37 @@ static void ram_proc_axi_aw(ram_t *ram)
     ram->wr_b_pending = false;
 }
 
-static void ram_proc_axi_w(ram_t *ram)
+static void ram_fast_proc_axi_w(ram_t *ram)
 {
-    if (!ram->wr_active) {
-        return;
-    }
-    if (itf_fifo_empty(ram->axi4_w_slv)) {
+    if (!ram->wr_active || itf_fifo_empty(ram->axi4_w_slv)) {
         return;
     }
 
     axi4_w_if_t w;
     itf_fifo_get_front(ram->axi4_w_slv, &w);
 
-    if (w.last) {
-        if (ram->wr_b_pending) {
-            return;
-        }
+    bool last = w.last || ram->wr_burst_cnt == ram->wr_burst_len;
+    if (last && ram->wr_b_pending) {
+        return;
     }
 
     itf_fifo_pop_front(ram->axi4_w_slv);
-
-    u32 addr = ram->wr_burst_addr;
     u32 byte_num = 1u << ram->wr_burst_size;
-    ram_write(ram, addr, byte_num, w.data, w.strb);
+    ram_write(ram, ram->wr_burst_addr, byte_num, w.data, w.strb);
 
-    if (w.last) {
+    if (last) {
         ram->wr_active = false;
         ram->wr_b_pending = true;
     } else {
-        ram->wr_burst_addr = axi_burst_next_addr(addr, ram->wr_burst_type,
-                                                   ram->wr_burst_size);
+        ram->wr_burst_addr = axi_burst_next_addr(ram->wr_burst_addr,
+            ram->wr_burst_type, ram->wr_burst_size);
         ram->wr_burst_cnt++;
     }
 }
 
-static void ram_proc_axi_b(ram_t *ram)
+static void ram_fast_proc_axi_b(ram_t *ram)
 {
-    if (!ram->wr_b_pending) {
-        return;
-    }
-    if (itf_fifo_full(ram->axi4_b_mst)) {
+    if (!ram->wr_b_pending || itf_fifo_full(ram->axi4_b_mst)) {
         return;
     }
 
@@ -209,62 +414,258 @@ static void ram_proc_axi_b(ram_t *ram)
     ram->wr_b_pending = false;
 }
 
-static void ram_proc_axi(ram_t *ram)
+static void ram_fast_proc_axi(ram_t *ram)
 {
-    ram_proc_axi_b(ram);
-    ram_proc_axi_r(ram);
-    ram_proc_axi_w(ram);
-    ram_proc_axi_aw(ram);
-    ram_proc_axi_ar(ram);
+    ram_fast_proc_axi_b(ram);
+    ram_fast_proc_axi_r(ram);
+    ram_fast_proc_axi_w(ram);
+    ram_fast_proc_axi_aw(ram);
+    ram_fast_proc_axi_ar(ram);
 }
 
-static void ram_proc_port(ram_t *ram, u32 port_idx)
+static void ram_fast_proc_bti_port(ram_t *ram, u32 port_idx)
 {
     DBG_CHECK(port_idx < ram->port_num);
-
-    if (itf_fifo_empty(ram->bti_req_slvs[port_idx])) {
+    if (itf_fifo_empty(ram->bti_req_slvs[port_idx]) ||
+        itf_fifo_full(ram->bti_rsp_msts[port_idx])) {
         return;
     }
+
+    bti_req_if_t req;
+    itf_read(ram->bti_req_slvs[port_idx], &req);
+    DBG_CHECK(req.addr >= ram->base_addr);
+
+    bti_rsp_if_t rsp = ram_build_bti_rsp(ram, &req);
+    itf_write(ram->bti_rsp_msts[port_idx], &rsp);
+}
+
+static void ram_fast_proc_bti(ram_t *ram)
+{
+    for (u32 i = 0; i < ram->port_num; i++) {
+        ram_fast_proc_bti_port(ram, i);
+    }
+}
+
+static void ram_send_bti_rsp(ram_t *ram, u32 port_idx)
+{
     if (itf_fifo_full(ram->bti_rsp_msts[port_idx])) {
         return;
     }
 
-    bti_req_if_t bti_req;
-    itf_read(ram->bti_req_slvs[port_idx], &bti_req);
-    DBG_CHECK(bti_req.addr >= ram->base_addr);
-
-    bti_rsp_if_t bti_rsp = {
-        .trans_id = bti_req.trans_id,
-        .data = 0,
-        .ok = false
-    };
-    u32 addr = bti_req.addr - ram->base_addr;
-    u32 byte_num = 1u << bti_req.size;
-
-    if (bti_req.size > BTI_REQ_SIZE_B4) {
-        bti_rsp.data = 0;
-        bti_rsp.ok = false;
-    } else if (bti_req.cmd == BTI_REQ_CMD_READ) {
-        bti_rsp.ok = ram_read(ram, addr, byte_num, &bti_rsp.data);
-    } else if (bti_req.cmd == BTI_REQ_CMD_WRITE) {
-        bti_rsp.data = 0;
-        bti_rsp.ok = ram_write(ram, addr, byte_num, bti_req.data, bti_req.strobe);
-    } else {
-        bti_rsp.data = 0;
-        bti_rsp.ok = false;
+    u32 slot;
+    if (!ram_find_oldest_ready_bti(ram, port_idx, &slot)) {
+        return;
     }
 
-    itf_write(ram->bti_rsp_msts[port_idx], &bti_rsp);
+    itf_write(ram->bti_rsp_msts[port_idx], &ram->bti_entries[slot].rsp);
+    ram->bti_entries[slot].vld = false;
+    ram->bti_count--;
+}
+
+static void ram_accept_bti_req(ram_t *ram, u32 port_idx)
+{
+    if (itf_fifo_empty(ram->bti_req_slvs[port_idx])) {
+        return;
+    }
+
+    u32 slot;
+    if (!ram_find_free_bti_slot(ram, &slot)) {
+        return;
+    }
+
+    bti_req_if_t req;
+    itf_read(ram->bti_req_slvs[port_idx], &req);
+    DBG_CHECK(req.addr >= ram->base_addr);
+
+    ram_bti_entry_t *entry = &ram->bti_entries[slot];
+    entry->vld = true;
+    entry->port_idx = port_idx;
+    entry->seq = ram->next_seq++;
+    entry->delay = 0;
+    entry->rsp = ram_build_bti_rsp(ram, &req);
+    ram->bti_count++;
+}
+
+static void ram_proc_bti(ram_t *ram)
+{
+    ram_tick_bti_entries(ram);
+    for (u32 i = 0; i < ram->port_num; i++) {
+        ram_send_bti_rsp(ram, i);
+    }
+    for (u32 i = 0; i < ram->port_num; i++) {
+        ram_accept_bti_req(ram, i);
+    }
+}
+
+static void ram_accept_axi_ar(ram_t *ram)
+{
+    if (itf_fifo_empty(ram->axi4_ar_slv)) {
+        return;
+    }
+
+    u32 slot;
+    if (!ram_find_free_axi_rd_slot(ram, &slot)) {
+        return;
+    }
+
+    axi4_ar_if_t ar;
+    itf_read(ram->axi4_ar_slv, &ar);
+    DBG_CHECK(ar.addr >= ram->base_addr);
+
+    ram_axi_rd_entry_t *entry = &ram->axi_rd_entries[slot];
+    entry->vld = true;
+    entry->seq = ram->next_seq++;
+    entry->delay = 0;
+    entry->addr = ar.addr - ram->base_addr;
+    entry->id = ar.id;
+    entry->len = ar.len;
+    entry->size = ar.size;
+    entry->burst = ar.burst;
+    entry->beat_cnt = 0;
+    ram->axi_rd_count++;
+}
+
+static void ram_send_axi_r(ram_t *ram)
+{
+    if (itf_fifo_full(ram->axi4_r_mst)) {
+        return;
+    }
+
+    u32 slot;
+    if (!ram_find_oldest_ready_axi_rd(ram, &slot)) {
+        return;
+    }
+
+    ram_axi_rd_entry_t *entry = &ram->axi_rd_entries[slot];
+    u32 data = 0;
+    u32 byte_num = 1u << entry->size;
+    bool ok = ram_read(ram, entry->addr, byte_num, &data);
+    bool last = entry->beat_cnt == entry->len;
+
+    axi4_r_if_t r = {
+        .id = entry->id,
+        .data = data,
+        .resp = ok ? AXI4_R_RESP_OKAY : AXI4_R_RESP_SLVERR,
+        .last = last
+    };
+    itf_write(ram->axi4_r_mst, &r);
+
+    if (last) {
+        entry->vld = false;
+        ram->axi_rd_count--;
+    } else {
+        entry->addr = axi_burst_next_addr(entry->addr, entry->burst,
+            entry->size);
+        entry->beat_cnt++;
+    }
+}
+
+static void ram_accept_axi_aw(ram_t *ram)
+{
+    if (itf_fifo_empty(ram->axi4_aw_slv)) {
+        return;
+    }
+
+    u32 slot;
+    if (!ram_find_free_axi_wr_slot(ram, &slot)) {
+        return;
+    }
+
+    axi4_aw_if_t aw;
+    itf_read(ram->axi4_aw_slv, &aw);
+    DBG_CHECK(aw.addr >= ram->base_addr);
+
+    ram_axi_wr_entry_t *entry = &ram->axi_wr_entries[slot];
+    entry->vld = true;
+    entry->seq = ram->next_seq++;
+    entry->delay = 0;
+    entry->addr = aw.addr - ram->base_addr;
+    entry->id = aw.id;
+    entry->len = aw.len;
+    entry->size = aw.size;
+    entry->burst = aw.burst;
+    entry->beat_cnt = 0;
+    entry->w_done = false;
+    ram->axi_wr_count++;
+}
+
+static void ram_accept_axi_w(ram_t *ram)
+{
+    if (itf_fifo_empty(ram->axi4_w_slv)) {
+        return;
+    }
+
+    u32 slot;
+    if (!ram_find_oldest_axi_wr_need_w(ram, &slot)) {
+        return;
+    }
+
+    ram_axi_wr_entry_t *entry = &ram->axi_wr_entries[slot];
+    axi4_w_if_t w;
+    itf_fifo_get_front(ram->axi4_w_slv, &w);
+
+    bool last = w.last || entry->beat_cnt == entry->len;
+    itf_fifo_pop_front(ram->axi4_w_slv);
+
+    u32 byte_num = 1u << entry->size;
+    ram_write(ram, entry->addr, byte_num, w.data, w.strb);
+
+    if (last) {
+        entry->w_done = true;
+        entry->delay = 0;
+    } else {
+        entry->addr = axi_burst_next_addr(entry->addr, entry->burst,
+            entry->size);
+        entry->beat_cnt++;
+    }
+}
+
+static void ram_send_axi_b(ram_t *ram)
+{
+    if (itf_fifo_full(ram->axi4_b_mst)) {
+        return;
+    }
+
+    u32 slot;
+    if (!ram_find_oldest_ready_axi_wr(ram, &slot)) {
+        return;
+    }
+
+    ram_axi_wr_entry_t *entry = &ram->axi_wr_entries[slot];
+    axi4_b_if_t b = {
+        .id = entry->id,
+        .resp = AXI4_B_RESP_OKAY
+    };
+    itf_write(ram->axi4_b_mst, &b);
+    entry->vld = false;
+    ram->axi_wr_count--;
+}
+
+static void ram_proc_axi(ram_t *ram)
+{
+    ram_tick_axi_entries(ram);
+    ram_send_axi_b(ram);
+    ram_send_axi_r(ram);
+    ram_accept_axi_w(ram);
+    ram_accept_axi_aw(ram);
+    ram_accept_axi_ar(ram);
 }
 
 void ram_clock(ram_t *ram)
 {
     mod_clock(&ram->mod);
+    if (ram->latency == 0) {
+        if (ram->mode == RAM_MODE_AXI) {
+            ram_fast_proc_axi(ram);
+        } else {
+            ram_fast_proc_bti(ram);
+        }
+        return;
+    }
+
     if (ram->mode == RAM_MODE_AXI) {
         ram_proc_axi(ram);
     } else {
-        for (u32 i = 0; i < ram->port_num; i++) {
-            ram_proc_port(ram, i);
-        }
+        ram_proc_bti(ram);
     }
 }

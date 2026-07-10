@@ -122,6 +122,7 @@ static bool l2_start_miss(l2_t *l2, u32 owner, l2_port_state_t return_state)
     if (l2->mem_state != L2_MEM_STATE_IDLE ||
         !ostq_empty(&l2->bypass_rd_ost) ||
         !ostq_empty(&l2->bypass_wr_ost)) {
+        (*l2->perf_miss_busy)++;
         return false;
     }
 
@@ -146,6 +147,29 @@ static bool l2_start_miss(l2_t *l2, u32 owner, l2_port_state_t return_state)
     } else {
         l2->mem_state = L2_MEM_STATE_REFILL_AR;
     }
+    return true;
+}
+
+static bool l2_port_latency_ready(l2_t *l2, l2_port_t *port)
+{
+    if (port->miss_resolved || l2->conf.latency == 0) {
+        port->latency_active = false;
+        port->delay = 0;
+        return true;
+    }
+
+    if (!port->latency_active) {
+        port->latency_active = true;
+        port->delay = 0;
+    }
+
+    port->delay++;
+    if (port->delay < l2->conf.latency) {
+        return false;
+    }
+
+    port->latency_active = false;
+    port->delay = 0;
     return true;
 }
 
@@ -336,6 +360,9 @@ static bool l2_start_bypass_read(l2_t *l2, u32 port_idx, const axi4_ar_if_t *ar)
     if (l2->mem_state != L2_MEM_STATE_IDLE ||
         ostq_full(&l2->bypass_rd_ost) ||
         itf_fifo_full(l2->mem_axi4_ar_mst)) {
+        if (ostq_full(&l2->bypass_rd_ost)) {
+            (*l2->perf_bypass_rd_ost_full)++;
+        }
         return false;
     }
     l2_bypass_rd_ctx_t ctx = { .port = port_idx };
@@ -351,6 +378,9 @@ static bool l2_start_bypass_write(l2_t *l2, u32 port_idx, const axi4_aw_if_t *aw
     if (l2->mem_state != L2_MEM_STATE_IDLE ||
         ostq_full(&l2->bypass_wr_ost) ||
         itf_fifo_full(l2->mem_axi4_aw_mst)) {
+        if (ostq_full(&l2->bypass_wr_ost)) {
+            (*l2->perf_bypass_wr_ost_full)++;
+        }
         return false;
     }
     l2_bypass_wr_ctx_t ctx = {
@@ -450,6 +480,8 @@ static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
             port->addr = aw.addr;
             port->beat_idx = 0;
             port->miss_resolved = false;
+            port->latency_active = false;
+            port->delay = 0;
             port->state = L2_PORT_STATE_WRITE;
         }
         fifo_pop(aw_fifo, &aw);
@@ -476,6 +508,8 @@ static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
         port->addr = ar.addr;
         port->beat_idx = 0;
         port->miss_resolved = false;
+        port->latency_active = false;
+        port->delay = 0;
         port->state = L2_PORT_STATE_READ;
     }
     fifo_pop(ar_fifo, &ar);
@@ -486,6 +520,9 @@ static void l2_proc_port_read(l2_t *l2, u32 port_idx)
     l2_port_t *port = &l2->ports[port_idx];
     itf_t *r_mst = l2_port_r_mst(l2, port_idx);
     if (itf_fifo_full(r_mst)) {
+        return;
+    }
+    if (!l2_port_latency_ready(l2, port)) {
         return;
     }
 
@@ -520,6 +557,9 @@ static void l2_proc_port_write(l2_t *l2, u32 port_idx)
     l2_port_t *port = &l2->ports[port_idx];
     fifo_t *w_fifo = &l2->w_fifos[port_idx];
     if (fifo_empty(w_fifo)) {
+        return;
+    }
+    if (!l2_port_latency_ready(l2, port)) {
         return;
     }
 
@@ -615,6 +655,12 @@ void l2_construct(l2_t *l2, const char *parent, const char *name,
     l2->perf_miss = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "miss");
     l2->perf_bypass = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "bypass");
     l2->perf_writeback = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "writeback");
+    l2->perf_bypass_rd_ost_full = dbg_pcm_reg_perf_cnt(l2->mod.hier_name,
+        "bypass_rd_ost_full");
+    l2->perf_bypass_wr_ost_full = dbg_pcm_reg_perf_cnt(l2->mod.hier_name,
+        "bypass_wr_ost_full");
+    l2->perf_miss_busy = dbg_pcm_reg_perf_cnt(l2->mod.hier_name,
+        "miss_busy");
     l2->perf_stg_ar_full[L2_I_PORT] = dbg_pcm_reg_perf_cnt(
         l2->mod.hier_name, "i_stg_ar_full");
     l2->perf_stg_aw_full[L2_I_PORT] = dbg_pcm_reg_perf_cnt(
@@ -646,6 +692,8 @@ void l2_reset(l2_t *l2)
         l2->ports[port].state = L2_PORT_STATE_IDLE;
         l2->ports[port].beat_idx = 0;
         l2->ports[port].miss_resolved = false;
+        l2->ports[port].latency_active = false;
+        l2->ports[port].delay = 0;
         fifo_reset(&l2->ar_fifos[port]);
         fifo_reset(&l2->aw_fifos[port]);
         fifo_reset(&l2->w_fifos[port]);
@@ -665,6 +713,9 @@ void l2_reset(l2_t *l2)
     *l2->perf_miss = 0;
     *l2->perf_bypass = 0;
     *l2->perf_writeback = 0;
+    *l2->perf_bypass_rd_ost_full = 0;
+    *l2->perf_bypass_wr_ost_full = 0;
+    *l2->perf_miss_busy = 0;
     for (u32 port = 0; port < L2_PORT_NUM; port++) {
         *l2->perf_stg_ar_full[port] = 0;
         *l2->perf_stg_aw_full[port] = 0;

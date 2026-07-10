@@ -48,6 +48,7 @@ typedef struct rv32g_conf {
     u32 hart_mmu_i_stg_fifo_depth;
     u32 hart_mmu_d_stg_fifo_depth;
     u32 hart_mmu_ost_depth;
+    u32 hart_l1_latency;
     u32 hart_l1i_stg_fifo_depth;
     u32 hart_l1d_stg_fifo_depth;
     u32 hart_l1_ost_depth;
@@ -55,8 +56,11 @@ typedef struct rv32g_conf {
     u32 hart_l1d_bti_mux_ost_depth;
     u32 cbi_bus_stg_fifo_depth;
     u32 cbi_bus_ost_depth;
+    u32 l2_latency;
     u32 l2_stg_fifo_depth;
     u32 l2_bypass_ost_depth;
+    u32 itcm_latency;
+    u32 dtcm_latency;
 } rv32g_conf_t;
 
 typedef struct rv32g {

@@ -12,6 +12,7 @@
 #define L1I_WAY_NUM 2u
 #define L1D_SIZE (16u * KiB)
 #define L1D_WAY_NUM 2u
+#define HART_L1_LATENCY 1u
 
 #define HART_IFU_CTRLQ_DEPTH 8u
 #define HART_IFU_FCH_OST_DEPTH 8u
