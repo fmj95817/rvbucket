@@ -38,6 +38,25 @@ typedef struct rv32g_conf {
     u32 aclint_sswi_size;
     u32 plic_base;
     u32 plic_size;
+    u32 hart_ifu_ctrlq_depth;
+    u32 hart_ifu_fch_ost_depth;
+    u32 hart_hbi_stg_fifo_depth;
+    u32 hart_hbi_i_ost_depth;
+    u32 hart_hbi_d_ost_depth;
+    u32 hart_lsu_stg_fifo_depth;
+    u32 hart_lsu_ost_depth;
+    u32 hart_mmu_i_stg_fifo_depth;
+    u32 hart_mmu_d_stg_fifo_depth;
+    u32 hart_mmu_ost_depth;
+    u32 hart_l1i_stg_fifo_depth;
+    u32 hart_l1d_stg_fifo_depth;
+    u32 hart_l1_ost_depth;
+    u32 hart_l1d_bti_mux_stg_fifo_depth;
+    u32 hart_l1d_bti_mux_ost_depth;
+    u32 cbi_bus_stg_fifo_depth;
+    u32 cbi_bus_ost_depth;
+    u32 l2_stg_fifo_depth;
+    u32 l2_bypass_ost_depth;
 } rv32g_conf_t;
 
 typedef struct rv32g {

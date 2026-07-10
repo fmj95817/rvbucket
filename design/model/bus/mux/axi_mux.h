@@ -4,14 +4,21 @@
 #include "base/types.h"
 #include "base/mod.h"
 #include "base/itf.h"
+#include "base/fifo.h"
+#include "base/ost.h"
 #include "itf/axi4_if.h"
 
 #define AXI_MUX_HOST_NUM_MAX 16
 
-#define AXI_MUX_STATE_IDLE 0
-#define AXI_MUX_STATE_RD 1
-#define AXI_MUX_STATE_WR_DATA 2
-#define AXI_MUX_STATE_WR_RESP 3
+typedef struct axi_mux_conf {
+    u32 host_num;
+    u32 stg_fifo_depth;
+    u32 ost_depth;
+} axi_mux_conf_t;
+
+typedef struct axi_mux_ost_ctx {
+    u32 host_idx;
+} axi_mux_ost_ctx_t;
 
 typedef struct axi_mux {
     mod_t mod;
@@ -29,17 +36,22 @@ typedef struct axi_mux {
 
     u32 host_num;
 
-    u32 rd_state;
-    u32 rd_active_host_idx;
     u32 rd_rr_idx;
-
-    u32 wr_state;
-    u32 wr_active_host_idx;
     u32 wr_rr_idx;
-    bool wr_w_done;
+    fifo_t host_ar_fifos[AXI_MUX_HOST_NUM_MAX];
+    fifo_t host_aw_fifos[AXI_MUX_HOST_NUM_MAX];
+    fifo_t host_w_fifos[AXI_MUX_HOST_NUM_MAX];
+    ostk_t rd_ost;
+    ostq_t wr_data_ost;
+    ostk_t wr_rsp_ost;
+
+    u64 *perf_stg_ar_full;
+    u64 *perf_stg_aw_full;
+    u64 *perf_stg_w_full;
 } axi_mux_t;
 
-extern void axi_mux_construct(axi_mux_t *axi_mux, const char *parent, const char *name, u32 host_num);
+extern void axi_mux_construct(axi_mux_t *axi_mux, const char *parent, const char *name,
+    const axi_mux_conf_t *conf);
 extern void axi_mux_reset(axi_mux_t *axi_mux);
 extern void axi_mux_clock(axi_mux_t *axi_mux);
 extern void axi_mux_free(axi_mux_t *axi_mux);

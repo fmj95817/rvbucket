@@ -6,6 +6,8 @@
 #include "utils.h"
 
 #define TB_MEM_WORDS 256
+#define TB_L1_STG_FIFO_DEPTH 8u
+#define TB_L1_OST_DEPTH 16u
 
 typedef struct l1_tb {
     mod_t mod;
@@ -23,6 +25,7 @@ typedef struct l1_tb {
 
     l1_t dut;
     u32 mem[TB_MEM_WORDS];
+    bool stall_axi_r;
 
     bool rd_active;
     u32 rd_addr;
@@ -91,6 +94,7 @@ static void tb_reset(l1_tb_t *tb)
     tb->rd_active = false;
     tb->wr_active = false;
     tb->b_pending = false;
+    tb->stall_axi_r = false;
     tb->ar_count = 0;
     tb->aw_count = 0;
     for (u32 i = 0; i < TB_MEM_WORDS; i++) {
@@ -119,7 +123,7 @@ static void tb_mock_axi(l1_tb_t *tb)
         tb->b_pending = false;
     }
 
-    if (tb->rd_active && !itf_fifo_full(&tb->axi_r)) {
+    if (tb->rd_active && !tb->stall_axi_r && !itf_fifo_full(&tb->axi_r)) {
         u32 word_idx = tb->rd_addr / 4u;
         axi4_r_if_t r = {
             .id = tb->rd_id,
@@ -400,13 +404,47 @@ TEST_CASE(l1_tb_t, flush_invalidates)
     TEST_END();
 }
 
+TEST_CASE(l1_tb_t, hit_under_miss_uses_ost)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Hit Under Miss Uses OST");
+
+    tb_bti_read(tb, 1, 0x00);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb->mem[0], true), "line 0 filled");
+
+    tb->stall_axi_r = true;
+    tb_bti_read(tb, 2, 0x40);
+    RUN_CYCLES(4);
+    REQUIRE(tb->dut.state != L1_STATE_IDLE, "miss is active");
+    REQUIRE(itf_fifo_empty(&tb->bti_rsp), "older miss has no response yet");
+
+    tb_bti_read(tb, 3, 0x00);
+    RUN_CYCLES(4);
+    REQUIRE(tb->dut.ost.count == 2, "hit under miss occupies another ost slot");
+    REQUIRE(itf_fifo_empty(&tb->bti_req), "hit under miss request was accepted");
+    REQUIRE(itf_fifo_empty(&tb->bti_rsp), "younger hit waits behind older miss");
+
+    tb->stall_axi_r = false;
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, tb->mem[0x40 / 4], true),
+        "older miss response returns first");
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, tb->mem[0], true),
+        "younger hit response returns second");
+
+    TEST_END();
+}
+
 int main(void)
 {
     l1_conf_t cached_conf = {
         .full_bypass = false,
         .ro = false,
         .size = L1_LINE_SIZE,
-        .way_num = 1
+        .way_num = 1,
+        .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
+        .ost_depth = TB_L1_OST_DEPTH
     };
     l1_tb_t tb;
     tb_setup(&tb, &cached_conf);
@@ -422,10 +460,29 @@ int main(void)
         return ret;
     }
 
+    l1_conf_t hit_under_miss_conf = {
+        .full_bypass = false,
+        .ro = false,
+        .size = L1_LINE_SIZE * 2,
+        .way_num = 1,
+        .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
+        .ost_depth = TB_L1_OST_DEPTH
+    };
+    tb_setup(&tb, &hit_under_miss_conf);
+    TEST_RUN(hit_under_miss_uses_ost);
+    ut_sbd_summary(&tb.sbd);
+    ret = ut_sbd_ret(&tb.sbd);
+    tb_free(&tb);
+    if (ret != 0) {
+        return ret;
+    }
+
     l1_conf_t bypass_conf = {
         .ro = false,
         .size = L1_LINE_SIZE,
         .way_num = 1,
+        .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
+        .ost_depth = TB_L1_OST_DEPTH,
         .bypass_bases = { 0x80 },
         .bypass_sizes = { 0x40 }
     };

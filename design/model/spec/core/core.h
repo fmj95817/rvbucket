@@ -7,6 +7,11 @@
 #define L2_SIZE        (128u * KiB)
 #define L2_WAY_NUM     4u
 
+#define CORE_BUS_STG_FIFO_DEPTH 16u
+#define CORE_BUS_OST_DEPTH 8u
+#define CORE_L2_STG_FIFO_DEPTH 16u
+#define CORE_L2_BYPASS_OST_DEPTH 4u
+
 #define BOOT_ROM_BASE  0x00000000u
 #define BOOT_ROM_SIZE  (2u * KiB)
 #define ITCM_BASE      0x10000000u

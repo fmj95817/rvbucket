@@ -38,7 +38,22 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
         .dtcm_base = conf->dtcm_base,
         .dtcm_size = conf->dtcm_size,
         .cfg_base = conf->cfg_base,
-        .cfg_size = conf->cfg_size
+        .cfg_size = conf->cfg_size,
+        .ifu_ctrlq_depth = conf->hart_ifu_ctrlq_depth,
+        .ifu_fch_ost_depth = conf->hart_ifu_fch_ost_depth,
+        .hbi_stg_fifo_depth = conf->hart_hbi_stg_fifo_depth,
+        .hbi_i_ost_depth = conf->hart_hbi_i_ost_depth,
+        .hbi_d_ost_depth = conf->hart_hbi_d_ost_depth,
+        .lsu_stg_fifo_depth = conf->hart_lsu_stg_fifo_depth,
+        .lsu_ost_depth = conf->hart_lsu_ost_depth,
+        .mmu_i_stg_fifo_depth = conf->hart_mmu_i_stg_fifo_depth,
+        .mmu_d_stg_fifo_depth = conf->hart_mmu_d_stg_fifo_depth,
+        .mmu_ost_depth = conf->hart_mmu_ost_depth,
+        .l1i_stg_fifo_depth = conf->hart_l1i_stg_fifo_depth,
+        .l1d_stg_fifo_depth = conf->hart_l1d_stg_fifo_depth,
+        .l1_ost_depth = conf->hart_l1_ost_depth,
+        .l1d_bti_mux_stg_fifo_depth = conf->hart_l1d_bti_mux_stg_fifo_depth,
+        .l1d_bti_mux_ost_depth = conf->hart_l1d_bti_mux_ost_depth
     };
     hart_construct(&s->hart, s->mod.hier_name, "u_hart", &hart_conf);
 
@@ -70,7 +85,9 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
         .aclint_base = conf->aclint_base,
         .aclint_size = conf->aclint_size,
         .plic_base = conf->plic_base,
-        .plic_size = conf->plic_size
+        .plic_size = conf->plic_size,
+        .bus_stg_fifo_depth = conf->cbi_bus_stg_fifo_depth,
+        .bus_ost_depth = conf->cbi_bus_ost_depth
     };
     cbi_construct(&s->cbi, s->mod.hier_name, "u_cbi", &cbi_conf);
 
@@ -92,7 +109,9 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     s->l2.mod.cycle = s->mod.cycle;
     l2_conf_t l2_conf = {
         .size = L2_SIZE,
-        .way_num = L2_WAY_NUM
+        .way_num = L2_WAY_NUM,
+        .stg_fifo_depth = conf->l2_stg_fifo_depth,
+        .bypass_ost_depth = conf->l2_bypass_ost_depth
     };
     l2_construct(&s->l2, s->mod.hier_name, "u_l2", &l2_conf);
 

@@ -24,6 +24,21 @@ typedef struct hart_conf {
     u32 dtcm_size;
     u32 cfg_base;
     u32 cfg_size;
+    u32 ifu_ctrlq_depth;
+    u32 ifu_fch_ost_depth;
+    u32 hbi_stg_fifo_depth;
+    u32 hbi_i_ost_depth;
+    u32 hbi_d_ost_depth;
+    u32 lsu_stg_fifo_depth;
+    u32 lsu_ost_depth;
+    u32 mmu_i_stg_fifo_depth;
+    u32 mmu_d_stg_fifo_depth;
+    u32 mmu_ost_depth;
+    u32 l1i_stg_fifo_depth;
+    u32 l1d_stg_fifo_depth;
+    u32 l1_ost_depth;
+    u32 l1d_bti_mux_stg_fifo_depth;
+    u32 l1d_bti_mux_ost_depth;
 } hart_conf_t;
 
 typedef struct hart {

@@ -119,7 +119,9 @@ static void l2_port_next_write(l2_port_t *port)
 
 static bool l2_start_miss(l2_t *l2, u32 owner, l2_port_state_t return_state)
 {
-    if (l2->mem_state != L2_MEM_STATE_IDLE) {
+    if (l2->mem_state != L2_MEM_STATE_IDLE ||
+        !ostq_empty(&l2->bypass_rd_ost) ||
+        !ostq_empty(&l2->bypass_wr_ost)) {
         return false;
     }
 
@@ -243,56 +245,78 @@ static void l2_proc_mem_refill_r(l2_t *l2)
 
 static void l2_proc_mem_bypass_r(l2_t *l2)
 {
-    if (l2->mem_state != L2_MEM_STATE_BYPASS_R ||
-        itf_fifo_empty(l2->mem_axi4_r_slv)) {
+    if (itf_fifo_empty(l2->mem_axi4_r_slv)) {
         return;
     }
-    itf_t *r_mst = l2_port_r_mst(l2, l2->mem_owner);
+
+    l2_bypass_rd_ctx_t ctx;
+    bool found = ostq_peek_head(&l2->bypass_rd_ost, &ctx, NULL);
+    if (!found) {
+        return;
+    }
+
+    itf_t *r_mst = l2_port_r_mst(l2, ctx.port);
     if (itf_fifo_full(r_mst)) {
         return;
     }
+
     axi4_r_if_t r;
     itf_read(l2->mem_axi4_r_slv, &r);
     itf_write(r_mst, &r);
     if (r.last) {
-        l2->ports[l2->mem_owner].state = L2_PORT_STATE_IDLE;
-        l2->mem_state = L2_MEM_STATE_IDLE;
+        ostq_free_head(&l2->bypass_rd_ost);
     }
 }
 
 static void l2_proc_mem_bypass_w(l2_t *l2)
 {
-    if (l2->mem_state != L2_MEM_STATE_BYPASS_W ||
-        itf_fifo_full(l2->mem_axi4_w_mst)) {
+    if (itf_fifo_full(l2->mem_axi4_w_mst)) {
         return;
     }
-    itf_t *w_slv = l2_port_w_slv(l2, l2->mem_owner);
-    if (itf_fifo_empty(w_slv)) {
+
+    l2_bypass_wr_ctx_t ctx;
+    u32 slot;
+    bool found = ostq_peek_head(&l2->bypass_wr_ost, &ctx, &slot);
+    if (!found || ctx.w_done) {
         return;
     }
+
+    fifo_t *w_fifo = &l2->w_fifos[ctx.port];
+    if (fifo_empty(w_fifo)) {
+        return;
+    }
+
     axi4_w_if_t w;
-    itf_read(w_slv, &w);
+    fifo_pop(w_fifo, &w);
     itf_write(l2->mem_axi4_w_mst, &w);
-    if (w.last) {
-        l2->mem_state = L2_MEM_STATE_BYPASS_B;
+    ctx.beat_idx++;
+    if (w.last || ctx.beat_idx >= ctx.beat_num) {
+        ctx.w_done = true;
     }
+    ostq_write_slot(&l2->bypass_wr_ost, slot, &ctx);
 }
 
 static void l2_proc_mem_bypass_b(l2_t *l2)
 {
-    if (l2->mem_state != L2_MEM_STATE_BYPASS_B ||
-        itf_fifo_empty(l2->mem_axi4_b_slv)) {
+    if (itf_fifo_empty(l2->mem_axi4_b_slv)) {
         return;
     }
-    itf_t *b_mst = l2_port_b_mst(l2, l2->mem_owner);
+
+    l2_bypass_wr_ctx_t ctx;
+    bool found = ostq_peek_head(&l2->bypass_wr_ost, &ctx, NULL);
+    if (!found || !ctx.w_done) {
+        return;
+    }
+
+    itf_t *b_mst = l2_port_b_mst(l2, ctx.port);
     if (itf_fifo_full(b_mst)) {
         return;
     }
+
     axi4_b_if_t b;
     itf_read(l2->mem_axi4_b_slv, &b);
     itf_write(b_mst, &b);
-    l2->ports[l2->mem_owner].state = L2_PORT_STATE_IDLE;
-    l2->mem_state = L2_MEM_STATE_IDLE;
+    ostq_free_head(&l2->bypass_wr_ost);
 }
 
 static void l2_proc_mem(l2_t *l2)
@@ -309,42 +333,117 @@ static void l2_proc_mem(l2_t *l2)
 
 static bool l2_start_bypass_read(l2_t *l2, u32 port_idx, const axi4_ar_if_t *ar)
 {
-    if (l2->mem_state != L2_MEM_STATE_IDLE || itf_fifo_full(l2->mem_axi4_ar_mst)) {
+    if (l2->mem_state != L2_MEM_STATE_IDLE ||
+        ostq_full(&l2->bypass_rd_ost) ||
+        itf_fifo_full(l2->mem_axi4_ar_mst)) {
         return false;
     }
+    l2_bypass_rd_ctx_t ctx = { .port = port_idx };
+    bool alloc_ok = ostq_alloc(&l2->bypass_rd_ost, &ctx, NULL);
+    DBG_CHECK(alloc_ok);
     itf_write(l2->mem_axi4_ar_mst, ar);
-    l2->mem_owner = port_idx;
-    l2->ports[port_idx].state = L2_PORT_STATE_BYPASS_WAIT;
-    l2->mem_state = L2_MEM_STATE_BYPASS_R;
     (*l2->perf_bypass)++;
     return true;
 }
 
 static bool l2_start_bypass_write(l2_t *l2, u32 port_idx, const axi4_aw_if_t *aw)
 {
-    if (l2->mem_state != L2_MEM_STATE_IDLE || itf_fifo_full(l2->mem_axi4_aw_mst)) {
+    if (l2->mem_state != L2_MEM_STATE_IDLE ||
+        ostq_full(&l2->bypass_wr_ost) ||
+        itf_fifo_full(l2->mem_axi4_aw_mst)) {
         return false;
     }
+    l2_bypass_wr_ctx_t ctx = {
+        .port = port_idx,
+        .beat_idx = 0,
+        .beat_num = (u32)aw->len + 1u,
+        .w_done = false
+    };
+    bool alloc_ok = ostq_alloc(&l2->bypass_wr_ost, &ctx, NULL);
+    DBG_CHECK(alloc_ok);
     itf_write(l2->mem_axi4_aw_mst, aw);
-    l2->mem_owner = port_idx;
-    l2->ports[port_idx].state = L2_PORT_STATE_BYPASS_WAIT;
-    l2->mem_state = L2_MEM_STATE_BYPASS_W;
     (*l2->perf_bypass)++;
     return true;
+}
+
+static void l2_capture_port(l2_t *l2, u32 port_idx)
+{
+    itf_t *ar_slv = l2_port_ar_slv(l2, port_idx);
+    if (fifo_full(&l2->ar_fifos[port_idx])) {
+        if (!itf_fifo_empty(ar_slv)) {
+            (*l2->perf_stg_ar_full[port_idx])++;
+        }
+    } else if (!itf_fifo_empty(ar_slv)) {
+        axi4_ar_if_t ar;
+        itf_read(ar_slv, &ar);
+        fifo_push(&l2->ar_fifos[port_idx], &ar);
+    }
+
+    itf_t *aw_slv = l2_port_aw_slv(l2, port_idx);
+    if (fifo_full(&l2->aw_fifos[port_idx])) {
+        if (!itf_fifo_empty(aw_slv)) {
+            (*l2->perf_stg_aw_full[port_idx])++;
+        }
+    } else if (!itf_fifo_empty(aw_slv)) {
+        axi4_aw_if_t aw;
+        itf_read(aw_slv, &aw);
+        fifo_push(&l2->aw_fifos[port_idx], &aw);
+    }
+
+    itf_t *w_slv = l2_port_w_slv(l2, port_idx);
+    if (fifo_full(&l2->w_fifos[port_idx])) {
+        if (!itf_fifo_empty(w_slv)) {
+            (*l2->perf_stg_w_full[port_idx])++;
+        }
+    } else if (!itf_fifo_empty(w_slv)) {
+        axi4_w_if_t w;
+        itf_read(w_slv, &w);
+        fifo_push(&l2->w_fifos[port_idx], &w);
+    }
+}
+
+static bool l2_port_has_bypass_pending(l2_t *l2, u32 port_idx)
+{
+    for (u32 i = 0; i < l2->bypass_rd_ost.depth; i++) {
+        if (!ostq_slot_valid(&l2->bypass_rd_ost, i)) {
+            continue;
+        }
+        l2_bypass_rd_ctx_t ctx;
+        ostq_read_slot(&l2->bypass_rd_ost, i, &ctx);
+        if (ctx.port == port_idx) {
+            return true;
+        }
+    }
+
+    for (u32 i = 0; i < l2->bypass_wr_ost.depth; i++) {
+        if (!ostq_slot_valid(&l2->bypass_wr_ost, i)) {
+            continue;
+        }
+        l2_bypass_wr_ctx_t ctx;
+        ostq_read_slot(&l2->bypass_wr_ost, i, &ctx);
+        if (ctx.port == port_idx) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
 {
     l2_port_t *port = &l2->ports[port_idx];
-    itf_t *aw_slv = l2_port_aw_slv(l2, port_idx);
-    if (!itf_fifo_empty(aw_slv)) {
+    fifo_t *aw_fifo = &l2->aw_fifos[port_idx];
+    if (!fifo_empty(aw_fifo)) {
         axi4_aw_if_t aw;
-        itf_fifo_get_front(aw_slv, &aw);
+        fifo_get_front(aw_fifo, &aw);
         if (aw.cache == 0) {
             if (!l2_start_bypass_write(l2, port_idx, &aw)) {
                 return;
             }
         } else {
+            if (l2_port_has_bypass_pending(l2, port_idx)) {
+                return;
+            }
             DBG_CHECK(aw.size == AXI4_AW_SIZE_B4);
             DBG_CHECK(aw.burst == AXI4_AW_BURST_INCR);
             port->aw = aw;
@@ -353,21 +452,24 @@ static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
             port->miss_resolved = false;
             port->state = L2_PORT_STATE_WRITE;
         }
-        itf_fifo_pop_front(aw_slv);
+        fifo_pop(aw_fifo, &aw);
         return;
     }
 
-    itf_t *ar_slv = l2_port_ar_slv(l2, port_idx);
-    if (itf_fifo_empty(ar_slv)) {
+    fifo_t *ar_fifo = &l2->ar_fifos[port_idx];
+    if (fifo_empty(ar_fifo)) {
         return;
     }
     axi4_ar_if_t ar;
-    itf_fifo_get_front(ar_slv, &ar);
+    fifo_get_front(ar_fifo, &ar);
     if (ar.cache == 0) {
         if (!l2_start_bypass_read(l2, port_idx, &ar)) {
             return;
         }
     } else {
+        if (l2_port_has_bypass_pending(l2, port_idx)) {
+            return;
+        }
         DBG_CHECK(ar.size == AXI4_AR_SIZE_B4);
         DBG_CHECK(ar.burst == AXI4_AR_BURST_INCR);
         port->ar = ar;
@@ -376,7 +478,7 @@ static void l2_proc_port_idle(l2_t *l2, u32 port_idx)
         port->miss_resolved = false;
         port->state = L2_PORT_STATE_READ;
     }
-    itf_fifo_pop_front(ar_slv);
+    fifo_pop(ar_fifo, &ar);
 }
 
 static void l2_proc_port_read(l2_t *l2, u32 port_idx)
@@ -416,8 +518,8 @@ static void l2_proc_port_read(l2_t *l2, u32 port_idx)
 static void l2_proc_port_write(l2_t *l2, u32 port_idx)
 {
     l2_port_t *port = &l2->ports[port_idx];
-    itf_t *w_slv = l2_port_w_slv(l2, port_idx);
-    if (itf_fifo_empty(w_slv)) {
+    fifo_t *w_fifo = &l2->w_fifos[port_idx];
+    if (fifo_empty(w_fifo)) {
         return;
     }
 
@@ -431,14 +533,14 @@ static void l2_proc_port_write(l2_t *l2, u32 port_idx)
     }
 
     axi4_w_if_t w;
-    itf_fifo_get_front(w_slv, &w);
+    fifo_get_front(w_fifo, &w);
     bool last = port->beat_idx == port->aw.len;
     DBG_CHECK(w.last == last);
     itf_t *b_mst = l2_port_b_mst(l2, port_idx);
     if (last && itf_fifo_full(b_mst)) {
         return;
     }
-    itf_fifo_pop_front(w_slv);
+    fifo_pop(w_fifo, &w);
     l2_write_word(l2, line_idx, port->addr, w.data, w.strb);
     l2->dirtys[line_idx] = true;
     l2->data_write_used = true;
@@ -478,6 +580,8 @@ void l2_construct(l2_t *l2, const char *parent, const char *name,
     DBG_CHECK(conf->way_num > 0);
     DBG_CHECK(conf->size >= L2_LINE_SIZE);
     DBG_CHECK((conf->size % (conf->way_num * L2_LINE_SIZE)) == 0);
+    DBG_CHECK(conf->stg_fifo_depth > 0);
+    DBG_CHECK(conf->bypass_ost_depth > 0);
     DBG_CHECK(l2->i_axi4_aw_slv && l2->i_axi4_w_slv && l2->i_axi4_b_mst);
     DBG_CHECK(l2->i_axi4_ar_slv && l2->i_axi4_r_mst);
     DBG_CHECK(l2->d_axi4_aw_slv && l2->d_axi4_w_slv && l2->d_axi4_b_mst);
@@ -494,17 +598,45 @@ void l2_construct(l2_t *l2, const char *parent, const char *name,
     l2->valids = malloc(sizeof(bool) * l2->line_num);
     l2->dirtys = malloc(sizeof(bool) * l2->line_num);
     DBG_CHECK(l2->tags && l2->data && l2->replace_ways && l2->valids && l2->dirtys);
+    for (u32 port = 0; port < L2_PORT_NUM; port++) {
+        fifo_construct(&l2->ar_fifos[port], sizeof(axi4_ar_if_t),
+            conf->stg_fifo_depth);
+        fifo_construct(&l2->aw_fifos[port], sizeof(axi4_aw_if_t),
+            conf->stg_fifo_depth);
+        fifo_construct(&l2->w_fifos[port], sizeof(axi4_w_if_t),
+            conf->stg_fifo_depth);
+    }
+    ostq_construct(&l2->bypass_rd_ost, sizeof(l2_bypass_rd_ctx_t),
+        conf->bypass_ost_depth);
+    ostq_construct(&l2->bypass_wr_ost, sizeof(l2_bypass_wr_ctx_t),
+        conf->bypass_ost_depth);
 
     l2->perf_hit = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "hit");
     l2->perf_miss = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "miss");
     l2->perf_bypass = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "bypass");
     l2->perf_writeback = dbg_pcm_reg_perf_cnt(l2->mod.hier_name, "writeback");
+    l2->perf_stg_ar_full[L2_I_PORT] = dbg_pcm_reg_perf_cnt(
+        l2->mod.hier_name, "i_stg_ar_full");
+    l2->perf_stg_aw_full[L2_I_PORT] = dbg_pcm_reg_perf_cnt(
+        l2->mod.hier_name, "i_stg_aw_full");
+    l2->perf_stg_w_full[L2_I_PORT] = dbg_pcm_reg_perf_cnt(
+        l2->mod.hier_name, "i_stg_w_full");
+    l2->perf_stg_ar_full[L2_D_PORT] = dbg_pcm_reg_perf_cnt(
+        l2->mod.hier_name, "d_stg_ar_full");
+    l2->perf_stg_aw_full[L2_D_PORT] = dbg_pcm_reg_perf_cnt(
+        l2->mod.hier_name, "d_stg_aw_full");
+    l2->perf_stg_w_full[L2_D_PORT] = dbg_pcm_reg_perf_cnt(
+        l2->mod.hier_name, "d_stg_w_full");
 
     dbg_vcd_add_sig("i_state", DBG_SIG_TYPE_REG, 3, &l2->ports[L2_I_PORT].state);
     dbg_vcd_add_sig("d_state", DBG_SIG_TYPE_REG, 3, &l2->ports[L2_D_PORT].state);
     dbg_vcd_add_sig("mem_state", DBG_SIG_TYPE_REG, 4, &l2->mem_state);
     dbg_vcd_add_sig("i_addr", DBG_SIG_TYPE_REG, 32, &l2->ports[L2_I_PORT].addr);
     dbg_vcd_add_sig("d_addr", DBG_SIG_TYPE_REG, 32, &l2->ports[L2_D_PORT].addr);
+    dbg_vcd_add_sig("bypass_rd_ost_count", DBG_SIG_TYPE_REG, 32,
+        &l2->bypass_rd_ost.count);
+    dbg_vcd_add_sig("bypass_wr_ost_count", DBG_SIG_TYPE_REG, 32,
+        &l2->bypass_wr_ost.count);
 }
 
 void l2_reset(l2_t *l2)
@@ -514,9 +646,14 @@ void l2_reset(l2_t *l2)
         l2->ports[port].state = L2_PORT_STATE_IDLE;
         l2->ports[port].beat_idx = 0;
         l2->ports[port].miss_resolved = false;
+        fifo_reset(&l2->ar_fifos[port]);
+        fifo_reset(&l2->aw_fifos[port]);
+        fifo_reset(&l2->w_fifos[port]);
     }
     l2->mem_state = L2_MEM_STATE_IDLE;
     l2->data_write_used = false;
+    ostq_reset(&l2->bypass_rd_ost);
+    ostq_reset(&l2->bypass_wr_ost);
     for (u32 i = 0; i < l2->line_num; i++) {
         l2->tags[i] = 0;
         l2->valids[i] = false;
@@ -528,11 +665,20 @@ void l2_reset(l2_t *l2)
     *l2->perf_miss = 0;
     *l2->perf_bypass = 0;
     *l2->perf_writeback = 0;
+    for (u32 port = 0; port < L2_PORT_NUM; port++) {
+        *l2->perf_stg_ar_full[port] = 0;
+        *l2->perf_stg_aw_full[port] = 0;
+        *l2->perf_stg_w_full[port] = 0;
+    }
 }
 
 void l2_clock(l2_t *l2)
 {
     mod_clock(&l2->mod);
+    ostq_clock(&l2->bypass_rd_ost);
+    ostq_clock(&l2->bypass_wr_ost);
+    l2_capture_port(l2, L2_I_PORT);
+    l2_capture_port(l2, L2_D_PORT);
     l2->data_write_used = false;
     l2_proc_mem(l2);
     l2_proc_port(l2, L2_I_PORT);
@@ -542,6 +688,13 @@ void l2_clock(l2_t *l2)
 void l2_free(l2_t *l2)
 {
     mod_free(&l2->mod);
+    for (u32 port = 0; port < L2_PORT_NUM; port++) {
+        fifo_free(&l2->ar_fifos[port]);
+        fifo_free(&l2->aw_fifos[port]);
+        fifo_free(&l2->w_fifos[port]);
+    }
+    ostq_free(&l2->bypass_rd_ost);
+    ostq_free(&l2->bypass_wr_ost);
     free(l2->tags);
     free(l2->data);
     free(l2->replace_ways);

@@ -49,9 +49,18 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->ifu.fl_req_mst = &s->fl_req_itf;
     s->ifu.fch_expt_mst = &s->fch_expt_itf;
     s->ifu.trap_send_slv = &s->trap_send_itf;
+    s->ifu.tlb_flush_slv = &s->tlb_flush_itf;
+    s->ifu.l1i_flush_slv = &s->l1i_flush_itf;
+    s->ifu.exu_state_in = &s->exu_state_sig_itf;
     s->ifu.mod.cycle = s->mod.cycle;
-    ifu_construct(&s->ifu, s->mod.hier_name, "u_ifu", conf->boot_rom_base,
-        conf->boot_rom_base, conf->boot_rom_size);
+    ifu_conf_t ifu_conf = {
+        .reset_pc = conf->boot_rom_base,
+        .boot_rom_base = conf->boot_rom_base,
+        .boot_rom_size = conf->boot_rom_size,
+        .ctrlq_depth = conf->ifu_ctrlq_depth,
+        .fch_ost_depth = conf->ifu_fch_ost_depth
+    };
+    ifu_construct(&s->ifu, s->mod.hier_name, "u_ifu", &ifu_conf);
 
     s->exu.fl_req_slv = &s->fl_req_itf;
     s->exu.ex_req_slv = &s->ex_req_itf;
@@ -93,7 +102,11 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->lsu.hbi_ldst_rsp_slv = &s->lsu_hbi_ldst_rsp_itf;
     s->lsu.csr_lsu_state_in = &s->csr_lsu_state_sig_itf;
     s->lsu.mod.cycle = s->mod.cycle;
-    lsu_construct(&s->lsu, s->mod.hier_name, "u_lsu");
+    lsu_conf_t lsu_conf = {
+        .stg_fifo_depth = conf->lsu_stg_fifo_depth,
+        .ost_depth = conf->lsu_ost_depth
+    };
+    lsu_construct(&s->lsu, s->mod.hier_name, "u_lsu", &lsu_conf);
 
     BTI_MST_CONNECT(&s->hbi, i_, s, va_i_);
     BTI_MST_CONNECT(&s->hbi, d_, s, va_d_);
@@ -103,7 +116,12 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->hbi.ldst_req_slv = &s->lsu_hbi_ldst_req_itf;
     s->hbi.ldst_rsp_mst = &s->lsu_hbi_ldst_rsp_itf;
     s->hbi.mod.cycle = s->mod.cycle;
-    hbi_construct(&s->hbi, s->mod.hier_name, "u_hbi");
+    hbi_conf_t hbi_conf = {
+        .stg_fifo_depth = conf->hbi_stg_fifo_depth,
+        .i_ost_depth = conf->hbi_i_ost_depth,
+        .d_ost_depth = conf->hbi_d_ost_depth
+    };
+    hbi_construct(&s->hbi, s->mod.hier_name, "u_hbi", &hbi_conf);
 
     BTI_SLV_CONNECT(&s->mmu, va_i_, s, va_i_);
     BTI_SLV_CONNECT(&s->mmu, va_d_, s, va_d_);
@@ -115,7 +133,11 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->mmu.tlb_flush_slv = &s->tlb_flush_itf;
     s->mmu.exu_state_in = &s->exu_state_sig_itf;
     s->mmu.csr_mmu_state_in = &s->csr_mmu_state_sig_itf;
-    mmu_conf_t mmu_conf = {};
+    mmu_conf_t mmu_conf = {
+        .i_stg_fifo_depth = conf->mmu_i_stg_fifo_depth,
+        .d_stg_fifo_depth = conf->mmu_d_stg_fifo_depth,
+        .ost_depth = conf->mmu_ost_depth
+    };
     s->mmu.mod.cycle = s->mod.cycle;
     mmu_construct(&s->mmu, s->mod.hier_name, "u_mmu", &mmu_conf);
 
@@ -123,13 +145,21 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     BTI_SLV_ARR_CONNECT(&s->l1d_bti_mux, host_, 1, s, pa_ptw_);
     BTI_MST_CONNECT(&s->l1d_bti_mux, gst_, s, l1d_);
     s->l1d_bti_mux.mod.cycle = s->mod.cycle;
-    bti_mux_construct(&s->l1d_bti_mux, s->mod.hier_name, "u_l1d_bti_mux", 2);
+    bti_mux_conf_t l1d_bti_mux_conf = {
+        .host_num = 2,
+        .stg_fifo_depth = conf->l1d_bti_mux_stg_fifo_depth,
+        .ost_depth = conf->l1d_bti_mux_ost_depth
+    };
+    bti_mux_construct(&s->l1d_bti_mux, s->mod.hier_name, "u_l1d_bti_mux",
+        &l1d_bti_mux_conf);
 
     l1_conf_t l1i_conf = {
         .full_bypass = false,
         .ro = true,
         .size = L1I_SIZE,
         .way_num = L1I_WAY_NUM,
+        .stg_fifo_depth = conf->l1i_stg_fifo_depth,
+        .ost_depth = conf->l1_ost_depth,
         .bypass_bases = { conf->boot_rom_base, conf->itcm_base },
         .bypass_sizes = { conf->boot_rom_size, conf->itcm_size }
     };
@@ -144,6 +174,8 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
         .ro = false,
         .size = L1D_SIZE,
         .way_num = L1D_WAY_NUM,
+        .stg_fifo_depth = conf->l1d_stg_fifo_depth,
+        .ost_depth = conf->l1_ost_depth,
         .bypass_bases = { conf->boot_rom_base, conf->itcm_base, conf->dtcm_base, conf->cfg_base },
         .bypass_sizes = { conf->boot_rom_size, conf->itcm_size, conf->dtcm_size, conf->cfg_size }
     };

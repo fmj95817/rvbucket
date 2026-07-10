@@ -4,6 +4,8 @@
 #include "dbg/chk.h"
 #include "dbg/log.h"
 
+#define CSR_SATP 0x180u
+
 #define DECL_SYS_HANDLER(inst) static void inst##_ex_req_handler(exu_t *exu, const ex_req_if_t *req)
 #define CALL_SYS_HANDLER(inst, exu, req) inst##_ex_req_handler(exu, req)
 #define GET_SYS_HANDLER(inst) &inst##_ex_req_handler
@@ -56,7 +58,6 @@ DECL_SYS_HANDLER(wfi)
 DECL_SYS_HANDLER(sfence_vma)
 {
     DBG_LOG(LOG_TRACE, "sfence.vma\n");
-    DBG_CHECK(!itf_fifo_full(exu->tlb_flush_mst));
     tlb_flush_if_t pkt = {};
     itf_write(exu->tlb_flush_mst, &pkt);
 }
@@ -108,6 +109,16 @@ static bool csr_write(exu_t *exu, u32 addr, u32 data)
     return exu->csr_write_rsp_i->ok;
 }
 
+static void notify_translation_csr_write(exu_t *exu, u32 addr)
+{
+    if (addr != CSR_SATP) {
+        return;
+    }
+
+    tlb_flush_if_t pkt = {};
+    itf_write(exu->tlb_flush_mst, &pkt);
+}
+
 static void csr_access_trap(exu_t *exu, const ex_req_if_t *req)
 {
     exu_send_expt(exu, HART_EXPT_TYPE_EXCEPTION,
@@ -129,6 +140,7 @@ DECL_SYS_HANDLER(csrrw)
         csr_access_trap(exu, req);
         return;
     }
+    notify_translation_csr_write(exu, addr);
     set_gpr(exu, req->inst.i.rd, old_val);
 
     DBG_LOG(LOG_TRACE, "csrrw, %s, %s, %s\n", gpr_name(req->inst.i.rd),
@@ -151,6 +163,7 @@ DECL_SYS_HANDLER(csrrs)
             csr_access_trap(exu, req);
             return;
         }
+        notify_translation_csr_write(exu, addr);
     }
     set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrs, %s, %s, %s\n", gpr_name(req->inst.i.rd),
@@ -173,6 +186,7 @@ DECL_SYS_HANDLER(csrrc)
             csr_access_trap(exu, req);
             return;
         }
+        notify_translation_csr_write(exu, addr);
     }
     set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrc, %s, %s, %s\n", gpr_name(req->inst.i.rd),
@@ -194,6 +208,7 @@ DECL_SYS_HANDLER(csrrwi)
         csr_access_trap(exu, req);
         return;
     }
+    notify_translation_csr_write(exu, addr);
     set_gpr(exu, req->inst.i.rd, old_val);
 
     DBG_LOG(LOG_TRACE, "csrrwi, %s, %s, %u\n", gpr_name(req->inst.i.rd),
@@ -216,6 +231,7 @@ DECL_SYS_HANDLER(csrrsi)
             csr_access_trap(exu, req);
             return;
         }
+        notify_translation_csr_write(exu, addr);
     }
     set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrsi, %s, %s, %u\n", gpr_name(req->inst.i.rd),
@@ -238,6 +254,7 @@ DECL_SYS_HANDLER(csrrci)
             csr_access_trap(exu, req);
             return;
         }
+        notify_translation_csr_write(exu, addr);
     }
     set_gpr(exu, req->inst.i.rd, old_val);
     DBG_LOG(LOG_TRACE, "csrrci, %s, %s, %u\n", gpr_name(req->inst.i.rd),

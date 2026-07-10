@@ -58,6 +58,8 @@ typedef struct exu {
     u32 cur_opcode;
 
     bool ldst_req_pend;
+    u32 ldst_opcode;
+    u32 ldst_pc;
     u32 ld_rd;
     u32 ld_funct3;
 
@@ -73,6 +75,10 @@ typedef struct exu {
     u32 wfi_resume_pc;
 
     u32 gpr[RV32G_GPR_NUM];
+
+    struct {
+        u64 *exec_inst;
+    } perf;
 } exu_t;
 
 extern void exu_construct(exu_t *exu, const char *parent, const char *name);

@@ -1,6 +1,7 @@
 #include "soc.h"
 #include "base/def.h"
 #include "spec/core/core.h"
+#include "spec/core/hart.h"
 #include "spec/soc.h"
 #include "dbg/vcd.h"
 
@@ -49,7 +50,26 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
         .aclint_sswi_base = ACLINT_SSWI_BASE,
         .aclint_sswi_size = ACLINT_SSWI_SIZE,
         .plic_base = PLIC_BASE,
-        .plic_size = PLIC_SIZE
+        .plic_size = PLIC_SIZE,
+        .hart_ifu_ctrlq_depth = HART_IFU_CTRLQ_DEPTH,
+        .hart_ifu_fch_ost_depth = HART_IFU_FCH_OST_DEPTH,
+        .hart_hbi_stg_fifo_depth = HART_HBI_STG_FIFO_DEPTH,
+        .hart_hbi_i_ost_depth = HART_HBI_I_OST_DEPTH,
+        .hart_hbi_d_ost_depth = HART_HBI_D_OST_DEPTH,
+        .hart_lsu_stg_fifo_depth = HART_LSU_STG_FIFO_DEPTH,
+        .hart_lsu_ost_depth = HART_LSU_OST_DEPTH,
+        .hart_mmu_i_stg_fifo_depth = HART_MMU_I_STG_FIFO_DEPTH,
+        .hart_mmu_d_stg_fifo_depth = HART_MMU_D_STG_FIFO_DEPTH,
+        .hart_mmu_ost_depth = HART_MMU_OST_DEPTH,
+        .hart_l1i_stg_fifo_depth = HART_L1I_STG_FIFO_DEPTH,
+        .hart_l1d_stg_fifo_depth = HART_L1D_STG_FIFO_DEPTH,
+        .hart_l1_ost_depth = HART_L1_OST_DEPTH,
+        .hart_l1d_bti_mux_stg_fifo_depth = HART_L1D_BTI_MUX_STG_FIFO_DEPTH,
+        .hart_l1d_bti_mux_ost_depth = HART_L1D_BTI_MUX_OST_DEPTH,
+        .cbi_bus_stg_fifo_depth = CORE_BUS_STG_FIFO_DEPTH,
+        .cbi_bus_ost_depth = CORE_BUS_OST_DEPTH,
+        .l2_stg_fifo_depth = CORE_L2_STG_FIFO_DEPTH,
+        .l2_bypass_ost_depth = CORE_L2_BYPASS_OST_DEPTH
     };
     rv32g_construct(&soc->cpu, soc->mod.hier_name, "u_rv32g_cpu", &rv32g_conf);
 
@@ -69,8 +89,15 @@ void soc_construct(soc_t *soc, const char *parent, const char *name)
     const u32 mm_axi_gst_bases[] = { DDR_BASE, FLASH_BASE };
     const u32 mm_axi_gst_sizes[] = { DDR_SIZE, FLASH_SIZE };
     soc->mm_axi_demux.mod.cycle = soc->mod.cycle;
+    axi_demux_conf_t mm_axi_demux_conf = {
+        .gst_num = 2,
+        .gst_bases = mm_axi_gst_bases,
+        .gst_sizes = mm_axi_gst_sizes,
+        .stg_fifo_depth = SOC_BUS_STG_FIFO_DEPTH,
+        .ost_depth = SOC_BUS_OST_DEPTH
+    };
     axi_demux_construct(&soc->mm_axi_demux, soc->mod.hier_name,
-        "u_mm_axi_demux", 2, mm_axi_gst_bases, mm_axi_gst_sizes);
+        "u_mm_axi_demux", &mm_axi_demux_conf);
 }
 
 void soc_reset(soc_t *soc)
