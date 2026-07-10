@@ -37,14 +37,10 @@ typedef struct csr {
     itf_t *csr_lsu_state_out;
     itf_t *csr_trap_state_out;
 
-    const core_timer_if_t *core_timer_i;
-    const core_m_irq_if_t *core_m_irq_i;
-    core_swi_pend_if_t *core_swi_pend_o;
     const exu_csr_read_req_if_t *read_req_i;
     csr_exu_read_rsp_if_t *read_rsp_o;
     const exu_csr_write_req_if_t *write_req_i;
     csr_exu_write_rsp_if_t *write_rsp_o;
-    const ext_irq_if_t *ext_irq_i;
     const trap_csr_write_req_if_t *trap_write_req_i;
     csr_trap_write_rsp_if_t *trap_write_rsp_o;
     csr_mmu_state_if_t *mmu_state_o;

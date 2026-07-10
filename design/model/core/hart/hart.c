@@ -3,9 +3,12 @@
 #include "dbg/chk.h"
 #include "spec/core/hart.h"
 
-void hart_construct(hart_t *s, const char *parent, const char *name, const hart_conf_t *conf)
+static void hart_clock_real(void *args);
+
+void hart_construct(hart_t *s, const char *parent, const char *name,
+    const hart_conf_t *conf, bool smp_opt)
 {
-    mod_construct(&s->mod, parent, name);
+    mod_construct_smp_opt(&s->mod, parent, name, &hart_clock_real, s, smp_opt);
     DBG_VCD_MODULE_SCOPE(name);
 
     EX_REQ_IF_CONSTRUCT(s, ex_req_itf, 1);
@@ -299,9 +302,9 @@ void hart_free(hart_t *s)
     itf_free(&s->csr_trap_write_rsp_sig_itf);
 }
 
-void hart_clock(hart_t *s)
+static void hart_clock_real(void *args)
 {
-    mod_clock(&s->mod);
+    hart_t *s = args;
     exu_clock(&s->exu);
     csr_clock(&s->csr);
     lsu_clock(&s->lsu);
@@ -346,4 +349,11 @@ void hart_clock(hart_t *s)
     itf_dbg_clock(&s->csr_trap_state_sig_itf);
     itf_dbg_clock(&s->trap_csr_write_req_sig_itf);
     itf_dbg_clock(&s->csr_trap_write_rsp_sig_itf);
+}
+
+void hart_clock(hart_t *s)
+{
+    if (!mod_clock_async(&s->mod)) {
+        hart_clock_real(s);
+    }
 }

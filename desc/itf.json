@@ -151,6 +151,12 @@
             "payloads": []
         },
 
+        "l1_flush": {
+            "type": "vld",
+            "model_only": true,
+            "payloads": []
+        },
+
         "ldst_req": {
             "type": "vld-rdy",
             "enums": {
@@ -371,6 +377,14 @@
             "type": "none",
             "payloads": [
                 { "name": "irq", "width": 1 }
+            ]
+        },
+
+        "gpio": {
+            "type": "none",
+            "model_only": true,
+            "payloads": [
+                { "name": "val", "width": 32 }
             ]
         },
 

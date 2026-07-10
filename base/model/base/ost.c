@@ -82,14 +82,19 @@ void ostq_reset(ostq_t *ost)
         ost_clear_slot_ctx(ost->entries[i].ctx, ost->ctx_size);
     }
     ost->count = 0;
+    ost->free_pending_count = 0;
     ost->rptr = 0;
     ost->wptr = 0;
 }
 
-void ostq_clock(ostq_t *ost)
+void ostq_clock_slow(ostq_t *ost)
 {
     DBG_CHECK(ost != NULL);
     DBG_CHECK(ost->entries != NULL);
+
+    if (ost->free_pending_count == 0) {
+        return;
+    }
 
     while (ost->count > 0) {
         ostq_entry_t *entry = &ost->entries[ost->rptr];
@@ -102,6 +107,8 @@ void ostq_clock(ostq_t *ost)
         entry->free_pending = false;
         ost_clear_slot_ctx(entry->ctx, ost->ctx_size);
         ost->count--;
+        DBG_CHECK(ost->free_pending_count > 0);
+        ost->free_pending_count--;
         ost->rptr = (ost->rptr + 1u) % ost->depth;
     }
 }
@@ -120,6 +127,7 @@ void ostq_free(ostq_t *ost)
     ost->depth = 0;
     ost->ctx_size = 0;
     ost->count = 0;
+    ost->free_pending_count = 0;
     ost->rptr = 0;
     ost->wptr = 0;
 }
@@ -175,6 +183,7 @@ void ostq_free_head(ostq_t *ost)
     DBG_CHECK(!ost->entries[ost->rptr].free_pending);
 
     ost->entries[ost->rptr].free_pending = true;
+    ost->free_pending_count++;
 }
 
 void ostq_read_slot(ostq_t *ost, u32 slot, void *ctx)
@@ -299,15 +308,20 @@ void ostk_reset(ostk_t *ost)
         ost_clear_slot_ctx(ost->entries[i].ctx, ost->ctx_size);
     }
     ost->count = 0;
+    ost->free_pending_count = 0;
     ost->wptr = 0;
     ost->rptr = 0;
     ost->next_issue_seq = 0;
 }
 
-void ostk_clock(ostk_t *ost)
+void ostk_clock_slow(ostk_t *ost)
 {
     DBG_CHECK(ost != NULL);
     DBG_CHECK(ost->entries != NULL);
+
+    if (ost->free_pending_count == 0) {
+        return;
+    }
 
     bool freed = false;
     for (u32 i = 0; i < ost->depth; i++) {
@@ -323,9 +337,12 @@ void ostk_clock(ostk_t *ost)
         ost_clear_slot_ctx(entry->ctx, ost->ctx_size);
         DBG_CHECK(ost->count > 0);
         ost->count--;
+        DBG_CHECK(ost->free_pending_count > 0);
+        ost->free_pending_count--;
         freed = true;
     }
 
+    DBG_CHECK(ost->free_pending_count == 0);
     if (freed) {
         ostk_update_rptr(ost);
     }
@@ -345,6 +362,7 @@ void ostk_free(ostk_t *ost)
     ost->depth = 0;
     ost->ctx_size = 0;
     ost->count = 0;
+    ost->free_pending_count = 0;
     ost->wptr = 0;
     ost->rptr = 0;
     ost->next_issue_seq = 0;
@@ -413,6 +431,7 @@ void ostk_free_slot(ostk_t *ost, u32 slot)
     DBG_CHECK(ostk_slot_valid(ost, slot));
 
     ost->entries[slot].free_pending = true;
+    ost->free_pending_count++;
 }
 
 void ostk_read_slot(ostk_t *ost, u32 slot, void *ctx)

@@ -10,6 +10,37 @@
 #define MSIP(hart_id)      ((hart_id) * 4u)
 #define SETSSIP(hart_id)   ((hart_id) * 4u)
 
+static void aclint_write_core_timer(aclint_t *aclint, u64 time)
+{
+    core_timer_if_t timer = {
+        .time = time
+    };
+    itf_write(aclint->core_timer_out, &timer);
+}
+
+static core_m_irq_if_t aclint_read_core_m_irq(aclint_t *aclint, u32 hart_id)
+{
+    DBG_CHECK(hart_id < HART_NUM);
+    core_m_irq_if_t irq = {};
+    itf_read(aclint->core_m_irq_outs[hart_id], &irq);
+    return irq;
+}
+
+static void aclint_write_core_m_irq(aclint_t *aclint, u32 hart_id,
+    const core_m_irq_if_t *irq)
+{
+    DBG_CHECK(hart_id < HART_NUM);
+    itf_write(aclint->core_m_irq_outs[hart_id], irq);
+}
+
+static core_swi_pend_if_t aclint_read_core_swi_pend(aclint_t *aclint, u32 hart_id)
+{
+    DBG_CHECK(hart_id < HART_NUM);
+    core_swi_pend_if_t pend = {};
+    itf_read(aclint->core_swi_pend_ins[hart_id], &pend);
+    return pend;
+}
+
 void aclint_construct(aclint_t *aclint, const char *parent, const char *name, const aclint_conf_t *conf)
 {
     mod_construct(&aclint->mod, parent, name);
@@ -17,12 +48,6 @@ void aclint_construct(aclint_t *aclint, const char *parent, const char *name, co
     aclint->conf = *conf;
     dbg_vcd_add_sig("mtime", DBG_SIG_TYPE_REG, 64, &aclint->mtime.raw);
     dbg_vcd_add_sig("mtimecmp", DBG_SIG_TYPE_REG, 64, &aclint->mtimecmp[0].raw);
-
-    aclint->core_timer_o = itf_signal_get_src_and_chk(aclint->core_timer_out);
-    for (u32 i = 0; i < HART_NUM; i++) {
-        aclint->core_m_irq_o[i] = itf_signal_get_src_and_chk(aclint->core_m_irq_outs[i]);
-        aclint->core_swi_pend_i[i] = itf_signal_get_src_and_chk(aclint->core_swi_pend_ins[i]);
-    }
 }
 
 void aclint_reset(aclint_t *aclint)
@@ -30,12 +55,12 @@ void aclint_reset(aclint_t *aclint)
     mod_reset(&aclint->mod);
     aclint->mtime.raw = 0ull;
     aclint->mtime_cycle_cnt = 0u;
+    aclint_write_core_timer(aclint, 0ull);
     for (u32 i = 0; i < HART_NUM; i++) {
         aclint->mtimecmp[i].raw = 0xffffffffffffffffull;
         aclint->mtime_exceed_old[i] = false;
-        aclint->core_m_irq_o[i]->msw = false;
-        aclint->core_m_irq_o[i]->mtimer = false;
-        itf_signal_write_notify(aclint->core_m_irq_outs[i]);
+        core_m_irq_if_t irq = {};
+        aclint_write_core_m_irq(aclint, i, &irq);
     }
 }
 
@@ -48,8 +73,7 @@ static void timer_proc(aclint_t *aclint)
         aclint->mtime_cycle_cnt = 0u;
         aclint->mtime.raw++;
 
-        aclint->core_timer_o->time = aclint->mtime.raw;
-        itf_signal_write_notify(aclint->core_timer_out);
+        aclint_write_core_timer(aclint, aclint->mtime.raw);
     }
 }
 
@@ -115,11 +139,13 @@ static bool mswi_reg_rw(aclint_t *aclint, u32 addr, u32 *val, bool write, u8 str
             continue;
         }
         if (write && (strb & 1u)) {
-            aclint->core_m_irq_o[i]->msw = ((*val & 1u) != 0);
-            itf_signal_write_notify(aclint->core_m_irq_outs[i]);
+            core_m_irq_if_t irq = aclint_read_core_m_irq(aclint, i);
+            irq.msw = ((*val & 1u) != 0);
+            aclint_write_core_m_irq(aclint, i, &irq);
             return true;
         } else if (!write) {
-            *val = aclint->core_swi_pend_i[i]->msip ? 1u : 0u;
+            core_swi_pend_if_t pend = aclint_read_core_swi_pend(aclint, i);
+            *val = pend.msip ? 1u : 0u;
             return true;
         }
     }
@@ -191,8 +217,9 @@ static void raise_or_clear_mtimer_irq(aclint_t *aclint, u32 hart_id)
 
     bool m_exceed = (aclint->mtime.raw >= aclint->mtimecmp[hart_id].raw);
     if (m_exceed != aclint->mtime_exceed_old[hart_id]) {
-        aclint->core_m_irq_o[hart_id]->mtimer = m_exceed;
-        itf_signal_write_notify(aclint->core_m_irq_outs[hart_id]);
+        core_m_irq_if_t irq = aclint_read_core_m_irq(aclint, hart_id);
+        irq.mtimer = m_exceed;
+        aclint_write_core_m_irq(aclint, hart_id, &irq);
         aclint->mtime_exceed_old[hart_id] = m_exceed;
     }
 }

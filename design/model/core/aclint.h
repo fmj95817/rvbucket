@@ -40,10 +40,6 @@ typedef struct aclint {
     itf_t *core_s_irq_msts[HART_NUM];
     itf_t *core_swi_pend_ins[HART_NUM];
 
-    core_timer_if_t *core_timer_o;
-    core_m_irq_if_t *core_m_irq_o[HART_NUM];
-    const core_swi_pend_if_t *core_swi_pend_i[HART_NUM];
-
     aclint_conf_t conf;
     u32 mtime_cycle_cnt;
 

@@ -6,7 +6,13 @@
 #include "base/def.h"
 #include "dbg/vcd.h"
 
-#define AXI4_AW_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) do { \
+#define AXI4_AW_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) \
+    AXI4_AW_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, false)
+
+#define AXI4_AW_SIM_PROT_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, sim_prot) \
+    AXI4_AW_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, false, sim_prot)
+
+#define AXI4_AW_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, sim_prot_) do { \
     itf_conf_t conf = { \
         .cycle = module->mod.cycle, \
         .hier_name = module->mod.hier_name, \
@@ -15,12 +21,19 @@
         .pkt2str = &axi4_aw_if_to_str, \
         .reg_vcd = &axi4_aw_if_reg_vcd, \
         .force_disable_trace = dis_trace, \
-        .ext_sig_src = ext_src \
+        .ext_sig_src = ext_src, \
+        .sim_prot = sim_prot_ \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)
 
-#define AXI4_AW_IF_CONSTRUCT(module, itf, depth) do { \
+#define AXI4_AW_IF_CONSTRUCT(module, itf, depth) \
+    AXI4_AW_IF_CONSTRUCT_INNER(module, itf, depth, false)
+
+#define AXI4_AW_SIM_PROT_IF_CONSTRUCT(module, itf, depth, sim_prot) \
+    AXI4_AW_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot)
+
+#define AXI4_AW_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot_) do { \
     itf_conf_t conf = { \
         .cycle = module->mod.cycle, \
         .hier_name = module->mod.hier_name, \
@@ -29,6 +42,7 @@
         .pkt2str = &axi4_aw_if_to_str, \
         .reg_vcd = &axi4_aw_if_reg_vcd, \
         .force_disable_trace = false, \
+        .sim_prot = sim_prot_, \
         .fifo_depth = depth \
     }; \
     itf_construct(&module->itf, #itf, &conf); \

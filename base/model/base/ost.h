@@ -14,6 +14,7 @@ typedef struct ostq {
     u32 depth;
     u32 ctx_size;
     u32 count;
+    u32 free_pending_count;
     u32 rptr;
     u32 wptr;
 } ostq_t;
@@ -31,6 +32,7 @@ typedef struct ostk {
     u32 depth;
     u32 ctx_size;
     u32 count;
+    u32 free_pending_count;
     u32 wptr;
     u32 rptr;
     u64 next_issue_seq;
@@ -38,7 +40,7 @@ typedef struct ostk {
 
 extern void ostq_construct(ostq_t *ost, u32 ctx_size, u32 depth);
 extern void ostq_reset(ostq_t *ost);
-extern void ostq_clock(ostq_t *ost);
+extern void ostq_clock_slow(ostq_t *ost);
 extern void ostq_free(ostq_t *ost);
 extern bool ostq_alloc(ostq_t *ost, const void *ctx, u32 *slot);
 extern bool ostq_peek_head(ostq_t *ost, void *ctx, u32 *slot);
@@ -52,7 +54,7 @@ extern bool ostq_slot_valid(const ostq_t *ost, u32 slot);
 
 extern void ostk_construct(ostk_t *ost, u32 ctx_size, u32 depth);
 extern void ostk_reset(ostk_t *ost);
-extern void ostk_clock(ostk_t *ost);
+extern void ostk_clock_slow(ostk_t *ost);
 extern void ostk_free(ostk_t *ost);
 extern bool ostk_alloc(ostk_t *ost, u32 key, const void *ctx, u32 *slot);
 extern bool ostk_peek_key(ostk_t *ost, u32 key, void *ctx, u32 *slot);
@@ -63,5 +65,19 @@ extern bool ostk_full(const ostk_t *ost);
 extern bool ostk_empty(const ostk_t *ost);
 extern u32 ostk_count(const ostk_t *ost);
 extern bool ostk_slot_valid(const ostk_t *ost, u32 slot);
+
+static inline void ostq_clock(ostq_t *ost)
+{
+    if (ost->free_pending_count != 0) {
+        ostq_clock_slow(ost);
+    }
+}
+
+static inline void ostk_clock(ostk_t *ost)
+{
+    if (ost->free_pending_count != 0) {
+        ostk_clock_slow(ost);
+    }
+}
 
 #endif

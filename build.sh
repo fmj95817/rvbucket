@@ -382,6 +382,7 @@ function build_ut {
         ${HOST_CC} \
             -Wall \
             -O3 \
+            -pthread \
             -I./base/model \
             -I./design/model \
             -I./ut/model \

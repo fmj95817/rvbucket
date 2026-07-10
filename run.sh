@@ -27,13 +27,15 @@ RTL_SW_TIMEOUT="${RTL_SW_TIMEOUT:-300}"
 MODEL_SW_TIMEOUT="${MODEL_SW_TIMEOUT:-60}"
 MODEL_SW_PERF_SIM_TIMEOUT="${MODEL_SW_PERF_SIM_TIMEOUT:-300}"
 MODEL_SW_PERF_SIM=false
+MODEL_SW_ST_SIM=false
 
 function print_usage {
     cat <<EOF
-usage: $0 [--perf-sim] [model|rtl <vcs|verilator>] [sw|ut] [<name>]
+usage: $0 [--perf-sim] [--st-sim] [model|rtl <vcs|verilator>] [sw|ut] [<name>]
 
 Options:
   --perf-sim  Run model SW with sim_top --perf-sim
+  --st-sim    Disable default SMP simulation optimization for model SW
 
 Environment:
   MODEL_SW_TIMEOUT           Timeout for each model SW case, default 60s
@@ -133,10 +135,16 @@ function run_single_sw {
     if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
         sim_args+=(--perf-sim)
     fi
+    if [[ "${MODEL_SW_ST_SIM}" == true ]]; then
+        sim_args+=(--st-sim)
+    fi
 
     local sim_cmd="./sim_top"
     if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
         sim_cmd+=" --perf-sim"
+    fi
+    if [[ "${MODEL_SW_ST_SIM}" == true ]]; then
+        sim_cmd+=" --st-sim"
     fi
 
     echo "  cd ${cwd} && ${sim_cmd} ${rel_bin}"
@@ -199,7 +207,16 @@ function run_sw_cases {
     if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
         sim_args+=(--perf-sim)
         timeout="${MODEL_SW_PERF_SIM_TIMEOUT}"
-        printf "${CYN}=== bare-metal C cases (--perf-sim) ===${RST}\n"
+    fi
+    if [[ "${MODEL_SW_ST_SIM}" == true ]]; then
+        sim_args+=(--st-sim)
+    fi
+
+    if [[ "${MODEL_SW_PERF_SIM}" == true || "${MODEL_SW_ST_SIM}" == true ]]; then
+        local mode_args=()
+        [[ "${MODEL_SW_PERF_SIM}" == true ]] && mode_args+=(--perf-sim)
+        [[ "${MODEL_SW_ST_SIM}" == true ]] && mode_args+=(--st-sim)
+        printf "${CYN}=== bare-metal C cases (%s) ===${RST}\n" "${mode_args[*]}"
     else
         printf "${CYN}=== bare-metal C cases ===${RST}\n"
     fi
@@ -403,6 +420,9 @@ function main {
             --perf-sim)
                 MODEL_SW_PERF_SIM=true
                 ;;
+            --st-sim)
+                MODEL_SW_ST_SIM=true
+                ;;
             -h|--help)
                 print_usage
                 exit 0
@@ -443,8 +463,8 @@ function main {
             exit 1
         fi
 
-        if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
-            echo "error: --perf-sim is only supported for model SW cases"
+        if [[ "${MODEL_SW_PERF_SIM}" == true || "${MODEL_SW_ST_SIM}" == true ]]; then
+            echo "error: --perf-sim/--st-sim is only supported for model SW cases"
             exit 1
         fi
 
@@ -532,8 +552,8 @@ function main {
                 exit 1
             fi
 
-            if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
-                echo "error: --perf-sim is only supported for model SW cases"
+            if [[ "${MODEL_SW_PERF_SIM}" == true || "${MODEL_SW_ST_SIM}" == true ]]; then
+                echo "error: --perf-sim/--st-sim is only supported for model SW cases"
                 exit 1
             fi
             ;;

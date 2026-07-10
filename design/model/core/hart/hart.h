@@ -98,7 +98,8 @@ typedef struct hart {
     itf_t csr_trap_write_rsp_sig_itf;
 } hart_t;
 
-extern void hart_construct(hart_t *s, const char *parent, const char *name, const hart_conf_t *conf);
+extern void hart_construct(hart_t *s, const char *parent, const char *name,
+    const hart_conf_t *conf, bool smp_opt);
 extern void hart_reset(hart_t *s);
 extern void hart_clock(hart_t *s);
 extern void hart_free(hart_t *s);

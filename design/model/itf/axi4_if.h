@@ -15,6 +15,14 @@
     AXI4_R_IF_CONSTRUCT(module, pfx##axi4_r_itf, depth); \
 } while (0)
 
+#define AXI4_SIM_PROT_IF_CONSTRUCT(module, pfx, depth, sim_prot) do { \
+    AXI4_AW_SIM_PROT_IF_CONSTRUCT(module, pfx##axi4_aw_itf, depth, sim_prot); \
+    AXI4_W_SIM_PROT_IF_CONSTRUCT(module, pfx##axi4_w_itf, depth, sim_prot); \
+    AXI4_B_SIM_PROT_IF_CONSTRUCT(module, pfx##axi4_b_itf, depth, sim_prot); \
+    AXI4_AR_SIM_PROT_IF_CONSTRUCT(module, pfx##axi4_ar_itf, depth, sim_prot); \
+    AXI4_R_SIM_PROT_IF_CONSTRUCT(module, pfx##axi4_r_itf, depth, sim_prot); \
+} while (0)
+
 #define AXI4_IF_RESET(obj, pfx) do { \
     itf_reset(&((obj)->pfx##axi4_aw_itf)); \
     itf_reset(&((obj)->pfx##axi4_w_itf)); \

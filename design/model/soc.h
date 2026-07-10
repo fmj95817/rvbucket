@@ -29,7 +29,7 @@ typedef struct soc {
 } soc_t;
 
 extern void soc_construct(soc_t *soc, const char *parent, const char *name,
-    bool perf_sim);
+    bool perf_sim, bool smp_opt);
 extern void soc_reset(soc_t *soc);
 extern void soc_clock(soc_t *soc);
 extern void soc_free(soc_t *soc);

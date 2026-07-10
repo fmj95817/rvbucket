@@ -61,6 +61,7 @@ typedef struct rv32g_conf {
     u32 l2_bypass_ost_depth;
     u32 itcm_latency;
     u32 dtcm_latency;
+    bool smp_opt;
 } rv32g_conf_t;
 
 typedef struct rv32g {

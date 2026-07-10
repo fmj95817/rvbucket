@@ -9,6 +9,7 @@
 #include "itf/gpio_if.h"
 #include "mem/ram.h"
 #include "mem/rom.h"
+#include "base/smp_opt.h"
 #include "dbg/chk.h"
 #include "dbg/log.h"
 #include "dbg/env.h"
@@ -65,6 +66,7 @@ typedef struct sim_top {
     bool no_end_detect;
     bool boot_prog;
     bool perf_sim;
+    bool smp_opt;
 
     sim_ui_t *ui;
 } sim_top_t;
@@ -153,7 +155,7 @@ static void sim_top_burn_program(sim_top_t *sim_top)
 
 static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char *name,
     const char *prog_path, bool fast_load_linux, bool web_ui, bool no_end_detect,
-    bool boot_prog, bool perf_sim)
+    bool boot_prog, bool perf_sim, bool smp_opt)
 {
     mod_construct(&sim_top->mod, parent, name);
     sim_top->mod.cycle = dbg_pcm_reg_perf_cnt(sim_top->mod.hier_name, "cycles");
@@ -179,7 +181,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
         sim_top->soc.ext_irq_ins[i] = NULL;
     }
     soc_construct(&sim_top->soc, sim_top->mod.hier_name, "u_soc",
-        perf_sim);
+        perf_sim, smp_opt);
 
     AXI4_SLV_CONNECT(&sim_top->ddr, , sim_top, ddr_);
     sim_top->ddr.mod.cycle = sim_top->mod.cycle;
@@ -201,6 +203,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     sim_top->no_end_detect = no_end_detect;
     sim_top->boot_prog = boot_prog;
     sim_top->perf_sim = perf_sim;
+    sim_top->smp_opt = smp_opt;
 
     sim_top_burn_program(sim_top);
 
@@ -328,6 +331,7 @@ static void print_usage(const char *prog)
         "  --no-end-detect    Disable test-end detection (0x10 terminator)\n"
         "  --boot-prog        Enable bootloader progress output via UART\n"
         "  --perf-sim         Enable configured memory/cache latency modeling\n"
+        "  --st-sim           Disable default SMP simulation optimization\n"
         "\n"
         "Arguments:\n"
         "  <program.bin>      Path to the binary program image\n",
@@ -345,6 +349,7 @@ int main(int argc, char *argv[])
     bool no_end_detect = false;
     bool boot_prog = false;
     bool perf_sim = false;
+    bool st_sim = false;
     const char *prog_path = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--fast-load-linux") == 0) {
@@ -357,6 +362,8 @@ int main(int argc, char *argv[])
             boot_prog = true;
         } else if (strcmp(argv[i], "--perf-sim") == 0) {
             perf_sim = true;
+        } else if (strcmp(argv[i], "--st-sim") == 0) {
+            st_sim = true;
         } else if (!prog_path) {
             prog_path = argv[i];
         } else {
@@ -369,10 +376,16 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    bool smp_opt = !st_sim;
+    if (smp_opt && !smp_opt_supported()) {
+        fprintf(stderr, "warning: %s\n", smp_opt_unsupported_reason());
+        smp_opt = false;
+    }
+
     sim_top_t sim_top;
     sim_top_construct(&sim_top, NULL, "sim_top", prog_path,
                       fast_load_linux, web_ui, no_end_detect, boot_prog,
-                      perf_sim);
+                      perf_sim, smp_opt);
     sim_top_reset(&sim_top);
 
     while (!sim_top.end_sim) {

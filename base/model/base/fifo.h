@@ -2,6 +2,7 @@
 #define FIFO_H
 
 #include "types.h"
+#include "dbg/chk.h"
 
 typedef struct fifo {
     void *data;
@@ -21,8 +22,22 @@ extern void fifo_get_front(fifo_t *f, void *elem);
 extern void fifo_clear(fifo_t *f);
 extern void fifo_reset(fifo_t *f);
 
-extern bool fifo_empty(fifo_t *f);
-extern bool fifo_full(fifo_t *f);
-extern u32  fifo_count(fifo_t *f);
+static inline bool fifo_empty(fifo_t *f)
+{
+    DBG_CHECK(f != NULL);
+    return f->num == 0;
+}
+
+static inline bool fifo_full(fifo_t *f)
+{
+    DBG_CHECK(f != NULL);
+    return f->num == f->depth;
+}
+
+static inline u32 fifo_count(fifo_t *f)
+{
+    DBG_CHECK(f != NULL);
+    return f->num;
+}
 
 #endif

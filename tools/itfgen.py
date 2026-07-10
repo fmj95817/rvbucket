@@ -19,7 +19,13 @@ def gen_c_itf(itf_name, desc):
             f.write("#include \"{}\"\n".format(inc))
     f.write("\n")
 
-    f.write("#define {}_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) do {{ \\\n".format(itf_name.upper()))
+    f.write("#define {}_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) \\\n".format(itf_name.upper()))
+    f.write("    {}_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, false)\n\n".format(itf_name.upper()))
+
+    f.write("#define {}_SIM_PROT_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, sim_prot) \\\n".format(itf_name.upper()))
+    f.write("    {}_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, false, sim_prot)\n\n".format(itf_name.upper()))
+
+    f.write("#define {}_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, sim_prot_) do {{ \\\n".format(itf_name.upper()))
     f.write("    itf_conf_t conf = { \\\n")
     f.write("        .cycle = module->mod.cycle, \\\n")
     f.write("        .hier_name = module->mod.hier_name, \\\n")
@@ -28,12 +34,19 @@ def gen_c_itf(itf_name, desc):
     f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))
     f.write("        .reg_vcd = &{}_if_reg_vcd, \\\n".format(itf_name))
     f.write("        .force_disable_trace = dis_trace, \\\n")
-    f.write("        .ext_sig_src = ext_src \\\n")
+    f.write("        .ext_sig_src = ext_src, \\\n")
+    f.write("        .sim_prot = sim_prot_ \\\n")
     f.write("    }; \\\n")
     f.write("    itf_construct(&module->itf, #itf, &conf); \\\n")
     f.write("} while (0)\n\n")
 
-    f.write("#define {}_IF_CONSTRUCT(module, itf, depth) do {{ \\\n".format(itf_name.upper()))
+    f.write("#define {}_IF_CONSTRUCT(module, itf, depth) \\\n".format(itf_name.upper()))
+    f.write("    {}_IF_CONSTRUCT_INNER(module, itf, depth, false)\n\n".format(itf_name.upper()))
+
+    f.write("#define {}_SIM_PROT_IF_CONSTRUCT(module, itf, depth, sim_prot) \\\n".format(itf_name.upper()))
+    f.write("    {}_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot)\n\n".format(itf_name.upper()))
+
+    f.write("#define {}_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot_) do {{ \\\n".format(itf_name.upper()))
     f.write("    itf_conf_t conf = { \\\n")
     f.write("        .cycle = module->mod.cycle, \\\n")
     f.write("        .hier_name = module->mod.hier_name, \\\n")
@@ -42,6 +55,7 @@ def gen_c_itf(itf_name, desc):
     f.write("        .pkt2str = &{}_if_to_str, \\\n".format(itf_name))
     f.write("        .reg_vcd = &{}_if_reg_vcd, \\\n".format(itf_name))
     f.write("        .force_disable_trace = false, \\\n")
+    f.write("        .sim_prot = sim_prot_, \\\n")
     f.write("        .fifo_depth = depth \\\n")
     f.write("    }; \\\n")
     f.write("    itf_construct(&module->itf, #itf, &conf); \\\n")

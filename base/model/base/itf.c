@@ -21,6 +21,20 @@ typedef struct itf_name_list {
 static itf_name_list_t g_itf_trace_list;
 static itf_name_list_t g_itf_vcd_list;
 
+static inline void itf_lock(itf_t *itf)
+{
+    if (itf->sim_prot) {
+        smp_opt_lock_acquire(&itf->lock);
+    }
+}
+
+static inline void itf_unlock(itf_t *itf)
+{
+    if (itf->sim_prot) {
+        smp_opt_lock_release(&itf->lock);
+    }
+}
+
 static void itf_name_list_load(itf_name_list_t *list, const char *path)
 {
     FILE *fp = fopen(path, "r");
@@ -105,8 +119,10 @@ static void signal_itf_construct(itf_t *itf, const char *name, const itf_conf_t 
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
     DBG_CHECK(name != NULL);
     DBG_CHECK(conf != NULL);
+    DBG_CHECK(!conf->sim_prot || !conf->ext_sig_src);
 
     itf->ctx.signal.ext_sig_src = conf->ext_sig_src;
+    smp_opt_snapshot_seq_init(&itf->ctx.signal.snapshot_seq);
     if (conf->ext_sig_src) {
         itf->ctx.signal.shared_pkt_data = NULL;
     } else {
@@ -220,6 +236,8 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
     itf->name = name;
     itf->mode = conf->mode;
     itf->pkt_size = conf->pkt_size;
+    itf->sim_prot = conf->sim_prot;
+    smp_opt_lock_init(&itf->lock);
     DBG_CHECK(itf->mode <= ITF_MODE_MAX);
 
     bool trace_list_enable = itf_name_list_match(&g_itf_trace_list,
@@ -251,6 +269,7 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
 
 void itf_reset(itf_t *itf)
 {
+    itf_lock(itf);
     if (itf->mode == ITF_MODE_SIGNAL) {
         itf->ctx.signal.write_vld = false;
     } else if (itf->mode == ITF_MODE_FIFO) {
@@ -263,6 +282,7 @@ void itf_reset(itf_t *itf)
         itf->ctx.fifo.read_vld = false;
         itf->ctx.fifo.write_vld = false;
     }
+    itf_unlock(itf);
 }
 
 static void signal_itf_free(itf_t *itf)
@@ -353,6 +373,18 @@ static void signal_itf_write(itf_t *itf, const void *pkt)
     signal_itf_call_wcb(itf);
 }
 
+static void signal_itf_write_sim_prot(itf_t *itf, const void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(itf->sim_prot);
+
+    u32 seq = smp_opt_snapshot_seq_write_begin(&itf->ctx.signal.snapshot_seq);
+    memcpy(itf->ctx.signal.shared_pkt_data, pkt, itf->pkt_size);
+    smp_opt_snapshot_seq_write_end(&itf->ctx.signal.snapshot_seq, seq);
+
+    signal_itf_call_wcb(itf);
+}
+
 static void fifo_itf_write(itf_t *itf, const void *pkt)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
@@ -381,6 +413,11 @@ static void fifo_itf_write(itf_t *itf, const void *pkt)
 
 void itf_write(itf_t *itf, const void *pkt)
 {
+    if (itf->sim_prot && itf->mode == ITF_MODE_SIGNAL) {
+        signal_itf_write_sim_prot(itf, pkt);
+        return;
+    }
+
     typedef void (*itf_write_t)(itf_t *, const void *);
     itf_write_t write_list[ITF_MODE_NUM] = {
         [ITF_MODE_SIGNAL] = &signal_itf_write,
@@ -388,13 +425,29 @@ void itf_write(itf_t *itf, const void *pkt)
     };
     itf_write_t write_func = write_list[itf->mode];
     DBG_CHECK(write_func != NULL);
+    itf_lock(itf);
     write_func(itf, pkt);
+    itf_unlock(itf);
 }
 
 static void signal_itf_read(itf_t *itf, void *pkt)
 {
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
     memcpy(pkt, itf->ctx.signal.shared_pkt_data, itf->pkt_size);
+}
+
+static void signal_itf_read_sim_prot(itf_t *itf, void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(itf->sim_prot);
+
+    for (;;) {
+        u32 seq0 = smp_opt_snapshot_seq_read_begin(&itf->ctx.signal.snapshot_seq);
+        memcpy(pkt, itf->ctx.signal.shared_pkt_data, itf->pkt_size);
+        if (!smp_opt_snapshot_seq_read_retry(&itf->ctx.signal.snapshot_seq, seq0)) {
+            return;
+        }
+    }
 }
 
 static void fifo_itf_read(itf_t *itf, void *pkt)
@@ -425,6 +478,11 @@ static void fifo_itf_read(itf_t *itf, void *pkt)
 
 void itf_read(itf_t *itf, void *pkt)
 {
+    if (itf->sim_prot && itf->mode == ITF_MODE_SIGNAL) {
+        signal_itf_read_sim_prot(itf, pkt);
+        return;
+    }
+
     typedef void (*itf_read_t)(itf_t *, void *);
     itf_read_t read_list[ITF_MODE_NUM] = {
         [ITF_MODE_SIGNAL] = &signal_itf_read,
@@ -432,7 +490,9 @@ void itf_read(itf_t *itf, void *pkt)
     };
     itf_read_t read_func = read_list[itf->mode];
     DBG_CHECK(read_func != NULL);
+    itf_lock(itf);
     read_func(itf, pkt);
+    itf_unlock(itf);
 }
 
 static void signal_itf_dbg_clock(itf_t *itf)
@@ -477,7 +537,7 @@ static void fifo_itf_dbg_clock(itf_t *itf)
     }
 }
 
-void itf_dbg_clock(itf_t *itf)
+void itf_dbg_clock_inner(itf_t *itf)
 {
     typedef void (*itf_dbg_clock_t)(itf_t *);
     itf_dbg_clock_t dbg_clock_list[ITF_MODE_NUM] = {
@@ -486,13 +546,16 @@ void itf_dbg_clock(itf_t *itf)
     };
     itf_dbg_clock_t dbg_clock_func = dbg_clock_list[itf->mode];
     DBG_CHECK(dbg_clock_func != NULL);
+    itf_lock(itf);
     dbg_clock_func(itf);
+    itf_unlock(itf);
 }
 
 void *itf_signal_get_src_and_chk(itf_t *itf)
 {
-    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
     DBG_CHECK(itf != NULL);
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(!itf->sim_prot);
     DBG_CHECK(itf->ctx.signal.shared_pkt_data != NULL);
     return itf->ctx.signal.shared_pkt_data;
 }
@@ -502,6 +565,7 @@ void itf_signal_set_src(itf_t *itf, void *src)
     DBG_CHECK(src != NULL);
     DBG_CHECK(itf->name != NULL);
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(!itf->sim_prot);
     DBG_CHECK(itf->ctx.signal.ext_sig_src);
     DBG_CHECK(itf->ctx.signal.shared_pkt_data == NULL);
 
@@ -513,6 +577,7 @@ void itf_signal_set_src(itf_t *itf, void *src)
 
 void itf_signal_write_notify(itf_t *itf)
 {
+    DBG_CHECK(!itf->sim_prot);
     signal_itf_call_wcb(itf);
 }
 
@@ -525,11 +590,13 @@ void itf_signal_set_wcb(itf_t *itf, sig_wr_cb_t cb, void *args)
 void itf_fifo_get_front(itf_t *itf, void *pkt)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    itf_lock(itf);
     DBG_CHECK(itf->ctx.fifo.pkt_num > 0);
     memcpy(pkt, get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), itf->pkt_size);
+    itf_unlock(itf);
 }
 
-void itf_fifo_pop_front(itf_t *itf)
+static void itf_fifo_pop_front_unlocked(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
     DBG_CHECK(itf->ctx.fifo.pkt_num > 0);
@@ -554,23 +621,41 @@ void itf_fifo_pop_front(itf_t *itf)
     itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
 }
 
+void itf_fifo_pop_front(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    itf_lock(itf);
+    itf_fifo_pop_front_unlocked(itf);
+    itf_unlock(itf);
+}
+
 void itf_fifo_pop_all(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
 
+    itf_lock(itf);
     while (itf->ctx.fifo.pkt_num > 0) {
-        itf_fifo_pop_front(itf);
+        itf_fifo_pop_front_unlocked(itf);
     }
+    itf_unlock(itf);
 }
 
 bool itf_fifo_empty(itf_t *itf)
 {
+    DBG_CHECK(itf != NULL);
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
-    return itf->ctx.fifo.pkt_num == 0;
+    itf_lock(itf);
+    bool empty = itf->ctx.fifo.pkt_num == 0;
+    itf_unlock(itf);
+    return empty;
 }
 
 bool itf_fifo_full(itf_t *itf)
 {
+    DBG_CHECK(itf != NULL);
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
-    return itf->ctx.fifo.pkt_num == itf->ctx.fifo.fifo_depth;
+    itf_lock(itf);
+    bool full = itf->ctx.fifo.pkt_num == itf->ctx.fifo.fifo_depth;
+    itf_unlock(itf);
+    return full;
 }

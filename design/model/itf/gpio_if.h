@@ -6,7 +6,13 @@
 #include "base/def.h"
 #include "dbg/vcd.h"
 
-#define GPIO_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) do { \
+#define GPIO_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) \
+    GPIO_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, false)
+
+#define GPIO_SIM_PROT_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, sim_prot) \
+    GPIO_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, false, sim_prot)
+
+#define GPIO_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, sim_prot_) do { \
     itf_conf_t conf = { \
         .cycle = module->mod.cycle, \
         .hier_name = module->mod.hier_name, \
@@ -15,7 +21,29 @@
         .pkt2str = &gpio_if_to_str, \
         .reg_vcd = &gpio_if_reg_vcd, \
         .force_disable_trace = dis_trace, \
-        .ext_sig_src = ext_src \
+        .ext_sig_src = ext_src, \
+        .sim_prot = sim_prot_ \
+    }; \
+    itf_construct(&module->itf, #itf, &conf); \
+} while (0)
+
+#define GPIO_IF_CONSTRUCT(module, itf, depth) \
+    GPIO_IF_CONSTRUCT_INNER(module, itf, depth, false)
+
+#define GPIO_SIM_PROT_IF_CONSTRUCT(module, itf, depth, sim_prot) \
+    GPIO_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot)
+
+#define GPIO_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot_) do { \
+    itf_conf_t conf = { \
+        .cycle = module->mod.cycle, \
+        .hier_name = module->mod.hier_name, \
+        .mode = ITF_MODE_FIFO, \
+        .pkt_size = sizeof(gpio_if_t), \
+        .pkt2str = &gpio_if_to_str, \
+        .reg_vcd = &gpio_if_reg_vcd, \
+        .force_disable_trace = false, \
+        .sim_prot = sim_prot_, \
+        .fifo_depth = depth \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)

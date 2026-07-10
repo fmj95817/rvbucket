@@ -6,7 +6,7 @@
 #include "dbg/vcd.h"
 
 void soc_construct(soc_t *soc, const char *parent, const char *name,
-    bool perf_sim)
+    bool perf_sim, bool smp_opt)
 {
     mod_construct(&soc->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
@@ -79,7 +79,8 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
         .l2_stg_fifo_depth = CORE_L2_STG_FIFO_DEPTH,
         .l2_bypass_ost_depth = CORE_L2_BYPASS_OST_DEPTH,
         .itcm_latency = itcm_latency,
-        .dtcm_latency = dtcm_latency
+        .dtcm_latency = dtcm_latency,
+        .smp_opt = smp_opt
     };
     rv32g_construct(&soc->cpu, soc->mod.hier_name, "u_rv32g_cpu", &rv32g_conf);
 
