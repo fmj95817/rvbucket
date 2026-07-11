@@ -383,6 +383,60 @@ TEST_CASE(l1_tb_t, bypass_range)
     TEST_END();
 }
 
+TEST_CASE(l1_tb_t, bypass_unaligned_read_write)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Bypass Unaligned Read and Write");
+
+    tb_bti_read_size(tb, 1, 0x83, BTI_REQ_SIZE_B2);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb_read_bytes(tb, 0x83, 2), true),
+        "bypass halfword read crosses an AXI word");
+
+    tb_bti_write_size(tb, 2, 0x83, 0x44332211, 0xf, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, 0, true),
+        "bypass word write crossing an AXI word completes once");
+    REQUIRE(tb_read_bytes(tb, 0x83, 4) == 0x44332211,
+        "bypass split write updates the addressed bytes");
+
+    tb_bti_read_size(tb, 3, 0x83, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, 0x44332211, true),
+        "bypass split read observes the split write data");
+
+    TEST_END();
+}
+
+TEST_CASE(l1_tb_t, bypass_split_multi_outstanding)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Bypass Split Multi Outstanding");
+
+    tb->stall_axi_r = true;
+    tb_bti_read_size(tb, 1, 0x83, BTI_REQ_SIZE_B4);
+    RUN_CYCLES(2);
+
+    tb_bti_read(tb, 2, 0x88);
+    RUN_CYCLES(4);
+    REQUIRE(tb->dut.ost.count == 2,
+        "split bypass read and younger bypass read are both outstanding");
+    REQUIRE(itf_fifo_empty(&tb->bti_req),
+        "younger bypass read is accepted while older split read waits");
+    REQUIRE(itf_fifo_empty(&tb->bti_rsp),
+        "no BTI response is returned before AXI responses arrive");
+
+    tb->stall_axi_r = false;
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb_read_bytes(tb, 0x83, 4), true),
+        "older split bypass read returns first");
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, tb->mem[0x88 / 4], true),
+        "younger bypass read returns second");
+
+    TEST_END();
+}
+
 TEST_CASE(l1_tb_t, flush_invalidates)
 {
     tb_reset(tb);
@@ -491,6 +545,8 @@ int main(void)
     };
     tb_setup(&tb, &bypass_conf);
     TEST_RUN(bypass_range);
+    TEST_RUN(bypass_unaligned_read_write);
+    TEST_RUN(bypass_split_multi_outstanding);
     ut_sbd_summary(&tb.sbd);
     ret = ut_sbd_ret(&tb.sbd);
     tb_free(&tb);

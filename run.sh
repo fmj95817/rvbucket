@@ -4,6 +4,7 @@ set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${ROOT}/build"
+SIM_SW_DIR="${BUILD_DIR}/sw/sim"
 
 PASS=0
 FAIL=0
@@ -121,7 +122,7 @@ function find_ut_bins {
 
 function run_single_sw {
     local name="${1}"
-    local bin="${BUILD_DIR}/sw/${name}/${name}.bin"
+    local bin="${SIM_SW_DIR}/${name}/${name}.bin"
     local input=""
     local sim_args=()
 
@@ -131,7 +132,7 @@ function run_single_sw {
     fi
 
     local cwd="${BUILD_DIR}/hw/model"
-    local rel_bin="../../sw/${name}/${name}.bin"
+    local rel_bin="../../sw/sim/${name}/${name}.bin"
     if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
         sim_args+=(--perf-sim)
     fi
@@ -199,7 +200,7 @@ function run_single_rtl_ut {
 # ── batch regression ──────────────────────────────────────────────────────
 
 function run_sw_cases {
-    local sw_dir="${BUILD_DIR}/sw"
+    local sw_dir="${SIM_SW_DIR}"
     local sim="${BUILD_DIR}/hw/model/sim_top"
     local sim_args=()
     local timeout="${MODEL_SW_TIMEOUT}"
@@ -357,7 +358,7 @@ function run_one_rtl_case {
     local name="${3}"
     local quiet="${4}"
     local cwd="${BUILD_DIR}/hw/${simulator}"
-    local hex="${BUILD_DIR}/sw/${name}/${name}.hex"
+    local hex="${SIM_SW_DIR}/${name}/${name}.hex"
     local log="${BUILD_DIR}/logs/rtl/${simulator}/${name}.log"
     local status=0
 
@@ -366,7 +367,7 @@ function run_one_rtl_case {
         return
     fi
 
-    local rel_hex="../../sw/${name}/${name}.hex"
+    local rel_hex="../../sw/sim/${name}/${name}.hex"
     local input=""
 
     get_sw_case_input "${name}"

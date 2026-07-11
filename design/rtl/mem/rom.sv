@@ -13,6 +13,8 @@ module bti_to_rom #(
     output logic [ROM_AW-3:0] addr,
     input logic [BTI_DW-1:0]  data
 );
+    logic [1:0] rsp_addr_low;
+
     reg_slice #(
         .DW       (16)
     ) u_reg_slice(
@@ -28,7 +30,24 @@ module bti_to_rom #(
 
     assign cs = bti_req_slv.vld & bti_req_slv.rdy;
     assign addr = bti_req_slv.pkt.addr[ROM_AW-1:2];
-    assign bti_rsp_mst.pkt.data = data;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            rsp_addr_low <= 2'b0;
+        else if (cs)
+            rsp_addr_low <= bti_req_slv.pkt.addr[1:0];
+    end
+
+    always_comb begin
+        case (rsp_addr_low)
+            2'b00: bti_rsp_mst.pkt.data = data;
+            2'b01: bti_rsp_mst.pkt.data = {{8{1'b0}}, data[BTI_DW-1:8]};
+            2'b10: bti_rsp_mst.pkt.data = {{16{1'b0}}, data[BTI_DW-1:16]};
+            2'b11: bti_rsp_mst.pkt.data = {{24{1'b0}}, data[BTI_DW-1:24]};
+            default: bti_rsp_mst.pkt.data = {BTI_DW{1'bx}};
+        endcase
+    end
+
     assign bti_rsp_mst.pkt.ok = 1'b1;
 endmodule
 

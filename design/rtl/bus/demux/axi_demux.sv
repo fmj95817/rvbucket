@@ -22,7 +22,10 @@ module axi_demux #(
     logic [GST_NUM-1:0] rd_sel;
     logic [GST_NUM-1:0] wr_sel;
     logic [GST_NUM-1:0] rd_pending;
-    logic [GST_NUM-1:0] wr_pending;
+    logic [GST_NUM-1:0] wr_sel_q;
+    logic wr_busy;
+    logic wr_aw_done;
+    logic wr_w_done;
     logic rd_decerr;
     logic wr_decerr;
     logic [7:0] rd_decerr_id;
@@ -48,14 +51,17 @@ module axi_demux #(
         assign gst_axi4_ar_msts[i].vld = !(|rd_pending) && !rd_decerr &&
             host_axi4_ar_slv.vld && rd_sel[i];
         assign gst_axi4_ar_msts[i].pkt = host_axi4_ar_slv.pkt;
-        assign gst_axi4_aw_msts[i].vld = !(|wr_pending) && !wr_decerr && host_axi4_aw_slv.vld &&
-            host_axi4_w_slv.vld && wr_sel[i];
+        assign gst_axi4_aw_msts[i].vld = !wr_decerr && !wr_aw_done &&
+            host_axi4_aw_slv.vld && ((wr_busy && wr_sel_q[i]) ||
+            (!wr_busy && wr_sel[i]));
         assign gst_axi4_aw_msts[i].pkt = host_axi4_aw_slv.pkt;
-        assign gst_axi4_w_msts[i].vld = !(|wr_pending) && !wr_decerr && host_axi4_aw_slv.vld &&
-            host_axi4_w_slv.vld && wr_sel[i];
+        assign gst_axi4_w_msts[i].vld = !wr_decerr && !wr_w_done &&
+            host_axi4_w_slv.vld && ((wr_busy && wr_sel_q[i]) ||
+            (!wr_busy && host_axi4_aw_slv.vld && wr_sel[i]));
         assign gst_axi4_w_msts[i].pkt = host_axi4_w_slv.pkt;
         assign gst_axi4_r_slvs[i].rdy = rd_pending[i] && host_axi4_r_mst.rdy;
-        assign gst_axi4_b_slvs[i].rdy = wr_pending[i] && host_axi4_b_mst.rdy;
+        assign gst_axi4_b_slvs[i].rdy = wr_busy && wr_aw_done && wr_w_done &&
+            wr_sel_q[i] && host_axi4_b_mst.rdy;
         assign gst_ar_rdy[i] = gst_axi4_ar_msts[i].rdy;
         assign gst_aw_rdy[i] = gst_axi4_aw_msts[i].rdy;
         assign gst_w_rdy[i] = gst_axi4_w_msts[i].rdy;
@@ -71,25 +77,20 @@ module axi_demux #(
         always_ff @(posedge clk or negedge rst_n) begin
             if (!rst_n) begin
                 rd_pending[i] <= 1'b0;
-                wr_pending[i] <= 1'b0;
             end else begin
                 if (gst_axi4_ar_msts[i].vld && gst_axi4_ar_msts[i].rdy)
                     rd_pending[i] <= 1'b1;
                 else if (gst_axi4_r_slvs[i].vld && gst_axi4_r_slvs[i].rdy &&
                     gst_axi4_r_slvs[i].pkt.last)
                     rd_pending[i] <= 1'b0;
-
-                if (gst_axi4_aw_msts[i].vld && gst_axi4_aw_msts[i].rdy &&
-                    gst_axi4_w_msts[i].vld && gst_axi4_w_msts[i].rdy)
-                    wr_pending[i] <= 1'b1;
-                else if (gst_axi4_b_slvs[i].vld && gst_axi4_b_slvs[i].rdy)
-                    wr_pending[i] <= 1'b0;
             end
         end
     end
 
     wire rd_miss = !(|rd_sel);
     wire wr_miss = !(|wr_sel);
+    wire wr_b_hsk = wr_busy && wr_aw_done && wr_w_done &&
+        host_axi4_b_mst.vld && host_axi4_b_mst.rdy;
     wire rd_decerr_hsk = rd_decerr && host_axi4_r_mst.rdy;
     wire wr_decerr_hsk = wr_decerr && host_axi4_b_mst.rdy;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -98,6 +99,10 @@ module axi_demux #(
             wr_decerr <= 1'b0;
             rd_decerr_id <= 0;
             wr_decerr_id <= 0;
+            wr_sel_q <= '0;
+            wr_busy <= 1'b0;
+            wr_aw_done <= 1'b0;
+            wr_w_done <= 1'b0;
         end else begin
             if (!(|rd_pending) && !rd_decerr && host_axi4_ar_slv.vld &&
                 host_axi4_ar_slv.rdy && rd_miss) begin
@@ -106,13 +111,36 @@ module axi_demux #(
             end else if (rd_decerr_hsk) begin
                 rd_decerr <= 1'b0;
             end
-            if (!(|wr_pending) && !wr_decerr && host_axi4_aw_slv.vld &&
+
+            if (!wr_busy && !wr_decerr && host_axi4_aw_slv.vld &&
                 host_axi4_aw_slv.rdy && host_axi4_w_slv.vld &&
                 host_axi4_w_slv.rdy && wr_miss) begin
                 wr_decerr <= 1'b1;
                 wr_decerr_id <= host_axi4_aw_slv.pkt.id;
             end else if (wr_decerr_hsk) begin
                 wr_decerr <= 1'b0;
+            end
+
+            if (wr_busy) begin
+                if (host_axi4_aw_slv.vld && host_axi4_aw_slv.rdy) begin
+                    wr_aw_done <= 1'b1;
+                end
+                if (host_axi4_w_slv.vld && host_axi4_w_slv.rdy) begin
+                    wr_w_done <= 1'b1;
+                end
+                if (wr_b_hsk) begin
+                    wr_busy <= 1'b0;
+                    wr_aw_done <= 1'b0;
+                    wr_w_done <= 1'b0;
+                    wr_sel_q <= '0;
+                end
+            end else if (!wr_decerr && !wr_miss &&
+                ((host_axi4_aw_slv.vld && host_axi4_aw_slv.rdy) ||
+                (host_axi4_w_slv.vld && host_axi4_w_slv.rdy))) begin
+                wr_busy <= 1'b1;
+                wr_sel_q <= wr_sel;
+                wr_aw_done <= host_axi4_aw_slv.vld && host_axi4_aw_slv.rdy;
+                wr_w_done <= host_axi4_w_slv.vld && host_axi4_w_slv.rdy;
             end
         end
     end
@@ -132,7 +160,7 @@ module axi_demux #(
         if (!(|rd_pending) && !rd_decerr && rd_miss) begin
             host_axi4_ar_slv.rdy = 1'b1;
         end
-        if (!(|wr_pending) && !wr_decerr && wr_miss &&
+        if (!wr_busy && !wr_decerr && wr_miss &&
             host_axi4_aw_slv.vld && host_axi4_w_slv.vld) begin
             host_axi4_aw_slv.rdy = 1'b1;
             host_axi4_w_slv.rdy = 1'b1;
@@ -151,18 +179,23 @@ module axi_demux #(
         end
         for (int i = 0; i < GST_NUM; i++) begin
             host_axi4_ar_slv.rdy |= gst_ar_rdy[i] && rd_sel[i] && !(|rd_pending) && !rd_decerr;
-            host_axi4_aw_slv.rdy |= gst_aw_rdy[i] && gst_w_rdy[i] &&
-                wr_sel[i] && !(|wr_pending) && !wr_decerr;
-            host_axi4_w_slv.rdy |= gst_aw_rdy[i] && gst_w_rdy[i] &&
-                wr_sel[i] && !(|wr_pending) && !wr_decerr;
+            host_axi4_aw_slv.rdy |= gst_aw_rdy[i] && !wr_aw_done &&
+                ((wr_busy && wr_sel_q[i]) || (!wr_busy && wr_sel[i])) &&
+                !wr_decerr;
+            host_axi4_w_slv.rdy |= gst_w_rdy[i] && !wr_w_done &&
+                ((wr_busy && wr_sel_q[i]) || (!wr_busy && host_axi4_aw_slv.vld &&
+                wr_sel[i])) && !wr_decerr;
             host_axi4_r_mst.vld |= gst_r_vld[i] && rd_pending[i];
             host_axi4_r_mst.pkt.id |= gst_r_id[i] & {8{rd_pending[i]}};
             host_axi4_r_mst.pkt.data |= gst_r_data[i] & {32{rd_pending[i]}};
             host_axi4_r_mst.pkt.resp = rd_pending[i] ? gst_r_resp[i] : host_axi4_r_mst.pkt.resp;
             host_axi4_r_mst.pkt.last |= gst_r_last[i] && rd_pending[i];
-            host_axi4_b_mst.vld |= gst_b_vld[i] && wr_pending[i];
-            host_axi4_b_mst.pkt.id |= gst_b_id[i] & {8{wr_pending[i]}};
-            host_axi4_b_mst.pkt.resp = wr_pending[i] ? gst_b_resp[i] : host_axi4_b_mst.pkt.resp;
+            host_axi4_b_mst.vld |= gst_b_vld[i] && wr_busy && wr_aw_done &&
+                wr_w_done && wr_sel_q[i];
+            host_axi4_b_mst.pkt.id |= gst_b_id[i] & {8{wr_busy && wr_aw_done &&
+                wr_w_done && wr_sel_q[i]}};
+            host_axi4_b_mst.pkt.resp = (wr_busy && wr_aw_done && wr_w_done &&
+                wr_sel_q[i]) ? gst_b_resp[i] : host_axi4_b_mst.pkt.resp;
         end
     end
 endmodule

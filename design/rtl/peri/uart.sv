@@ -85,10 +85,10 @@ module uart_rx #(
         if (~rst_n)
             wind <= 2'b11;
         else
-            wind <= { rx_sync[0], wind[1] };
+            wind <= { wind[0], rx_sync[0] };
     end
 
-    tri fall_edge = (wind == 2'b01);
+    tri fall_edge = (wind == 2'b10);
 
     logic [9:0] bit_sr;
     logic       se;
@@ -96,19 +96,36 @@ module uart_rx #(
         if (~rst_n)
             bit_sr <= {10{1'b1}};
         else if (se)
-            bit_sr <= { wind[0], bit_sr[9:1] };
+            bit_sr <= { rx_sync[0], bit_sr[9:1] };
     end
 
     logic [3:0] baud_cnt;
     logic       baud_cnt_inc;
-    tri         baud_cnt_full = (baud_cnt == 4'd10);
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             baud_cnt <= 4'd0;
-        else if (baud_cnt_full)
+        else if (ch_done)
             baud_cnt <= 4'd0;
         else if (baud_cnt_inc)
             baud_cnt <= baud_cnt + 1'b1;
+    end
+
+    logic idle_seen;
+    logic [BCW-1:0] idle_cnt;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n) begin
+            idle_cnt <= {BCW{1'b0}};
+            idle_seen <= 1'b0;
+        end else if (rx_sync[0]) begin
+            if (!idle_seen) begin
+                if (idle_cnt == bc)
+                    idle_seen <= 1'b1;
+                else
+                    idle_cnt <= idle_cnt + 1'b1;
+            end
+        end else begin
+            idle_cnt <= {BCW{1'b0}};
+        end
     end
 
     logic [BCW-1:0] cycle_cnt;
@@ -117,7 +134,7 @@ module uart_rx #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             cycle_cnt <= {BCW{1'b0}};
-        else if (cycle_cnt_full)
+        else if (ch_done || baud_cnt_inc)
             cycle_cnt <= {BCW{1'b0}};
         else if (cycle_cnt_inc)
             cycle_cnt <= cycle_cnt + 1'b1;
@@ -127,17 +144,32 @@ module uart_rx #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             rx_pend <= 1'b0;
-        else if (fall_edge)
+        else if (!rx_pend && idle_seen && fall_edge)
             rx_pend <= 1'b1;
-        else if (baud_cnt_full)
+        else if (ch_done)
             rx_pend <= 1'b0;
     end
 
-    assign se = (cycle_cnt == {1'b0, bc[BCW-2:0]});
-    assign baud_cnt_inc = cycle_cnt_full;
+    logic ch_done;
+    logic ch_vld_q;
+    logic [7:0] ch_q;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (~rst_n) begin
+            ch_vld_q <= 1'b0;
+            ch_q <= 8'b0;
+        end else begin
+            ch_vld_q <= ch_done;
+            if (ch_done)
+                ch_q <= bit_sr[9:2];
+        end
+    end
+
+    assign se = rx_pend && (cycle_cnt == (bc >> 1));
+    assign ch_done = se && (baud_cnt == 4'd9);
+    assign baud_cnt_inc = rx_pend && cycle_cnt_full;
     assign cycle_cnt_inc = rx_pend;
-    assign ch_vld = baud_cnt_full;
-    assign ch = bit_sr[8:1];
+    assign ch_vld = ch_vld_q;
+    assign ch = ch_q;
 
 endmodule
 
@@ -163,13 +195,14 @@ module apb_to_uart #(
     localparam logic [REG_AW-1:0] REG_TX_ADDR = 'd1;
     localparam logic [REG_AW-1:0] REG_RX_ADDR = 'd2;
     localparam logic [REG_AW-1:0] REG_STS_ADDR = 'd3;
+    localparam logic [UART_BCW-1:0] UART_RESET_BC = UART_BCW'(9);
 
     logic reg_bc_set;
     logic [UART_BCW-1:0] reg_bc;
     logic [UART_BCW-1:0] reg_bc_nxt;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
-            reg_bc <= UART_BCW'(9);
+            reg_bc <= UART_RESET_BC;
         else if (reg_bc_set)
             reg_bc <= reg_bc_nxt;
     end
@@ -334,7 +367,8 @@ module apb_uart #(
     logic [7:0]          rx_ch;
 
     apb_to_uart #(
-        .UART_AW     (UART_AW)
+        .UART_AW  (UART_AW),
+        .UART_BCW (UART_BCW)
     ) u_apb_to_uart(
         .clk         (clk),
         .rst_n       (rst_n),

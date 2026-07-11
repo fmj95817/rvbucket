@@ -22,6 +22,8 @@ module l2(
     logic rd_rr_d;
     logic wr_active;
     logic wr_active_d;
+    logic wr_aw_done;
+    logic wr_w_done;
     logic wr_rr_d;
 
     wire rd_select_d = d_axi4_ar_slv.vld && (rd_rr_d || !i_axi4_ar_slv.vld);
@@ -29,12 +31,15 @@ module l2(
     wire rd_req_hsk = mem_axi4_ar_mst.vld && mem_axi4_ar_mst.rdy;
     wire rd_rsp_hsk = mem_axi4_r_slv.vld && mem_axi4_r_slv.rdy && mem_axi4_r_slv.pkt.last;
 
-    wire i_write_req = i_axi4_aw_slv.vld && i_axi4_w_slv.vld;
-    wire d_write_req = d_axi4_aw_slv.vld && d_axi4_w_slv.vld;
+    wire i_write_req = i_axi4_aw_slv.vld || i_axi4_w_slv.vld;
+    wire d_write_req = d_axi4_aw_slv.vld || d_axi4_w_slv.vld;
     wire wr_select_d = d_write_req && (wr_rr_d || !i_write_req);
     wire wr_select_i = i_write_req && !wr_select_d;
-    wire wr_req_hsk = mem_axi4_aw_mst.vld && mem_axi4_aw_mst.rdy &&
-        mem_axi4_w_mst.vld && mem_axi4_w_mst.rdy;
+    wire wr_sel_d = wr_active ? wr_active_d : wr_select_d;
+    wire wr_sel_i = wr_active ? !wr_active_d : wr_select_i;
+    wire wr_has_sel = wr_active || wr_select_i || wr_select_d;
+    wire wr_aw_hsk = mem_axi4_aw_mst.vld && mem_axi4_aw_mst.rdy;
+    wire wr_w_hsk = mem_axi4_w_mst.vld && mem_axi4_w_mst.rdy;
     wire wr_rsp_hsk = mem_axi4_b_slv.vld && mem_axi4_b_slv.rdy;
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -44,6 +49,8 @@ module l2(
             rd_rr_d <= 1'b0;
             wr_active <= 1'b0;
             wr_active_d <= 1'b0;
+            wr_aw_done <= 1'b0;
+            wr_w_done <= 1'b0;
             wr_rr_d <= 1'b0;
         end else begin
             if (!rd_active && rd_req_hsk) begin
@@ -54,12 +61,23 @@ module l2(
                 rd_active <= 1'b0;
             end
 
-            if (!wr_active && wr_req_hsk) begin
+            if (!wr_active && (wr_aw_hsk || wr_w_hsk)) begin
                 wr_active <= 1'b1;
                 wr_active_d <= wr_select_d;
                 wr_rr_d <= !wr_select_d;
+                wr_aw_done <= wr_aw_hsk;
+                wr_w_done <= wr_w_hsk;
             end else if (wr_active && wr_rsp_hsk) begin
                 wr_active <= 1'b0;
+                wr_aw_done <= 1'b0;
+                wr_w_done <= 1'b0;
+            end else if (wr_active) begin
+                if (wr_aw_hsk) begin
+                    wr_aw_done <= 1'b1;
+                end
+                if (wr_w_hsk) begin
+                    wr_w_done <= 1'b1;
+                end
             end
         end
     end
@@ -74,17 +92,22 @@ module l2(
     assign d_axi4_r_mst.pkt = mem_axi4_r_slv.pkt;
     assign mem_axi4_r_slv.rdy = rd_active_d ? d_axi4_r_mst.rdy : i_axi4_r_mst.rdy;
 
-    assign mem_axi4_aw_mst.vld = !wr_active && (wr_select_i || wr_select_d);
-    assign mem_axi4_aw_mst.pkt = wr_select_d ? d_axi4_aw_slv.pkt : i_axi4_aw_slv.pkt;
-    assign mem_axi4_w_mst.vld = !wr_active && (wr_select_i || wr_select_d);
-    assign mem_axi4_w_mst.pkt = wr_select_d ? d_axi4_w_slv.pkt : i_axi4_w_slv.pkt;
-    assign i_axi4_aw_slv.rdy = !wr_active && wr_select_i && mem_axi4_aw_mst.rdy && mem_axi4_w_mst.rdy;
-    assign i_axi4_w_slv.rdy = i_axi4_aw_slv.rdy;
-    assign d_axi4_aw_slv.rdy = !wr_active && wr_select_d && mem_axi4_aw_mst.rdy && mem_axi4_w_mst.rdy;
-    assign d_axi4_w_slv.rdy = d_axi4_aw_slv.rdy;
-    assign i_axi4_b_mst.vld = wr_active && !wr_active_d && mem_axi4_b_slv.vld;
+    assign mem_axi4_aw_mst.vld = wr_has_sel && !wr_aw_done &&
+        (wr_sel_d ? d_axi4_aw_slv.vld : i_axi4_aw_slv.vld);
+    assign mem_axi4_aw_mst.pkt = wr_sel_d ? d_axi4_aw_slv.pkt : i_axi4_aw_slv.pkt;
+    assign mem_axi4_w_mst.vld = wr_has_sel && !wr_w_done &&
+        (wr_sel_d ? d_axi4_w_slv.vld : i_axi4_w_slv.vld);
+    assign mem_axi4_w_mst.pkt = wr_sel_d ? d_axi4_w_slv.pkt : i_axi4_w_slv.pkt;
+    assign i_axi4_aw_slv.rdy = wr_sel_i && !wr_aw_done && mem_axi4_aw_mst.rdy;
+    assign i_axi4_w_slv.rdy = wr_sel_i && !wr_w_done && mem_axi4_w_mst.rdy;
+    assign d_axi4_aw_slv.rdy = wr_sel_d && !wr_aw_done && mem_axi4_aw_mst.rdy;
+    assign d_axi4_w_slv.rdy = wr_sel_d && !wr_w_done && mem_axi4_w_mst.rdy;
+    assign i_axi4_b_mst.vld = wr_active && wr_aw_done && wr_w_done &&
+        !wr_active_d && mem_axi4_b_slv.vld;
     assign i_axi4_b_mst.pkt = mem_axi4_b_slv.pkt;
-    assign d_axi4_b_mst.vld = wr_active && wr_active_d && mem_axi4_b_slv.vld;
+    assign d_axi4_b_mst.vld = wr_active && wr_aw_done && wr_w_done &&
+        wr_active_d && mem_axi4_b_slv.vld;
     assign d_axi4_b_mst.pkt = mem_axi4_b_slv.pkt;
-    assign mem_axi4_b_slv.rdy = wr_active_d ? d_axi4_b_mst.rdy : i_axi4_b_mst.rdy;
+    assign mem_axi4_b_slv.rdy = wr_active && wr_aw_done && wr_w_done &&
+        (wr_active_d ? d_axi4_b_mst.rdy : i_axi4_b_mst.rdy);
 endmodule

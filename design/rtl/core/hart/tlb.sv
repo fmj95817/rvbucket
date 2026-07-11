@@ -24,7 +24,7 @@ module tlb #(
     localparam SET_W = $clog2(SET_NUM);
     localparam WAY_W = $clog2(WAY_NUM);
     localparam META_W = 53;
-    localparam logic [SET_W-1:0] LAST_SET = SET_W'(SET_NUM - 1);
+    localparam logic [SET_W-1:0] LAST_SET = {SET_W{1'b1}};
 
     typedef struct packed {
         logic        valid;
@@ -69,7 +69,7 @@ module tlb #(
     genvar way;
     generate
         for (way = 0; way < WAY_NUM; way++) begin : gen_way
-            localparam logic [WAY_W-1:0] WAY_IDX = WAY_W'(way);
+            localparam logic [WAY_W-1:0] WAY_IDX = way;
 
             assign tlb_r_if[way].cs = lookup_vld;
             assign tlb_r_if[way].addr = lookup_set;

@@ -3,6 +3,7 @@
 #define FLASH_BASE   ((const uint32_t *)0x80000000)
 #define ITCM_BASE    ((volatile uint32_t *)0x10000000)
 #define DTCM_BASE    ((volatile uint32_t *)0x20000000)
+#define UART_BC      (*(volatile uint32_t *)0x30000000u)
 #define UART_TX      (*(volatile uint32_t *)0x30000004u)
 #define GPIO_IN      (*(volatile uint32_t *)0x30001000u)
 #define GPIO_MODE_LO (*(volatile uint32_t *)0x30001004u)
@@ -67,6 +68,15 @@ static int progress_on(void)
 static void uart_putc(char c)
 {
     UART_TX = (uint32_t)c;
+}
+
+static void uart_init(void)
+{
+#ifdef RVB_SIM
+    UART_BC = 9u;
+#else
+    UART_BC = 867u;
+#endif
 }
 
 static void uart_puts(const char *s)
@@ -149,6 +159,7 @@ static void copy_sec(const uint32_t *src, volatile uint32_t *dst,
 
 void boot_main(void)
 {
+    uart_init();
     gpio_set_input(20);
 
     if (progress_on()) {

@@ -7,9 +7,13 @@ int main(void)
 {
     volatile uint32_t *ddr = (volatile uint32_t *)DDR_BASE;
 
+    printf("ddr_access: start\n");
     ddr[0] = 0x11223344u;
+    printf("ddr_access: w0\n");
     ddr[1] = 0xa5a55a5au;
+    printf("ddr_access: w1\n");
     ddr[1024] = ddr[0] ^ ddr[1];
+    printf("ddr_access: w2\n");
 
     if (ddr[0] != 0x11223344u ||
         ddr[1] != 0xa5a55a5au ||

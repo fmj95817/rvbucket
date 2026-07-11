@@ -6,7 +6,7 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 
 ## System Specifications
 
-- **CPU Core**: 2-stage pipelined RV32G (RV32IMACZicsr) CPU with Sv32 MMU; ASM includes TLB, RTL currently uses direct page-table walk
+- **CPU Core**: 2-stage pipelined RV32G (RV32IMAZicsr) CPU; both ASM and RTL include Sv32 MMU with TLB
 - **L1 Cache**: Configurable set-associative L1 I-Cache and L1 D-Cache with write-back support in ASM; RTL cache optimization is in progress
 - **Boot ROM**: 2 KB
 - **Flash**: 32 MB
@@ -24,7 +24,7 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 
 - **RV32G Instruction Set**: Supports RV32I + M + A + Zicsr + Zifencei.
 - **2-Stage Pipeline**: IF/EX pipeline with branch prediction (BHT).
-- **MMU with Sv32 Paging**: ASM supports TLB and page table walker; RTL supports Linux smoke with direct page-table walk.
+- **MMU with Sv32 Paging**: ASM and RTL both support TLB and page table walker; RTL can run Linux smoke.
 - **L1 Cache**: Configurable set-associative L1 I-Cache and D-Cache with bypass support in ASM; RTL cache optimization is planned.
 - **Trap Handling**: Machine/Supervisor mode traps, interrupts, delegations.
 - **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, GTimer, ACLINT, PLIC.
@@ -53,10 +53,13 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 | `./build.sh hw rtl vcs debug` | Build RTL simulation (VCS debug + FSDB) |
 | `./build.sh hw rtl verilator` | Build RTL simulation (Verilator) |
 | `./build.sh hw fpga xilinx` | Generate Vivado FPGA project |
-| `./build.sh sw` | Build all bare-metal C test cases |
-| `./build.sh sw <name>` | Build a single C test case |
-| `./build.sh sw linux` | Build Linux kernel + OpenSBI |
-| `./build.sh sw linux clean` | Clean Linux kernel + OpenSBI build |
+| `./build.sh sw` | Build all simulation bare-metal C test cases under `build/sw/sim` |
+| `./build.sh sw sim <name>` | Build a single simulation C test case |
+| `./build.sh sw board` | Build all board/real-hardware bare-metal C test cases under `build/sw/board` |
+| `./build.sh sw board <name>` | Build a single board/real-hardware C test case |
+| `./build.sh sw sim opensbi` / `./build.sh sw board opensbi` | Build the standalone OpenSBI case; currently both profiles share one output |
+| `./build.sh sw sim linux` / `./build.sh sw board linux` | Build Linux kernel + OpenSBI; currently both profiles share one output |
+| `./build.sh sw sim linux clean` / `./build.sh sw board linux clean` | Clean Linux kernel + OpenSBI build |
 | `./build.sh ut model` | Build all ASM unit tests |
 | `./build.sh ut model <name>` | Build a single UT or UT subdirectory |
 
@@ -69,16 +72,16 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 cd build/hw/model
 
 # Terminal mode:
-./sim_top ../../sw/<case>/<case>.bin
+./sim_top ../../sw/sim/<case>/<case>.bin
 
 # Web UI dashboard (open http://localhost:5000):
-./sim_top --web-ui ../../sw/<case>/<case>.bin
+./sim_top --web-ui ../../sw/sim/<case>/<case>.bin
 
 # Linux with fast preload to DDR:
 ./sim_top --fast-load-linux --web-ui ../../sw/linux/linux.bin
 
 # Disable end-of-sim detection (interactive use):
-./sim_top --no-end-detect --web-ui ../../sw/<case>/<case>.bin
+./sim_top --no-end-detect --web-ui ../../sw/sim/<case>/<case>.bin
 ```
 
 **Web UI Dashboard:**
@@ -109,13 +112,13 @@ cd build/hw/model
 **RTL (VCS):**
 ```bash
 cd build/hw/vcs
-./sim_top +program=../../sw/<case>/<case>.hex
+./sim_top +program=../../sw/sim/<case>/<case>.hex
 ```
 
 **RTL (Verilator):**
 ```bash
 cd build/hw/verilator
-./obj_dir/Vsim_top +program=../../sw/<case>/<case>.hex
+./obj_dir/Vsim_top +program=../../sw/sim/<case>/<case>.hex
 ```
 
 ## Project Structure
@@ -161,11 +164,11 @@ cd build/hw/verilator
 - [x] ASM regression suite (run.sh)
 - [x] Linux RVBucket GPIO driver (gpio-rvbucket, sysfs interface)
 - [x] RTL RV32G instruction set
-- [x] RTL MMU with Sv32 direct page-table walk
+- [x] RTL Sv32 MMU with direct page-table walk and TLB optimization
 - [x] RTL reaches Linux smoke stage
-- [ ] RTL TLB optimization
+- [x] RTL TLB optimization
 - [ ] RTL L1 cache optimization
-- [ ] FPGA boots Linux kernel
+- [x] FPGA boots Linux kernel
 - [ ] ASM/RTL F/D instruction set extensions
 
 ## Contributions

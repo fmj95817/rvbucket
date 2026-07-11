@@ -65,6 +65,72 @@ static u32 l1_req_size_from(const bti_req_if_t *req)
     return 1u << req->size;
 }
 
+static u32 l1_req_word_offset(const bti_req_if_t *req)
+{
+    return req->addr & (L1_WORD_SIZE - 1u);
+}
+
+static u32 l1_req_aligned_word_addr(const bti_req_if_t *req)
+{
+    return req->addr & ~(L1_WORD_SIZE - 1u);
+}
+
+static bool l1_req_cross_word(const bti_req_if_t *req)
+{
+    return l1_req_word_offset(req) + l1_req_size_from(req) > L1_WORD_SIZE;
+}
+
+static u32 l1_bypass_beat_addr(const l1_ost_ctx_t *ctx)
+{
+    return l1_req_aligned_word_addr(&ctx->req) +
+        ctx->bypass_req_idx * L1_WORD_SIZE;
+}
+
+static u32 l1_bypass_first_read_data(u32 data, u32 offset)
+{
+    return data >> (offset * 8u);
+}
+
+static u32 l1_bypass_second_read_data(u32 data, u32 offset)
+{
+    return data << ((L1_WORD_SIZE - offset) * 8u);
+}
+
+static u32 l1_bypass_write_data(const l1_ost_ctx_t *ctx)
+{
+    u32 offset = l1_req_word_offset(&ctx->req);
+    if (ctx->bypass_req_idx == 0) {
+        return ctx->req.data << (offset * 8u);
+    }
+    return ctx->req.data >> ((L1_WORD_SIZE - offset) * 8u);
+}
+
+static u8 l1_bypass_write_strobe(const l1_ost_ctx_t *ctx)
+{
+    u32 offset = l1_req_word_offset(&ctx->req);
+    if (ctx->bypass_req_idx == 0) {
+        return (u8)((ctx->req.strobe << offset) & 0xfu);
+    }
+    return (u8)((ctx->req.strobe >> (L1_WORD_SIZE - offset)) & 0xfu);
+}
+
+static u32 l1_bypass_beat_num(const l1_ost_ctx_t *ctx)
+{
+    return ctx->bypass_split ? 2u : 1u;
+}
+
+static bool l1_bypass_slot_can_issue(const l1_ost_ctx_t *ctx)
+{
+    return !ctx->rsp_vld &&
+        ctx->bypass_req_idx < l1_bypass_beat_num(ctx) &&
+        ctx->bypass_req_idx == ctx->bypass_rsp_idx;
+}
+
+static bool l1_bypass_slot_wait_rsp(const l1_ost_ctx_t *ctx)
+{
+    return !ctx->rsp_vld && ctx->bypass_rsp_idx < ctx->bypass_req_idx;
+}
+
 static u32 l1_req_size(const l1_t *l1)
 {
     return l1_req_size_from(&l1->req);
@@ -266,6 +332,11 @@ static bool l1_alloc_ost(l1_t *l1, const bti_req_if_t *req,
     l1_ost_ctx_t ctx = {
         .trans_id = req->trans_id,
         .kind = kind,
+        .req = *req,
+        .bypass_split = (kind == L1_OST_BYPASS_RD ||
+            kind == L1_OST_BYPASS_WR) && l1_req_cross_word(req),
+        .bypass_req_idx = 0,
+        .bypass_rsp_idx = 0,
         .rsp_vld = false,
         .rsp_delay_pend = false,
         .ok = false,
@@ -389,39 +460,74 @@ static bool l1_try_cached_hit_req(l1_t *l1, const bti_req_if_t *req,
     return true;
 }
 
+static void l1_issue_bypass_read(l1_t *l1, u32 slot, l1_ost_ctx_t *ctx)
+{
+    DBG_CHECK(slot <= 0xffu);
+    axi4_ar_if_t ar = {
+        .id = (u8)slot,
+        .addr = l1_bypass_beat_addr(ctx),
+        .len = 0,
+        .size = AXI4_AR_SIZE_B4,
+        .burst = AXI4_AR_BURST_INCR,
+        .lock = false,
+        .cache = 0,
+        .prot = 0,
+        .qos = 0,
+        .user = 0
+    };
+    itf_write(l1->axi4_ar_mst, &ar);
+    ctx->bypass_req_idx++;
+    ostq_write_slot(&l1->ost, slot, ctx);
+}
+
+static void l1_issue_bypass_write(l1_t *l1, u32 slot, l1_ost_ctx_t *ctx)
+{
+    DBG_CHECK(slot <= 0xffu);
+    axi4_aw_if_t aw = {
+        .id = (u8)slot,
+        .addr = l1_bypass_beat_addr(ctx),
+        .len = 0,
+        .size = AXI4_AW_SIZE_B4,
+        .burst = AXI4_AW_BURST_INCR,
+        .lock = false,
+        .cache = 0,
+        .prot = 0,
+        .qos = 0,
+        .user = 0
+    };
+    axi4_w_if_t w = {
+        .data = l1_bypass_write_data(ctx),
+        .strb = l1_bypass_write_strobe(ctx),
+        .last = true
+    };
+    itf_write(l1->axi4_aw_mst, &aw);
+    itf_write(l1->axi4_w_mst, &w);
+    ctx->bypass_req_idx++;
+    ostq_write_slot(&l1->ost, slot, ctx);
+}
+
 static bool l1_try_bypass_req(l1_t *l1, const bti_req_if_t *req)
 {
     if (l1->state != L1_STATE_IDLE) {
         return false;
     }
 
+    u32 slot;
+
     if (req->cmd == BTI_REQ_CMD_READ) {
         if (itf_fifo_full(l1->axi4_ar_mst)) {
             return false;
         }
-        u32 slot;
         if (!l1_alloc_ost(l1, req, L1_OST_BYPASS_RD, &slot)) {
             return false;
         }
-        axi4_ar_if_t ar = {
-            .id = 0,
-            .addr = req->addr,
-            .len = 0,
-            .size = (axi4_ar_size_t)req->size,
-            .burst = AXI4_AR_BURST_FIXED,
-            .lock = false,
-            .cache = 0,
-            .prot = 0,
-            .qos = 0,
-            .user = 0
-        };
-        itf_write(l1->axi4_ar_mst, &ar);
-        (void)slot;
+        l1_ost_ctx_t ctx;
+        ostq_read_slot(&l1->ost, slot, &ctx);
+        l1_issue_bypass_read(l1, slot, &ctx);
         return true;
     }
 
     if (l1->conf.ro) {
-        u32 slot;
         if (!l1_alloc_ost(l1, req, L1_OST_CACHED, &slot)) {
             return false;
         }
@@ -432,30 +538,12 @@ static bool l1_try_bypass_req(l1_t *l1, const bti_req_if_t *req)
     if (itf_fifo_full(l1->axi4_aw_mst) || itf_fifo_full(l1->axi4_w_mst)) {
         return false;
     }
-    u32 slot;
     if (!l1_alloc_ost(l1, req, L1_OST_BYPASS_WR, &slot)) {
         return false;
     }
-    axi4_aw_if_t aw = {
-        .id = 0,
-        .addr = req->addr,
-        .len = 0,
-        .size = (axi4_aw_size_t)req->size,
-        .burst = AXI4_AW_BURST_FIXED,
-        .lock = false,
-        .cache = 0,
-        .prot = 0,
-        .qos = 0,
-        .user = 0
-    };
-    axi4_w_if_t w = {
-        .data = req->data,
-        .strb = (u8)(req->strobe & 0xf),
-        .last = true
-    };
-    itf_write(l1->axi4_aw_mst, &aw);
-    itf_write(l1->axi4_w_mst, &w);
-    (void)slot;
+    l1_ost_ctx_t ctx;
+    ostq_read_slot(&l1->ost, slot, &ctx);
+    l1_issue_bypass_write(l1, slot, &ctx);
     return true;
 }
 
@@ -550,7 +638,7 @@ static void l1_proc_flush(l1_t *l1)
     l1_invalidate(l1);
 }
 
-static bool l1_find_ost_wait_slot(l1_t *l1, l1_ost_kind_t kind,
+static bool l1_find_bypass_issue_slot(l1_t *l1, l1_ost_kind_t kind,
     l1_ost_ctx_t *ctx, u32 *slot)
 {
     for (u32 i = 0; i < l1->ost.depth; i++) {
@@ -561,7 +649,7 @@ static bool l1_find_ost_wait_slot(l1_t *l1, l1_ost_kind_t kind,
 
         l1_ost_ctx_t cur;
         ostq_read_slot(&l1->ost, idx, &cur);
-        if (cur.rsp_vld || cur.kind != kind) {
+        if (cur.kind != kind || !l1_bypass_slot_can_issue(&cur)) {
             continue;
         }
 
@@ -576,28 +664,48 @@ static bool l1_find_ost_wait_slot(l1_t *l1, l1_ost_kind_t kind,
     return false;
 }
 
+static void l1_mark_bypass_rsp(l1_t *l1, u32 slot, l1_ost_ctx_t *ctx)
+{
+    if (ctx->bypass_rsp_idx == l1_bypass_beat_num(ctx)) {
+        ctx->rsp_vld = l1->conf.latency == 0;
+        ctx->rsp_delay_pend = l1->conf.latency != 0;
+        ctx->delay = 0;
+    }
+    ostq_write_slot(&l1->ost, slot, ctx);
+}
+
 static void l1_proc_bypass_rd_wait(l1_t *l1)
 {
     if (itf_fifo_empty(l1->axi4_r_slv)) {
         return;
     }
 
-    l1_ost_ctx_t ctx;
-    u32 slot;
-    bool found = l1_find_ost_wait_slot(l1, L1_OST_BYPASS_RD, &ctx, &slot);
-    if (!found) {
+    axi4_r_if_t r;
+    itf_fifo_get_front(l1->axi4_r_slv, &r);
+    u32 slot = r.id;
+    if (slot >= l1->ost.depth || !ostq_slot_valid(&l1->ost, slot)) {
         return;
     }
 
-    axi4_r_if_t r;
-    itf_read(l1->axi4_r_slv, &r);
+    l1_ost_ctx_t ctx;
+    ostq_read_slot(&l1->ost, slot, &ctx);
+    if (ctx.kind != L1_OST_BYPASS_RD || !l1_bypass_slot_wait_rsp(&ctx)) {
+        return;
+    }
+
+    itf_fifo_pop_front(l1->axi4_r_slv);
     DBG_CHECK(r.last);
-    ctx.ok = (r.resp == AXI4_R_RESP_OKAY);
-    ctx.data = r.data;
-    ctx.rsp_vld = l1->conf.latency == 0;
-    ctx.rsp_delay_pend = l1->conf.latency != 0;
-    ctx.delay = 0;
-    ostq_write_slot(&l1->ost, slot, &ctx);
+    bool resp_ok = r.resp == AXI4_R_RESP_OKAY;
+    ctx.ok = ctx.bypass_rsp_idx == 0 ? resp_ok : ctx.ok && resp_ok;
+    if (ctx.bypass_rsp_idx == 0) {
+        ctx.data = l1_bypass_first_read_data(r.data,
+            l1_req_word_offset(&ctx.req));
+    } else {
+        ctx.data |= l1_bypass_second_read_data(r.data,
+            l1_req_word_offset(&ctx.req));
+    }
+    ctx.bypass_rsp_idx++;
+    l1_mark_bypass_rsp(l1, slot, &ctx);
 }
 
 static void l1_proc_bypass_wr_wait(l1_t *l1)
@@ -606,21 +714,55 @@ static void l1_proc_bypass_wr_wait(l1_t *l1)
         return;
     }
 
-    l1_ost_ctx_t ctx;
-    u32 slot;
-    bool found = l1_find_ost_wait_slot(l1, L1_OST_BYPASS_WR, &ctx, &slot);
-    if (!found) {
+    axi4_b_if_t b;
+    itf_fifo_get_front(l1->axi4_b_slv, &b);
+    u32 slot = b.id;
+    if (slot >= l1->ost.depth || !ostq_slot_valid(&l1->ost, slot)) {
         return;
     }
 
-    axi4_b_if_t b;
-    itf_read(l1->axi4_b_slv, &b);
-    ctx.ok = (b.resp == AXI4_B_RESP_OKAY);
+    l1_ost_ctx_t ctx;
+    ostq_read_slot(&l1->ost, slot, &ctx);
+    if (ctx.kind != L1_OST_BYPASS_WR || !l1_bypass_slot_wait_rsp(&ctx)) {
+        return;
+    }
+
+    itf_fifo_pop_front(l1->axi4_b_slv);
+    bool resp_ok = b.resp == AXI4_B_RESP_OKAY;
+    ctx.ok = ctx.bypass_rsp_idx == 0 ? resp_ok : ctx.ok && resp_ok;
     ctx.data = 0;
-    ctx.rsp_vld = l1->conf.latency == 0;
-    ctx.rsp_delay_pend = l1->conf.latency != 0;
-    ctx.delay = 0;
-    ostq_write_slot(&l1->ost, slot, &ctx);
+    ctx.bypass_rsp_idx++;
+    l1_mark_bypass_rsp(l1, slot, &ctx);
+}
+
+static void l1_proc_bypass_rd_issue(l1_t *l1)
+{
+    if (itf_fifo_full(l1->axi4_ar_mst)) {
+        return;
+    }
+
+    l1_ost_ctx_t ctx;
+    u32 slot;
+    bool found = l1_find_bypass_issue_slot(l1, L1_OST_BYPASS_RD, &ctx, &slot);
+    if (!found) {
+        return;
+    }
+    l1_issue_bypass_read(l1, slot, &ctx);
+}
+
+static void l1_proc_bypass_wr_issue(l1_t *l1)
+{
+    if (itf_fifo_full(l1->axi4_aw_mst) || itf_fifo_full(l1->axi4_w_mst)) {
+        return;
+    }
+
+    l1_ost_ctx_t ctx;
+    u32 slot;
+    bool found = l1_find_bypass_issue_slot(l1, L1_OST_BYPASS_WR, &ctx, &slot);
+    if (!found) {
+        return;
+    }
+    l1_issue_bypass_write(l1, slot, &ctx);
 }
 
 static void l1_send_ost_rsp(l1_t *l1)
@@ -796,6 +938,8 @@ void l1_clock(l1_t *l1)
     }
     l1_proc_bypass_rd_wait(l1);
     l1_proc_bypass_wr_wait(l1);
+    l1_proc_bypass_rd_issue(l1);
+    l1_proc_bypass_wr_issue(l1);
     l1_proc_wb_b(l1);
     l1_proc_refill_r(l1);
     l1_proc_serve_miss(l1);

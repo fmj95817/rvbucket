@@ -9,7 +9,7 @@ module l1(
     axi4_ar_if_t.mst  mem_axi4_ar_mst,
     axi4_r_if_t.slv   mem_axi4_r_slv
 );
-    bti2axi u_bti2axi(
+    l1_bti2axi u_l1_bti2axi(
         .clk          (clk),
         .rst_n        (rst_n),
         .bti_req_slv  (host_bti_req_slv),

@@ -39,6 +39,20 @@ void bti2axi_reset(bti2axi_t *br)
     *br->perf_stg_full = 0;
 }
 
+static bool bti2axi_req_aligned(const bti_req_if_t *req)
+{
+    switch (req->size) {
+    case BTI_REQ_SIZE_B1:
+        return true;
+    case BTI_REQ_SIZE_B2:
+        return (req->addr & 0x1u) == 0;
+    case BTI_REQ_SIZE_B4:
+        return (req->addr & 0x3u) == 0;
+    default:
+        return false;
+    }
+}
+
 static void bti2axi_capture_req(bti2axi_t *br)
 {
     if (fifo_full(&br->bti_req_fifo)) {
@@ -54,6 +68,7 @@ static void bti2axi_capture_req(bti2axi_t *br)
 
     bti_req_if_t bti_req;
     itf_read(br->bti_req_slv, &bti_req);
+    DBG_CHECK(bti2axi_req_aligned(&bti_req));
     fifo_push(&br->bti_req_fifo, &bti_req);
 }
 
@@ -81,7 +96,7 @@ static void bti2axi_proc_req(bti2axi_t *br)
             .addr = bti_req.addr,
             .len = 0,
             .size = (axi4_ar_size_t)bti_req.size,
-            .burst = AXI4_AR_BURST_FIXED,
+            .burst = AXI4_AR_BURST_INCR,
             .lock = false,
             .cache = 0,
             .prot = 0,
@@ -107,7 +122,7 @@ static void bti2axi_proc_req(bti2axi_t *br)
             .addr = bti_req.addr,
             .len = 0,
             .size = (axi4_aw_size_t)bti_req.size,
-            .burst = AXI4_AW_BURST_FIXED,
+            .burst = AXI4_AW_BURST_INCR,
             .lock = false,
             .cache = 0,
             .prot = 0,

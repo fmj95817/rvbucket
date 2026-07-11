@@ -87,8 +87,8 @@ sh rm -rf ${rpt_dir}/* ${data_dir}/* ${work_dir}/*
 set_app_var search_path [concat $search_path [list \
     "${root_dir}/base/rtl" \
     "${root_dir}/design/rtl" \
-    "${root_dir}/design/rtl/core" \
     "${root_dir}/asic/stub" \
+    "${root_dir}/design/rtl/core" \
     ] ${pdk_search_path}]
 
 set_app_var synthetic_library ${synthetic_library_list}

@@ -6,7 +6,7 @@
 
 ## 系统规格
 
-- **CPU核心**: 2级流水线的RV32G (RV32IMACZicsr) CPU，含Sv32 MMU；ASM已包含TLB，RTL当前采用直接页表遍历
+- **CPU核心**: 2级流水线的RV32G (RV32IMAZicsr) CPU，ASM和RTL均包含Sv32 MMU与TLB
 - **L1 Cache**: ASM中支持可配置组相联L1指令缓存和数据缓存，支持写回；RTL缓存优化仍在开发中
 - **Boot ROM**: 2 KB
 - **Flash**: 32 MB
@@ -24,7 +24,7 @@
 
 - **RV32G指令集**: 支持 RV32I + M + A + Zicsr + Zifencei。
 - **2级流水线**: IF/EX流水线，含分支预测（BHT）。
-- **MMU与Sv32分页**: ASM支持TLB和页表遍历器；RTL当前通过直接页表遍历到达Linux smoke阶段。
+- **MMU与Sv32分页**: ASM和RTL均支持TLB和页表遍历器，RTL已可运行Linux smoke。
 - **L1缓存**: ASM支持可配置组相联L1指令/数据缓存和bypass模式；RTL缓存优化待实现。
 - **陷阱处理**: 机器态/监管态陷阱、中断、委托机制。
 - **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、GTimer、ACLINT、PLIC。
@@ -53,10 +53,13 @@
 | `./build.sh hw rtl vcs debug` | 编译RTL仿真（VCS debug + FSDB） |
 | `./build.sh hw rtl verilator` | 编译RTL仿真（Verilator） |
 | `./build.sh hw fpga xilinx` | 生成Vivado FPGA工程 |
-| `./build.sh sw` | 编译全部裸机C测试用例 |
-| `./build.sh sw <名称>` | 编译单个C测试用例 |
-| `./build.sh sw linux` | 编译Linux内核 + OpenSBI |
-| `./build.sh sw linux clean` | 清理Linux内核 + OpenSBI编译 |
+| `./build.sh sw` | 编译全部仿真裸机C测试用例，输出到 `build/sw/sim` |
+| `./build.sh sw sim <名称>` | 编译单个仿真C测试用例 |
+| `./build.sh sw board` | 编译全部真机裸机C测试用例，输出到 `build/sw/board` |
+| `./build.sh sw board <名称>` | 编译单个真机C测试用例 |
+| `./build.sh sw sim opensbi` / `./build.sh sw board opensbi` | 编译独立OpenSBI用例；当前两个profile共享同一份产物 |
+| `./build.sh sw sim linux` / `./build.sh sw board linux` | 编译Linux内核 + OpenSBI；当前两个profile共享同一份产物 |
+| `./build.sh sw sim linux clean` / `./build.sh sw board linux clean` | 清理Linux内核 + OpenSBI编译 |
 | `./build.sh ut model` | 编译全部ASM单元测试 |
 | `./build.sh ut model <名称>` | 编译单个UT或UT子目录 |
 
@@ -69,16 +72,16 @@
 cd build/hw/model
 
 # 终端模式:
-./sim_top ../../sw/<用例>/<用例>.bin
+./sim_top ../../sw/sim/<用例>/<用例>.bin
 
 # Web UI Dashboard（浏览器打开 http://localhost:5000）:
-./sim_top --web-ui ../../sw/<用例>/<用例>.bin
+./sim_top --web-ui ../../sw/sim/<用例>/<用例>.bin
 
 # Linux 快速加载（预加载kernel/initrd/dtb至DDR）:
 ./sim_top --fast-load-linux --web-ui ../../sw/linux/linux.bin
 
 # 禁用仿真结束检测（交互式使用）:
-./sim_top --no-end-detect --web-ui ../../sw/<用例>/<用例>.bin
+./sim_top --no-end-detect --web-ui ../../sw/sim/<用例>/<用例>.bin
 ```
 
 **Web UI Dashboard 功能:**
@@ -109,13 +112,13 @@ cd build/hw/model
 **RTL (VCS):**
 ```bash
 cd build/hw/vcs
-./sim_top +program=../../sw/<用例>/<用例>.hex
+./sim_top +program=../../sw/sim/<用例>/<用例>.hex
 ```
 
 **RTL (Verilator):**
 ```bash
 cd build/hw/verilator
-./obj_dir/Vsim_top +program=../../sw/<用例>/<用例>.hex
+./obj_dir/Vsim_top +program=../../sw/sim/<用例>/<用例>.hex
 ```
 
 ## 项目结构
@@ -161,11 +164,11 @@ cd build/hw/verilator
 - [x] ASM 回归套件（run.sh）
 - [x] Linux RVBucket GPIO 驱动（gpio-rvbucket, sysfs接口）
 - [x] RTL RV32G 指令集
-- [x] RTL Sv32 MMU 直接页表遍历
+- [x] RTL Sv32 MMU，含直接页表遍历和TLB优化
 - [x] RTL 到达 Linux smoke 阶段
-- [ ] RTL TLB 优化
+- [x] RTL TLB 优化
 - [ ] RTL L1 缓存优化
-- [ ] FPGA 启动 Linux 内核
+- [x] FPGA 启动 Linux 内核
 - [ ] ASM/RTL F/D 指令集扩展
 
 ## 贡献

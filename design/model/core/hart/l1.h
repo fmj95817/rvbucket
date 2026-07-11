@@ -44,6 +44,10 @@ typedef enum l1_ost_kind {
 typedef struct l1_ost_ctx {
     u32 trans_id;
     l1_ost_kind_t kind;
+    bti_req_if_t req;
+    bool bypass_split;
+    u32 bypass_req_idx;
+    u32 bypass_rsp_idx;
     bool rsp_vld;
     bool rsp_delay_pend;
     bool ok;
