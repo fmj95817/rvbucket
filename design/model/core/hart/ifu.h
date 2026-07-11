@@ -29,6 +29,7 @@ typedef struct ifu_conf {
 typedef struct ifu_ctrlq_entry {
     bool vld;
     u32 pc;
+    u32 ir;
 } ifu_ctrlq_entry_t;
 
 typedef struct ifu_fch_ost_ctx {
@@ -109,11 +110,19 @@ typedef struct ifu {
         u32 access_seq;
         struct {
             bool vld;
-            u32 pc;
             u8 counter;
+        } cond_bht[IFU_COND_BHT_SIZE];
+        struct {
+            bool vld;
+            u32 pc;
             u32 target_pc;
             u32 last_used;
-        } bht[IFU_BHT_SIZE];
+        } jalr_btb[IFU_JALR_BTB_SIZE];
+        struct {
+            u32 entry[IFU_RAS_SIZE];
+            u32 sp;
+            u32 count;
+        } ras;
     } bpu;
 
     struct {
@@ -125,6 +134,17 @@ typedef struct ifu {
         u64 *fch_rsp_inst;
         u64 *branch;
         u64 *pred_true;
+        u64 *cond_branch;
+        u64 *cond_branch_pred_true;
+        u64 *jal;
+        u64 *jal_pred_true;
+        u64 *jalr;
+        u64 *jalr_pred_true;
+        u64 *cond_bht_hit;
+        u64 *ras_pred;
+        u64 *jalr_ras_hit;
+        u64 *jalr_btb_hit;
+        u64 *jalr_btb_miss;
         u64 *fch_ost_full;
     } perf;
 } ifu_t;

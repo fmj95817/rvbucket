@@ -8,6 +8,31 @@
 #define TB_IFU_CTRLQ_DEPTH 16u
 #define TB_IFU_FCH_OST_DEPTH 8u
 
+static u32 tb_encode_jal(u32 rd, s32 imm)
+{
+    u32 uimm = (u32)imm;
+
+    return (((uimm >> 20) & 0x1) << 31) |
+           (((uimm >> 1) & 0x3ff) << 21) |
+           (((uimm >> 11) & 0x1) << 20) |
+           (((uimm >> 12) & 0xff) << 12) |
+           ((rd & 0x1f) << 7) |
+           OPCODE_JAL;
+}
+
+static u32 tb_encode_jalr(u32 rd, u32 rs1, s32 imm)
+{
+    return (((u32)imm & 0xfff) << 20) |
+           ((rs1 & 0x1f) << 15) |
+           ((rd & 0x1f) << 7) |
+           OPCODE_JALR;
+}
+
+static u32 tb_cond_bht_idx(u32 pc)
+{
+    return (pc >> 2) & (IFU_COND_BHT_SIZE - 1u);
+}
+
 typedef struct ifu_tb {
     mod_t mod;
     u64 *cycle;
@@ -283,6 +308,190 @@ TEST_CASE(ifu_tb_t, branch_mispredict)
         itf_read(&tb->fch_req_itf, &req);
         REQUIRE(req.pc == 0x80001000, "redirected fch_req at target_pc");
     }
+
+    TEST_END();
+}
+
+TEST_CASE(ifu_tb_t, ras_predicts_return)
+{
+    TEST_BEGIN("RAS Predicts Return");
+
+    const u32 call_pc = 0x80000000;
+    const u32 call_target = 0x80000100;
+    const u32 return_pc = call_pc + 4;
+    const u32 jal_ra = tb_encode_jal(1, call_target - call_pc);
+    const u32 ret = tb_encode_jalr(0, 1, 0);
+
+    tb_drain_all(tb);
+
+    RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
+    {
+        fch_req_if_t req;
+        itf_read(&tb->fch_req_itf, &req);
+        REQUIRE(req.pc == call_pc, "initial fch_req at call pc");
+    }
+
+    fch_rsp_if_t call_rsp = { .ir = jal_ra, .ok = true };
+    itf_write(&tb->fch_rsp_itf, &call_rsp);
+    tb_clock(tb);
+
+    RUN_POLL_UNTIL(tb_cond_ex_req_ready, UT_TIMEOUT);
+    {
+        ex_req_if_t req;
+        itf_read(&tb->ex_req_itf, &req);
+        REQUIRE(req.pc == call_pc, "call issued");
+        REQUIRE(req.pred_taken, "JAL predicted taken");
+        REQUIRE(req.pred_pc == call_target, "JAL predicted direct target");
+    }
+
+    RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
+    {
+        fch_req_if_t req;
+        itf_read(&tb->fch_req_itf, &req);
+        REQUIRE(req.pc == call_target, "fetch redirected to call target");
+    }
+
+    ex_rsp_if_t call_ex_rsp = {
+        .pc = call_pc,
+        .taken = true,
+        .pred_true = true,
+        .target_pc = call_target
+    };
+    itf_write(&tb->ex_rsp_itf, &call_ex_rsp);
+    tb_clock(tb);
+    REQUIRE(tb->dut.bpu.ras.count == 1, "call pushes return pc into RAS");
+
+    fch_rsp_if_t ret_rsp = { .ir = ret, .ok = true };
+    itf_write(&tb->fch_rsp_itf, &ret_rsp);
+    tb_clock(tb);
+
+    RUN_POLL_UNTIL(tb_cond_ex_req_ready, UT_TIMEOUT);
+    {
+        ex_req_if_t req;
+        itf_read(&tb->ex_req_itf, &req);
+        REQUIRE(req.pc == call_target, "return issued");
+        REQUIRE(req.pred_taken, "return predicted taken");
+        REQUIRE(req.pred_pc == return_pc, "return predicted from RAS");
+    }
+    REQUIRE(*tb->dut.perf.ras_pred == 1, "RAS prediction counter increments");
+    REQUIRE(*tb->dut.perf.jalr_ras_hit == 1,
+        "JALR RAS hit counter increments");
+
+    ex_rsp_if_t ret_ex_rsp = {
+        .pc = call_target,
+        .taken = true,
+        .pred_true = true,
+        .target_pc = return_pc
+    };
+    itf_write(&tb->ex_rsp_itf, &ret_ex_rsp);
+    tb_clock(tb);
+    REQUIRE(tb->dut.bpu.ras.count == 0, "return pops RAS");
+    REQUIRE(itf_fifo_empty(&tb->fl_req_itf), "RAS hit avoids redirect flush");
+
+    TEST_END();
+}
+
+TEST_CASE(ifu_tb_t, cond_bht_predicts_taken_target)
+{
+    TEST_BEGIN("Cond BHT Predicts Taken Target");
+
+    const u32 branch_pc = 0x80000000;
+    const u32 branch_ir = 0x00000463;
+    rv32g_inst_t branch_inst = { .raw = branch_ir };
+    const u32 branch_target = branch_pc + b_imm_decode(&branch_inst).u;
+    const u32 bht_idx = tb_cond_bht_idx(branch_pc);
+
+    tb_drain_all(tb);
+
+    tb->dut.bpu.cond_bht[bht_idx].vld = true;
+    tb->dut.bpu.cond_bht[bht_idx].counter = 3;
+
+    RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
+    {
+        fch_req_if_t req;
+        itf_read(&tb->fch_req_itf, &req);
+        REQUIRE(req.pc == branch_pc, "initial fch_req at branch pc");
+    }
+
+    fch_rsp_if_t branch_rsp = { .ir = branch_ir, .ok = true };
+    itf_write(&tb->fch_rsp_itf, &branch_rsp);
+    tb_clock(tb);
+
+    RUN_POLL_UNTIL(tb_cond_ex_req_ready, UT_TIMEOUT);
+    {
+        ex_req_if_t req;
+        itf_read(&tb->ex_req_itf, &req);
+        REQUIRE(req.pred_taken, "seeded cond BHT predicts taken");
+        REQUIRE(req.pred_pc == branch_target, "branch target is decoded");
+    }
+    REQUIRE(*tb->dut.perf.cond_bht_hit == 1,
+        "cond BHT hit counter increments");
+
+    ex_rsp_if_t branch_ex_rsp = {
+        .pc = branch_pc,
+        .taken = false,
+        .pred_true = false,
+        .target_pc = branch_pc + 4
+    };
+    itf_write(&tb->ex_rsp_itf, &branch_ex_rsp);
+    tb_clock(tb);
+
+    REQUIRE(tb->dut.bpu.cond_bht[bht_idx].counter == 2,
+        "not-taken update leaves weak-taken counter");
+
+    TEST_END();
+}
+
+TEST_CASE(ifu_tb_t, jalr_btb_predicts_target)
+{
+    TEST_BEGIN("JALR BTB Predicts Target");
+
+    const u32 jalr_pc = 0x80000000;
+    const u32 jalr_target = 0x80000200;
+    const u32 jalr = tb_encode_jalr(0, 2, 0);
+
+    tb_drain_all(tb);
+
+    tb->dut.bpu.jalr_btb[0].vld = true;
+    tb->dut.bpu.jalr_btb[0].pc = jalr_pc;
+    tb->dut.bpu.jalr_btb[0].target_pc = jalr_target;
+    tb->dut.bpu.jalr_btb[0].last_used = 1;
+
+    RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
+    {
+        fch_req_if_t req;
+        itf_read(&tb->fch_req_itf, &req);
+        REQUIRE(req.pc == jalr_pc, "initial fch_req at JALR pc");
+    }
+
+    fch_rsp_if_t jalr_rsp = { .ir = jalr, .ok = true };
+    itf_write(&tb->fch_rsp_itf, &jalr_rsp);
+    tb_clock(tb);
+
+    RUN_POLL_UNTIL(tb_cond_ex_req_ready, UT_TIMEOUT);
+    {
+        ex_req_if_t req;
+        itf_read(&tb->ex_req_itf, &req);
+        REQUIRE(req.pc == jalr_pc, "JALR issued");
+        REQUIRE(req.pred_taken, "JALR BTB predicts taken");
+        REQUIRE(req.pred_pc == jalr_target, "JALR BTB target is used");
+    }
+    REQUIRE(*tb->dut.perf.jalr_btb_hit == 1,
+        "JALR BTB hit counter increments");
+    REQUIRE(*tb->dut.perf.jalr_btb_miss == 0,
+        "JALR BTB miss counter stays clear");
+
+    ex_rsp_if_t jalr_ex_rsp = {
+        .pc = jalr_pc,
+        .taken = true,
+        .pred_true = true,
+        .target_pc = jalr_target
+    };
+    itf_write(&tb->ex_rsp_itf, &jalr_ex_rsp);
+    tb_clock(tb);
+    REQUIRE(tb->dut.bpu.jalr_btb[0].target_pc == jalr_target,
+        "JALR BTB target remains trained");
+    REQUIRE(itf_fifo_empty(&tb->fl_req_itf), "JALR BTB hit avoids flush");
 
     TEST_END();
 }
@@ -688,6 +897,9 @@ int main(void)
     TEST_RUN(normal_fetch_issue);
     TEST_RUN(fetch_error_retry);
     TEST_RUN(branch_mispredict);
+    TEST_RUN(ras_predicts_return);
+    TEST_RUN(cond_bht_predicts_taken_target);
+    TEST_RUN(jalr_btb_predicts_target);
     TEST_RUN(fetch_fault_squashed_by_branch);
     TEST_RUN(trap_redirect);
     TEST_RUN(trap_blocks_during_ctrlq);

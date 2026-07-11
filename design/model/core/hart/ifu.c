@@ -6,6 +6,22 @@
 #include "dbg/pcm.h"
 #include "dbg/env.h"
 
+#define IFU_RAS_LINK_RA 1u
+#define IFU_RAS_LINK_T0 5u
+
+static inline void sat_counter_update(u8 *cnt, bool taken)
+{
+    if (taken) {
+        if (*cnt < 3) {
+            (*cnt)++;
+        }
+    } else {
+        if (*cnt > 0) {
+            (*cnt)--;
+        }
+    }
+}
+
 void ifu_construct(ifu_t *ifu, const char *parent, const char *name,
     const ifu_conf_t *conf)
 {
@@ -15,6 +31,10 @@ void ifu_construct(ifu_t *ifu, const char *parent, const char *name,
     DBG_CHECK(conf);
     DBG_CHECK(conf->ctrlq_depth > 0);
     DBG_CHECK(conf->fch_ost_depth > 0);
+    DBG_CHECK(IFU_COND_BHT_SIZE > 0);
+    DBG_CHECK((IFU_COND_BHT_SIZE & (IFU_COND_BHT_SIZE - 1u)) == 0);
+    DBG_CHECK(IFU_JALR_BTB_SIZE > 0);
+    DBG_CHECK(IFU_RAS_SIZE > 0);
 
     ifu->reset_pc = conf->reset_pc;
     ifu->ctrlq_depth = conf->ctrlq_depth;
@@ -36,6 +56,25 @@ void ifu_construct(ifu_t *ifu, const char *parent, const char *name,
         "fch_rsp_inst");
     ifu->perf.branch = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "branch");
     ifu->perf.pred_true = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "pred_true");
+    ifu->perf.cond_branch = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "cond_branch");
+    ifu->perf.cond_branch_pred_true = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "cond_branch_pred_true");
+    ifu->perf.jal = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "jal");
+    ifu->perf.jal_pred_true = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "jal_pred_true");
+    ifu->perf.jalr = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "jalr");
+    ifu->perf.jalr_pred_true = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "jalr_pred_true");
+    ifu->perf.cond_bht_hit = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "cond_bht_hit");
+    ifu->perf.ras_pred = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name, "ras_pred");
+    ifu->perf.jalr_ras_hit = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "jalr_ras_hit");
+    ifu->perf.jalr_btb_hit = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "jalr_btb_hit");
+    ifu->perf.jalr_btb_miss = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
+        "jalr_btb_miss");
     ifu->perf.fch_ost_full = dbg_pcm_reg_perf_cnt(ifu->mod.hier_name,
         "fch_ost_full");
 
@@ -51,6 +90,7 @@ void ifu_construct(ifu_t *ifu, const char *parent, const char *name,
     dbg_vcd_add_sig("redirect_state", DBG_SIG_TYPE_REG, 2, &ifu->redirect.state);
     dbg_vcd_add_sig("redirect_pc", DBG_SIG_TYPE_REG, 32, &ifu->redirect.pc);
     dbg_vcd_add_sig("ctrlq_entry_num", DBG_SIG_TYPE_REG, 32, &ifu->ctrlq.num);
+    dbg_vcd_add_sig("ras_count", DBG_SIG_TYPE_REG, 32, &ifu->bpu.ras.count);
 }
 
 void ifu_reset(ifu_t *ifu)
@@ -76,17 +116,36 @@ void ifu_reset(ifu_t *ifu)
     fifo_reset(&ifu->ctrlq);
 
     ifu->bpu.access_seq = 0;
-    for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
-        ifu->bpu.bht[i].vld = false;
-        ifu->bpu.bht[i].pc = 0;
-        ifu->bpu.bht[i].counter = 0;
-        ifu->bpu.bht[i].target_pc = 0;
-        ifu->bpu.bht[i].last_used = 0;
+    for (u32 i = 0; i < IFU_COND_BHT_SIZE; i++) {
+        ifu->bpu.cond_bht[i].vld = false;
+        ifu->bpu.cond_bht[i].counter = 0;
+    }
+    for (u32 i = 0; i < IFU_JALR_BTB_SIZE; i++) {
+        ifu->bpu.jalr_btb[i].vld = false;
+        ifu->bpu.jalr_btb[i].pc = 0;
+        ifu->bpu.jalr_btb[i].target_pc = 0;
+        ifu->bpu.jalr_btb[i].last_used = 0;
+    }
+    ifu->bpu.ras.sp = 0;
+    ifu->bpu.ras.count = 0;
+    for (u32 i = 0; i < IFU_RAS_SIZE; i++) {
+        ifu->bpu.ras.entry[i] = 0;
     }
 
     *ifu->perf.fch_rsp_inst = 0;
     *ifu->perf.branch = 0;
     *ifu->perf.pred_true = 0;
+    *ifu->perf.cond_branch = 0;
+    *ifu->perf.cond_branch_pred_true = 0;
+    *ifu->perf.jal = 0;
+    *ifu->perf.jal_pred_true = 0;
+    *ifu->perf.jalr = 0;
+    *ifu->perf.jalr_pred_true = 0;
+    *ifu->perf.cond_bht_hit = 0;
+    *ifu->perf.ras_pred = 0;
+    *ifu->perf.jalr_ras_hit = 0;
+    *ifu->perf.jalr_btb_hit = 0;
+    *ifu->perf.jalr_btb_miss = 0;
     *ifu->perf.fch_ost_full = 0;
 }
 
@@ -149,13 +208,17 @@ static void ifu_request_redirect(ifu_t *ifu, u32 pc, ifu_redirect_state_t state)
     ifu->redirect.state = state;
 }
 
-static void ifu_ctrlq_push(ifu_t *ifu, u32 pc)
+static void ifu_ctrlq_push(ifu_t *ifu, u32 pc, u32 ir)
 {
-    ifu_ctrlq_entry_t entry = { .vld = true, .pc = pc };
+    ifu_ctrlq_entry_t entry = {
+        .vld = true,
+        .pc = pc,
+        .ir = ir
+    };
     fifo_push(&ifu->ctrlq, &entry);
 }
 
-static bool ifu_ctrlq_pop_valid(ifu_t *ifu, u32 pc)
+static bool ifu_ctrlq_pop_valid(ifu_t *ifu, u32 pc, ifu_ctrlq_entry_t *out)
 {
     if (fifo_empty(&ifu->ctrlq)) {
         return false;
@@ -174,6 +237,9 @@ static bool ifu_ctrlq_pop_valid(ifu_t *ifu, u32 pc)
     }
 
     fifo_pop(&ifu->ctrlq, &entry);
+    if (out != NULL) {
+        *out = entry;
+    }
 
     return true;
 }
@@ -219,6 +285,145 @@ static bool ifu_proc_frontend_flush(ifu_t *ifu)
     ifu_ctrlq_flush(ifu);
     ifu_flush_fetch_path(ifu, ifu->exu_state_i->irq_epc);
     return true;
+}
+
+static bool ifu_bpu_is_link_reg(u32 reg)
+{
+    return reg == IFU_RAS_LINK_RA || reg == IFU_RAS_LINK_T0;
+}
+
+static bool ifu_bpu_jalr_reads_ras(const rv32g_inst_t *inst)
+{
+    bool rd_link = ifu_bpu_is_link_reg(inst->i.rd);
+    bool rs1_link = ifu_bpu_is_link_reg(inst->i.rs1);
+
+    return rs1_link && (!rd_link || inst->i.rd != inst->i.rs1);
+}
+
+static void ifu_bpu_ras_push(ifu_t *ifu, u32 pc)
+{
+    if (IFU_RAS_SIZE == 0) {
+        return;
+    }
+
+    ifu->bpu.ras.entry[ifu->bpu.ras.sp] = pc;
+    ifu->bpu.ras.sp = (ifu->bpu.ras.sp + 1) % IFU_RAS_SIZE;
+    if (ifu->bpu.ras.count < IFU_RAS_SIZE) {
+        ifu->bpu.ras.count++;
+    }
+}
+
+static bool ifu_bpu_ras_peek(ifu_t *ifu, u32 *pc)
+{
+    if (ifu->bpu.ras.count == 0) {
+        return false;
+    }
+
+    u32 idx = (ifu->bpu.ras.sp + IFU_RAS_SIZE - 1) % IFU_RAS_SIZE;
+    *pc = ifu->bpu.ras.entry[idx];
+    return true;
+}
+
+static void ifu_bpu_ras_pop(ifu_t *ifu)
+{
+    if (ifu->bpu.ras.count == 0) {
+        return;
+    }
+
+    ifu->bpu.ras.sp = (ifu->bpu.ras.sp + IFU_RAS_SIZE - 1) % IFU_RAS_SIZE;
+    ifu->bpu.ras.count--;
+}
+
+static void ifu_update_bpu_ras(ifu_t *ifu, const ifu_ctrlq_entry_t *entry)
+{
+    if (!ifu->bpu.enable) {
+        return;
+    }
+
+    rv32g_inst_t inst = { .raw = entry->ir };
+    if (inst.base.opcode == OPCODE_JAL) {
+        if (ifu_bpu_is_link_reg(inst.j.rd)) {
+            ifu_bpu_ras_push(ifu, entry->pc + 4);
+        }
+        return;
+    }
+
+    if (inst.base.opcode != OPCODE_JALR) {
+        return;
+    }
+
+    bool rd_link = ifu_bpu_is_link_reg(inst.i.rd);
+    bool rs1_link = ifu_bpu_is_link_reg(inst.i.rs1);
+
+    if (!rd_link && rs1_link) {
+        ifu_bpu_ras_pop(ifu);
+    } else if (rd_link && !rs1_link) {
+        ifu_bpu_ras_push(ifu, entry->pc + 4);
+    } else if (rd_link && rs1_link) {
+        if (inst.i.rd != inst.i.rs1) {
+            ifu_bpu_ras_pop(ifu);
+        }
+        ifu_bpu_ras_push(ifu, entry->pc + 4);
+    }
+}
+
+static u32 ifu_cond_bht_idx(u32 pc)
+{
+    return (pc >> 2) & (IFU_COND_BHT_SIZE - 1u);
+}
+
+static bool ifu_jalr_btb_lookup(ifu_t *ifu, u32 pc, u32 *target_pc)
+{
+    ifu->bpu.access_seq++;
+    for (u32 i = 0; i < IFU_JALR_BTB_SIZE; i++) {
+        if (!ifu->bpu.jalr_btb[i].vld) {
+            continue;
+        }
+
+        if (ifu->bpu.jalr_btb[i].pc == pc) {
+            ifu->bpu.jalr_btb[i].last_used = ifu->bpu.access_seq;
+            *target_pc = ifu->bpu.jalr_btb[i].target_pc;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void ifu_update_jalr_btb(ifu_t *ifu, u32 pc, u32 target_pc)
+{
+    ifu->bpu.access_seq++;
+    for (u32 i = 0; i < IFU_JALR_BTB_SIZE; i++) {
+        if (ifu->bpu.jalr_btb[i].vld && ifu->bpu.jalr_btb[i].pc == pc) {
+            ifu->bpu.jalr_btb[i].target_pc = target_pc;
+            ifu->bpu.jalr_btb[i].last_used = ifu->bpu.access_seq;
+            return;
+        }
+    }
+
+    for (u32 i = 0; i < IFU_JALR_BTB_SIZE; i++) {
+        if (!ifu->bpu.jalr_btb[i].vld) {
+            ifu->bpu.jalr_btb[i].vld = true;
+            ifu->bpu.jalr_btb[i].pc = pc;
+            ifu->bpu.jalr_btb[i].target_pc = target_pc;
+            ifu->bpu.jalr_btb[i].last_used = ifu->bpu.access_seq;
+            return;
+        }
+    }
+
+    u32 lru_idx = 0;
+    u32 lru_min = ifu->bpu.jalr_btb[0].last_used;
+    for (u32 i = 1; i < IFU_JALR_BTB_SIZE; i++) {
+        if (ifu->bpu.jalr_btb[i].last_used < lru_min) {
+            lru_idx = i;
+            lru_min = ifu->bpu.jalr_btb[i].last_used;
+        }
+    }
+
+    ifu->bpu.jalr_btb[lru_idx].vld = true;
+    ifu->bpu.jalr_btb[lru_idx].pc = pc;
+    ifu->bpu.jalr_btb[lru_idx].target_pc = target_pc;
+    ifu->bpu.jalr_btb[lru_idx].last_used = ifu->bpu.access_seq;
 }
 
 static void ifu_send_fch(ifu_t *ifu)
@@ -327,25 +532,45 @@ static void ifu_bpu_pred(ifu_t *ifu, u32 pc, bool is_branch)
         return;
     }
 
-    ifu->bpu.access_seq++;
+    if (inst.base.opcode == OPCODE_BRANCH) {
+        i32 offset = b_imm_decode(&inst);
+        u32 idx = ifu_cond_bht_idx(pc);
 
-    for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
-        if (!ifu->bpu.bht[i].vld) {
-            continue;
+        if (ifu->bpu.cond_bht[idx].vld) {
+            (*ifu->perf.cond_bht_hit)++;
+            ifu->issue.pred_taken = (ifu->bpu.cond_bht[idx].counter >= 2);
+            if (ifu->issue.pred_taken) {
+                ifu->issue.pred_target_pc = pc + offset.u;
+            }
+            return;
         }
-        if (ifu->bpu.bht[i].pc == pc) {
-            ifu->bpu.bht[i].last_used = ifu->bpu.access_seq;
-            ifu->issue.pred_taken = (ifu->bpu.bht[i].counter >= 2);
-            ifu->issue.pred_target_pc = ifu->bpu.bht[i].target_pc;
+
+        if (offset.s < 0) {
+            ifu->issue.pred_taken = true;
+            ifu->issue.pred_target_pc = pc + offset.u;
+        }
+        return;
+    }
+
+    if (inst.base.opcode == OPCODE_JALR && ifu_bpu_jalr_reads_ras(&inst)) {
+        u32 target_pc;
+        if (ifu_bpu_ras_peek(ifu, &target_pc)) {
+            ifu->issue.pred_taken = true;
+            ifu->issue.pred_target_pc = target_pc;
+            (*ifu->perf.ras_pred)++;
+            (*ifu->perf.jalr_ras_hit)++;
             return;
         }
     }
 
-    if (inst.base.opcode == OPCODE_BRANCH) {
-        i32 offset = b_imm_decode(&inst);
-        if (offset.s < 0) {
+    if (inst.base.opcode == OPCODE_JALR) {
+        u32 target_pc;
+        if (ifu_jalr_btb_lookup(ifu, pc, &target_pc)) {
             ifu->issue.pred_taken = true;
-            ifu->issue.pred_target_pc = pc + offset.u;
+            ifu->issue.pred_target_pc = target_pc;
+            (*ifu->perf.jalr_btb_hit)++;
+        } else {
+            (*ifu->perf.jalr_btb_miss)++;
         }
     }
 }
@@ -446,68 +671,36 @@ static void ifu_send_ex_req(ifu_t *ifu)
     itf_write(ifu->ex_req_mst, &ex_req);
 
     if (ifu->issue.is_ctrl) {
-        ifu_ctrlq_push(ifu, ifu->issue.pc);
+        ifu_ctrlq_push(ifu, ifu->issue.pc, ifu->issue.ir);
     }
 
     ifu->issue.vld = false;
     ifu->issue.is_ctrl = false;
 }
 
-static inline void sat_counter_update(u8 *cnt, bool taken)
-{
-    if (taken) {
-        if (*cnt < 3) {
-            (*cnt)++;
-        }
-    } else {
-        if (*cnt > 0) {
-            (*cnt)--;
-        }
-    }
-}
-
-static void ifu_update_bpu_bht(ifu_t *ifu, const ex_rsp_if_t *ex_rsp)
+static void ifu_update_bpu_tables(ifu_t *ifu,
+    const ifu_ctrlq_entry_t *entry, const ex_rsp_if_t *ex_rsp)
 {
     if (!ifu->bpu.enable) {
         return;
     }
 
-    ifu->bpu.access_seq++;
-
-    for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
-        if (ifu->bpu.bht[i].vld && ifu->bpu.bht[i].pc == ex_rsp->pc) {
-            sat_counter_update(&ifu->bpu.bht[i].counter, ex_rsp->taken);
-            ifu->bpu.bht[i].target_pc = ex_rsp->target_pc;
-            ifu->bpu.bht[i].last_used = ifu->bpu.access_seq;
-            return;
+    rv32g_inst_t inst = { .raw = entry->ir };
+    if (inst.base.opcode == OPCODE_BRANCH) {
+        u32 idx = ifu_cond_bht_idx(entry->pc);
+        if (!ifu->bpu.cond_bht[idx].vld) {
+            ifu->bpu.cond_bht[idx].vld = true;
+            ifu->bpu.cond_bht[idx].counter = ex_rsp->taken ? 2 : 1;
+        } else {
+            sat_counter_update(&ifu->bpu.cond_bht[idx].counter,
+                ex_rsp->taken);
         }
+        return;
     }
 
-    for (u32 i = 0; i < IFU_BHT_SIZE; i++) {
-        if (!ifu->bpu.bht[i].vld) {
-            ifu->bpu.bht[i].vld = true;
-            ifu->bpu.bht[i].pc = ex_rsp->pc;
-            ifu->bpu.bht[i].counter = ex_rsp->taken ? 2 : 1;
-            ifu->bpu.bht[i].target_pc = ex_rsp->target_pc;
-            ifu->bpu.bht[i].last_used = ifu->bpu.access_seq;
-            return;
-        }
+    if (inst.base.opcode == OPCODE_JALR) {
+        ifu_update_jalr_btb(ifu, entry->pc, ex_rsp->target_pc);
     }
-
-    u32 lru_idx = 0;
-    u32 lru_min = ifu->bpu.bht[0].last_used;
-    for (u32 i = 1; i < IFU_BHT_SIZE; i++) {
-        if (ifu->bpu.bht[i].last_used < lru_min) {
-            lru_idx = i;
-            lru_min = ifu->bpu.bht[i].last_used;
-        }
-    }
-
-    ifu->bpu.bht[lru_idx].vld = true;
-    ifu->bpu.bht[lru_idx].pc = ex_rsp->pc;
-    ifu->bpu.bht[lru_idx].counter = ex_rsp->taken ? 2 : 1;
-    ifu->bpu.bht[lru_idx].target_pc = ex_rsp->target_pc;
-    ifu->bpu.bht[lru_idx].last_used = ifu->bpu.access_seq;
 }
 
 static void ifu_proc_ex_rsp(ifu_t *ifu)
@@ -523,22 +716,39 @@ static void ifu_proc_ex_rsp(ifu_t *ifu)
     ex_rsp_if_t ex_rsp;
     itf_read(ifu->ex_rsp_slv, &ex_rsp);
 
-    if (!ifu_ctrlq_pop_valid(ifu, ex_rsp.pc)) {
+    ifu_ctrlq_entry_t ctrl;
+    if (!ifu_ctrlq_pop_valid(ifu, ex_rsp.pc, &ctrl)) {
         return;
     }
 
     bool is_boot = ADDR_IN(ex_rsp.pc,
         ifu->boot_rom_info.base, ifu->boot_rom_info.size);
+    rv32g_inst_t inst = { .raw = ctrl.ir };
 
     if (!is_boot) {
         (*ifu->perf.branch)++;
+        if (inst.base.opcode == OPCODE_BRANCH) {
+            (*ifu->perf.cond_branch)++;
+        } else if (inst.base.opcode == OPCODE_JAL) {
+            (*ifu->perf.jal)++;
+        } else if (inst.base.opcode == OPCODE_JALR) {
+            (*ifu->perf.jalr)++;
+        }
     }
 
-    ifu_update_bpu_bht(ifu, &ex_rsp);
+    ifu_update_bpu_tables(ifu, &ctrl, &ex_rsp);
+    ifu_update_bpu_ras(ifu, &ctrl);
 
     if (ex_rsp.pred_true) {
         if (!is_boot) {
             (*ifu->perf.pred_true)++;
+            if (inst.base.opcode == OPCODE_BRANCH) {
+                (*ifu->perf.cond_branch_pred_true)++;
+            } else if (inst.base.opcode == OPCODE_JAL) {
+                (*ifu->perf.jal_pred_true)++;
+            } else if (inst.base.opcode == OPCODE_JALR) {
+                (*ifu->perf.jalr_pred_true)++;
+            }
         }
         return;
     }
