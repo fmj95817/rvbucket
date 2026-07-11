@@ -10,6 +10,7 @@ module fpga_top #(
     input logic                         rst_n,
     output logic                        uart_tx,
     input logic                         uart_rx,
+    output logic [7:0]                  led,
 
     inout logic [DDR_DQ_WIDTH-1:0]      ddr3_dq,
     inout logic [DDR_DQS_WIDTH-1:0]     ddr3_dqs_n,
@@ -61,6 +62,7 @@ module fpga_top #(
     assign ddr_rst_n = ddr_rst_n_pipe[2];
     assign soc_rst_n_gated = soc_rst_n && soc_start_done;
     assign uart_tx = soc_uart_tx;
+    assign led = gpio_out[7:0];
 
     always_ff @(posedge clk_50m or negedge rst_n) begin
         if (!rst_n) begin

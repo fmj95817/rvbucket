@@ -11,7 +11,15 @@
         "flash_dq[1]": "A25",
         "flash_dq[2]": "B22",
         "flash_dq[3]": "A22",
-        "flash_ce_n": "C23"
+        "flash_ce_n": "C23",
+        "led[0]": "A23",
+        "led[1]": "A24",
+        "led[2]": "D23",
+        "led[3]": "C24",
+        "led[4]": "C26",
+        "led[5]": "D24",
+        "led[6]": "D25",
+        "led[7]": "E25"
     },
 
     "qspi_flash": {
