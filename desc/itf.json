@@ -152,8 +152,7 @@
         },
 
         "l1_flush": {
-            "type": "vld",
-            "model_only": true,
+            "type": "vld-rdy",
             "payloads": []
         },
 

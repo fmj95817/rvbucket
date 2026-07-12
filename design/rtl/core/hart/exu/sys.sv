@@ -12,8 +12,11 @@ module exu_sys_handler(
     exu_csr_write_req_if_t.mst csr_write_req_mst,
     csr_exu_write_rsp_if_t.slv csr_write_rsp_slv,
     tlb_flush_if_t.mst tlb_flush_mst,
+    l1_flush_if_t.mst l1i_flush_mst,
+    l1_flush_if_t.mst l1d_flush_mst,
     input logic [1:0] priv,
     input logic [31:0] pc,
+    output logic done,
     hart_expt_if_t.mst ex_expt_mst
 );
     wire csr_inst = sel && inst.base.opcode == OPCODE_SYSTEM && inst.i.funct3 != 3'b000;
@@ -24,6 +27,29 @@ module exu_sys_handler(
     wire sfence_vma = sel && inst.base.opcode == OPCODE_SYSTEM &&
         inst.i.funct3 == 3'b000 && inst.r.funct7 == 7'b0001001 &&
         inst.r.rd == 5'b00000;
+    wire fence_i = sel && inst.base.opcode == OPCODE_MISC_MEM &&
+        inst.i.funct3 == 3'b001;
+    logic l1i_flush_done;
+    logic l1d_flush_done;
+    wire l1i_flush_fire = l1i_flush_mst.vld && l1i_flush_mst.rdy;
+    wire l1d_flush_fire = l1d_flush_mst.vld && l1d_flush_mst.rdy;
+    wire l1i_flush_done_now = l1i_flush_done || l1i_flush_fire;
+    wire l1d_flush_done_now = l1d_flush_done || l1d_flush_fire;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            l1i_flush_done <= 1'b0;
+            l1d_flush_done <= 1'b0;
+        end else if (!fence_i || done) begin
+            l1i_flush_done <= 1'b0;
+            l1d_flush_done <= 1'b0;
+        end else begin
+            if (l1i_flush_fire)
+                l1i_flush_done <= 1'b1;
+            if (l1d_flush_fire)
+                l1d_flush_done <= 1'b1;
+        end
+    end
 
     always_comb begin
         csr_write_val = csr_read_rsp_slv.pkt.val;
@@ -58,6 +84,9 @@ module exu_sys_handler(
     assign csr_write_req_mst.pkt.val = csr_write_val;
     assign csr_write_req_mst.pkt.priv = priv;
     assign tlb_flush_mst.vld = sfence_vma;
+    assign l1i_flush_mst.vld = fence_i && !l1i_flush_done;
+    assign l1d_flush_mst.vld = fence_i && !l1d_flush_done;
+    assign done = !fence_i || (l1i_flush_done_now && l1d_flush_done_now);
 
     assign ex_expt_mst.vld = sel && inst.base.opcode == OPCODE_SYSTEM &&
         inst.i.funct3 == 0 && (inst.i.imm_11_0 == 12'h000 ||

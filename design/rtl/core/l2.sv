@@ -66,7 +66,7 @@ module l2(
                 wr_active_d <= wr_select_d;
                 wr_rr_d <= !wr_select_d;
                 wr_aw_done <= wr_aw_hsk;
-                wr_w_done <= wr_w_hsk;
+                wr_w_done <= wr_w_hsk && mem_axi4_w_mst.pkt.last;
             end else if (wr_active && wr_rsp_hsk) begin
                 wr_active <= 1'b0;
                 wr_aw_done <= 1'b0;
@@ -75,7 +75,7 @@ module l2(
                 if (wr_aw_hsk) begin
                     wr_aw_done <= 1'b1;
                 end
-                if (wr_w_hsk) begin
+                if (wr_w_hsk && mem_axi4_w_mst.pkt.last) begin
                     wr_w_done <= 1'b1;
                 end
             end

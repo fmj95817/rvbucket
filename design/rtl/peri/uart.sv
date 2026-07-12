@@ -8,7 +8,7 @@ module uart_tx #(
     input  logic [7:0]     ch,
     output logic           done,
     output logic           tx
-);
+    );
     logic [9:0] bit_sr;
     logic       se;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -101,6 +101,7 @@ module uart_rx #(
 
     logic [3:0] baud_cnt;
     logic       baud_cnt_inc;
+    logic       ch_done;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             baud_cnt <= 4'd0;
@@ -150,7 +151,6 @@ module uart_rx #(
             rx_pend <= 1'b0;
     end
 
-    logic ch_done;
     logic ch_vld_q;
     logic [7:0] ch_q;
     always_ff @(posedge clk or negedge rst_n) begin
