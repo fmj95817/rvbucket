@@ -40,6 +40,46 @@
             ]
         },
 
+        "bpu_pred_req": {
+            "type": "none",
+            "payloads": [
+                { "name": "vld", "width": 1 },
+                { "name": "pc", "width": 32 },
+                { "name": "ir", "width": 32 }
+            ]
+        },
+        "bpu_pred_rsp": {
+            "type": "none",
+            "payloads": [
+                { "name": "vld", "width": 1 },
+                { "name": "is_ctrl", "width": 1 },
+                { "name": "pred_taken", "width": 1 },
+                { "name": "pred_pc", "width": 32 },
+                { "name": "cond_bht_hit", "width": 1 },
+                { "name": "jalr_ras_hit", "width": 1 },
+                { "name": "jalr_btb_hit", "width": 1 },
+                { "name": "jalr_btb_miss", "width": 1 }
+            ]
+        },
+        "bpu_update": {
+            "type": "none",
+            "payloads": [
+                { "name": "vld", "width": 1 },
+                { "name": "pc", "width": 32 },
+                { "name": "ir", "width": 32 },
+                { "name": "taken", "width": 1 },
+                { "name": "target_pc", "width": 32 },
+                { "name": "pred_taken", "width": 1 },
+                { "name": "pred_pc", "width": 32 },
+                { "name": "pred_true", "width": 1 },
+                { "name": "is_boot_code", "width": 1 },
+                { "name": "pred_cond_bht_hit", "width": 1 },
+                { "name": "pred_jalr_ras_hit", "width": 1 },
+                { "name": "pred_jalr_btb_hit", "width": 1 },
+                { "name": "pred_jalr_btb_miss", "width": 1 }
+            ]
+        },
+
         "exu_csr_read_req": {
             "type": "none",
             "payloads": [

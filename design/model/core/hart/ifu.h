@@ -11,6 +11,9 @@
 #include "itf/fch_req_if.h"
 #include "itf/fch_rsp_if.h"
 #include "itf/fl_req_if.h"
+#include "itf/bpu_pred_req_if.h"
+#include "itf/bpu_pred_rsp_if.h"
+#include "itf/bpu_update_if.h"
 #include "itf/hart_expt_if.h"
 #include "itf/l1_flush_if.h"
 #include "itf/trap_send_if.h"
@@ -30,6 +33,12 @@ typedef struct ifu_ctrlq_entry {
     bool vld;
     u32 pc;
     u32 ir;
+    bool pred_taken;
+    u32 pred_pc;
+    bool pred_cond_bht_hit;
+    bool pred_jalr_ras_hit;
+    bool pred_jalr_btb_hit;
+    bool pred_jalr_btb_miss;
 } ifu_ctrlq_entry_t;
 
 typedef struct ifu_fch_ost_ctx {
@@ -68,6 +77,9 @@ typedef struct ifu {
     itf_t *ex_req_mst;
     itf_t *ex_rsp_slv;
     itf_t *fl_req_mst;
+    itf_t *bpu_pred_req_mst;
+    itf_t *bpu_pred_rsp_slv;
+    itf_t *bpu_update_mst;
     itf_t *fch_expt_mst;
     itf_t *trap_send_slv;
     itf_t *tlb_flush_slv;
@@ -85,6 +97,7 @@ typedef struct ifu {
         u32 ir;
         u32 epoch;
     } fch;
+    bool back_blocked;
 
     ostq_t fch_ost;
     fifo_t fch_rspq;
@@ -95,7 +108,13 @@ typedef struct ifu {
         u32 ir;
         u32 pred_target_pc;
         bool pred_taken;
+        bool pred_vld;
+        bool pred_redirected;
         bool is_ctrl;
+        bool pred_cond_bht_hit;
+        bool pred_jalr_ras_hit;
+        bool pred_jalr_btb_hit;
+        bool pred_jalr_btb_miss;
     } issue;
 
     struct {
@@ -106,45 +125,12 @@ typedef struct ifu {
     fifo_t ctrlq;
 
     struct {
-        bool enable;
-        u32 access_seq;
-        struct {
-            bool vld;
-            u8 counter;
-        } cond_bht[IFU_COND_BHT_SIZE];
-        struct {
-            bool vld;
-            u32 pc;
-            u32 target_pc;
-            u32 last_used;
-        } jalr_btb[IFU_JALR_BTB_SIZE];
-        struct {
-            u32 entry[IFU_RAS_SIZE];
-            u32 sp;
-            u32 count;
-        } ras;
-    } bpu;
-
-    struct {
         u32 base;
         u32 size;
     } boot_rom_info;
 
     struct {
         u64 *fch_rsp_inst;
-        u64 *branch;
-        u64 *pred_true;
-        u64 *cond_branch;
-        u64 *cond_branch_pred_true;
-        u64 *jal;
-        u64 *jal_pred_true;
-        u64 *jalr;
-        u64 *jalr_pred_true;
-        u64 *cond_bht_hit;
-        u64 *ras_pred;
-        u64 *jalr_ras_hit;
-        u64 *jalr_btb_hit;
-        u64 *jalr_btb_miss;
         u64 *fch_ost_full;
     } perf;
 } ifu_t;
