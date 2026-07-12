@@ -2,7 +2,6 @@
 
 interface l1_flush_if_t;
     logic vld;
-    logic rdy;
 
 `ifdef RVB_ITF_TRACE_ENABLED
 
@@ -10,8 +9,8 @@ interface l1_flush_if_t;
         __itf_trace_pkt_str = "00000000";
     endfunction
 `endif
-    modport mst (output vld, input rdy);
-    modport slv (input vld, output rdy);
+    modport mst (output vld);
+    modport slv (input vld);
 
-    `RVB_ITF_TRACE_WHEN("mst", "slv", vld && rdy)
+    `RVB_ITF_TRACE_WHEN("drv", "", vld)
 endinterface

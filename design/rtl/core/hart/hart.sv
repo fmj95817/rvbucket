@@ -222,7 +222,7 @@ module hart(
         end else if (rtl_progress_en) begin
             rtl_progress_cycle <= rtl_progress_cycle + 1;
             if (rtl_progress_cycle[19:0] == 20'h0) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d pc=%08x ex=%0b/%0b fch=%0b/%0b:%0b/%0b ldst=%0b/%0b:%0b/%0b pa_i=%0b/%0b:%0b/%0b pa_d=%0b/%0b:%0b/%0b flush_i=%0b/%0b flush_d=%0b/%0b",
+                $display("[RTL_PROGRESS][%m] cycle=%0d pc=%08x ex=%0b/%0b fch=%0b/%0b:%0b/%0b ldst=%0b/%0b:%0b/%0b pa_i=%0b/%0b:%0b/%0b pa_d=%0b/%0b:%0b/%0b flush_i=%0b flush_d=%0b",
                     rtl_progress_cycle,
                     exu_state_if.pkt.pc,
                     ex_req_if.vld, ex_req_if.rdy,
@@ -234,8 +234,8 @@ module hart(
                     pa_i_bti_rsp_if.vld, pa_i_bti_rsp_if.rdy,
                     pa_d_bti_req_if.vld, pa_d_bti_req_if.rdy,
                     pa_d_bti_rsp_if.vld, pa_d_bti_rsp_if.rdy,
-                    l1i_flush_if.vld, l1i_flush_if.rdy,
-                    l1d_flush_if.vld, l1d_flush_if.rdy);
+                    l1i_flush_if.vld,
+                    l1d_flush_if.vld);
             end
         end
     end

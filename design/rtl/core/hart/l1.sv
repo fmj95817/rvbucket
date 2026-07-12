@@ -109,6 +109,7 @@ module l1 #(
     logic [31:0] wb_word_data;
     logic [SET_W-1:0] flush_set;
     logic [WAY_W-1:0] flush_way;
+    logic flush_pending;
 
     logic [TAG_W-1:0] tag_ram[WAY_NUM][SET_NUM];
     logic valid_ram[WAY_NUM][SET_NUM];
@@ -150,6 +151,15 @@ module l1 #(
         state == S_BYPASS_RD_RESP1 ||
         state == S_BYPASS_WR_SEND1 ||
         state == S_BYPASS_WR_RESP1;
+    wire flush_active =
+        state == S_FLUSH_CHECK ||
+        state == S_FLUSH_WB_AW ||
+        state == S_FLUSH_WB_READ ||
+        state == S_FLUSH_WB_CAPTURE ||
+        state == S_FLUSH_WB_W ||
+        state == S_FLUSH_WB_B ||
+        state == S_FLUSH_DONE;
+    wire flush_req = flush_slv.vld || flush_pending;
 
     function automatic logic [WAY_W-1:0] way_idx(input int unsigned idx);
         way_idx = idx[WAY_W-1:0];
@@ -396,6 +406,7 @@ module l1 #(
             wb_word_data <= '0;
             flush_set <= '0;
             flush_way <= '0;
+            flush_pending <= 1'b0;
             for (int w = 0; w < WAY_NUM; w++) begin
                 for (int s = 0; s < SET_NUM; s++) begin
                     tag_ram[w][s] <= '0;
@@ -406,11 +417,15 @@ module l1 #(
             for (int s = 0; s < SET_NUM; s++)
                 replace_way[s] <= '0;
         end else begin
+            if (flush_slv.vld && state != S_IDLE && !flush_active)
+                flush_pending <= 1'b1;
+
             unique case (state)
             S_IDLE: begin
-                if (flush_slv.vld) begin
+                if (flush_req) begin
                     flush_set <= '0;
                     flush_way <= '0;
+                    flush_pending <= 1'b0;
                     state <= S_FLUSH_CHECK;
                 end else if (host_bti_req_slv.vld && host_bti_req_slv.rdy) begin
                     req_trans_id <= host_bti_req_slv.pkt.trans_id;
@@ -677,8 +692,7 @@ module l1 #(
         end
     end
 
-    assign host_bti_req_slv.rdy = state == S_IDLE && !flush_slv.vld;
-    assign flush_slv.rdy = state == S_FLUSH_DONE;
+    assign host_bti_req_slv.rdy = state == S_IDLE && !flush_req;
 
     assign mem_axi4_ar_mst.vld =
         state == S_BYPASS_RD_SEND0 ||

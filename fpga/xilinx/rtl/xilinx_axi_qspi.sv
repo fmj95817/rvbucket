@@ -10,7 +10,10 @@ module xilinx_axi_qspi #(
     axi4_b_if_t.mst  axi4_b_mst,
     axi4_ar_if_t.slv axi4_ar_slv,
     axi4_r_if_t.mst  axi4_r_mst,
-    inout logic [3:0] flash_dq,
+    output logic      flash_dq0,
+    input logic       flash_dq1,
+    output logic      flash_dq2,
+    output logic      flash_dq3,
     output logic      flash_ce_n
 );
     typedef enum logic [1:0] {
@@ -56,10 +59,10 @@ module xilinx_axi_qspi #(
     logic [7:0] wr_beat;
 
     assign flash_ce_n = !spi_active;
-    assign flash_dq[0] = spi_active ? spi_mosi : 1'bz;
-    assign spi_miso = flash_dq[1];
-    assign flash_dq[2] = 1'b1;
-    assign flash_dq[3] = 1'b1;
+    assign flash_dq0 = spi_active ? spi_mosi : 1'b1;
+    assign spi_miso = flash_dq1;
+    assign flash_dq2 = 1'b1;
+    assign flash_dq3 = 1'b1;
 
     STARTUPE2 #(
         .PROG_USR      ("FALSE"),
