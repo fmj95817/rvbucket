@@ -10,7 +10,10 @@ module xilinx_axi_qspi #(
     axi4_b_if_t.mst  axi4_b_mst,
     axi4_ar_if_t.slv axi4_ar_slv,
     axi4_r_if_t.mst  axi4_r_mst,
-    inout logic [3:0] flash_dq,
+    output logic      flash_dq0,
+    input logic       flash_dq1,
+    output logic      flash_dq2,
+    output logic      flash_dq3,
     output logic      flash_ce_n
 );
     typedef enum logic [1:0] {
@@ -34,6 +37,10 @@ module xilinx_axi_qspi #(
     wr_state_t wr_state;
     logic [7:0] rd_id;
     logic [31:0] rd_addr;
+    logic [7:0] rd_len;
+    logic [2:0] rd_size;
+    logic [1:0] rd_burst;
+    logic [7:0] rd_beat;
     logic [39:0] tx_shift;
     logic [5:0] tx_cnt;
     logic [5:0] rx_cnt;
@@ -48,12 +55,14 @@ module xilinx_axi_qspi #(
     logic aw_done;
     logic w_done;
     logic [7:0] wr_id;
+    logic [7:0] wr_len;
+    logic [7:0] wr_beat;
 
     assign flash_ce_n = !spi_active;
-    assign flash_dq[0] = spi_active ? spi_mosi : 1'bz;
-    assign spi_miso = flash_dq[1];
-    assign flash_dq[2] = 1'b1;
-    assign flash_dq[3] = 1'b1;
+    assign flash_dq0 = spi_active ? spi_mosi : 1'b1;
+    assign spi_miso = flash_dq1;
+    assign flash_dq2 = 1'b1;
+    assign flash_dq3 = 1'b1;
 
     STARTUPE2 #(
         .PROG_USR      ("FALSE"),
@@ -81,12 +90,28 @@ module xilinx_axi_qspi #(
     wire aw_hsk = axi4_aw_slv.vld && axi4_aw_slv.rdy;
     wire w_hsk = axi4_w_slv.vld && axi4_w_slv.rdy;
     wire b_hsk = axi4_b_mst.vld && axi4_b_mst.rdy;
+    wire [7:0] cur_wr_len = aw_hsk ? axi4_aw_slv.pkt.len : wr_len;
+
+    function automatic logic [31:0] next_addr(
+        input logic [31:0] addr,
+        input logic [2:0] size,
+        input logic [1:0] burst
+    );
+        unique case (burst)
+        2'd0: next_addr = addr;
+        default: next_addr = addr + (32'd1 << size);
+        endcase
+    endfunction
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             rd_state <= RD_INIT;
             rd_id <= '0;
             rd_addr <= '0;
+            rd_len <= '0;
+            rd_size <= '0;
+            rd_burst <= '0;
+            rd_beat <= '0;
             tx_shift <= '0;
             tx_cnt <= '0;
             rx_cnt <= '0;
@@ -119,6 +144,10 @@ module xilinx_axi_qspi #(
                 if (axi4_ar_slv.vld && axi4_ar_slv.rdy) begin
                     rd_id <= axi4_ar_slv.pkt.id;
                     rd_addr <= flash_addr;
+                    rd_len <= axi4_ar_slv.pkt.len;
+                    rd_size <= axi4_ar_slv.pkt.size;
+                    rd_burst <= axi4_ar_slv.pkt.burst;
+                    rd_beat <= '0;
                     tx_shift <= {READ4_CMD, flash_addr};
                     tx_cnt <= '0;
                     rx_cnt <= '0;
@@ -168,8 +197,22 @@ module xilinx_axi_qspi #(
                 end
             end
             RD_RESP: begin
-                if (axi4_r_mst.vld && axi4_r_mst.rdy)
-                    rd_state <= RD_IDLE;
+                if (axi4_r_mst.vld && axi4_r_mst.rdy) begin
+                    if (rd_beat == rd_len) begin
+                        rd_state <= RD_IDLE;
+                    end else begin
+                        rd_addr <= next_addr(rd_addr, rd_size, rd_burst);
+                        rd_beat <= rd_beat + 1'b1;
+                        tx_shift <= {READ4_CMD,
+                            next_addr(rd_addr, rd_size, rd_burst)};
+                        tx_cnt <= '0;
+                        rx_cnt <= '0;
+                        rx_shift <= '0;
+                        spi_mosi <= READ4_CMD[7];
+                        spi_active <= 1'b1;
+                        rd_state <= RD_SHIFT;
+                    end
+                end
             end
             default: begin
                 rd_state <= RD_IDLE;
@@ -184,17 +227,24 @@ module xilinx_axi_qspi #(
             aw_done <= 1'b0;
             w_done <= 1'b0;
             wr_id <= '0;
+            wr_len <= '0;
+            wr_beat <= '0;
         end else begin
             case (wr_state)
             WR_IDLE: begin
                 aw_done <= 1'b0;
                 w_done <= 1'b0;
+                wr_beat <= '0;
                 if (aw_hsk) begin
                     aw_done <= 1'b1;
                     wr_id <= axi4_aw_slv.pkt.id;
+                    wr_len <= axi4_aw_slv.pkt.len;
                 end
-                if (w_hsk)
-                    w_done <= 1'b1;
+                if (w_hsk) begin
+                    w_done <= axi4_w_slv.pkt.last || wr_beat == cur_wr_len;
+                    if (!(axi4_w_slv.pkt.last || wr_beat == cur_wr_len))
+                        wr_beat <= wr_beat + 1'b1;
+                end
                 if ((aw_hsk || aw_done) && (w_hsk || w_done))
                     wr_state <= WR_RESP;
                 else if (aw_hsk || w_hsk)
@@ -204,9 +254,14 @@ module xilinx_axi_qspi #(
                 if (aw_hsk) begin
                     aw_done <= 1'b1;
                     wr_id <= axi4_aw_slv.pkt.id;
+                    wr_len <= axi4_aw_slv.pkt.len;
+                    wr_beat <= '0;
                 end
-                if (w_hsk)
-                    w_done <= 1'b1;
+                if (w_hsk) begin
+                    w_done <= axi4_w_slv.pkt.last || wr_beat == cur_wr_len;
+                    if (!(axi4_w_slv.pkt.last || wr_beat == cur_wr_len))
+                        wr_beat <= wr_beat + 1'b1;
+                end
                 if ((aw_hsk || aw_done) && (w_hsk || w_done))
                     wr_state <= WR_RESP;
             end
@@ -226,7 +281,7 @@ module xilinx_axi_qspi #(
     assign axi4_r_mst.pkt.id = rd_id;
     assign axi4_r_mst.pkt.data = rd_data;
     assign axi4_r_mst.pkt.resp = AXI4_R_RESP_OKAY;
-    assign axi4_r_mst.pkt.last = 1'b1;
+    assign axi4_r_mst.pkt.last = rd_beat == rd_len;
 
     assign axi4_aw_slv.rdy = wr_state == WR_IDLE || wr_state == WR_WAIT;
     assign axi4_w_slv.rdy = wr_state == WR_IDLE || wr_state == WR_WAIT;

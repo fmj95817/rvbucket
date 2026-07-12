@@ -8,6 +8,8 @@ module ifu(
     ex_req_if_t.mst  ex_req_mst,
     ex_rsp_if_t.slv  ex_rsp_slv,
     fl_req_if_t.mst  fl_req_mst,
+    tlb_flush_if_t.slv tlb_flush_slv,
+    input logic l1i_flush_vld,
     trap_send_if_t.slv trap_send_slv
 );
     typedef enum logic [1:0] {
@@ -26,6 +28,7 @@ module ifu(
     wire fch_rsp_hsk = fch_rsp_slv.vld && fch_rsp_slv.rdy;
     wire ex_req_hsk = ex_req_mst.vld && ex_req_mst.rdy;
     wire redirect = ex_rsp_slv.vld && ex_rsp_slv.rdy && ex_rsp_slv.pkt.taken;
+    wire frontend_flush = tlb_flush_slv.vld || l1i_flush_vld;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -35,6 +38,13 @@ module ifu(
             ir_raw <= '0;
         end else if (trap_send_slv.vld) begin
             pc <= trap_send_slv.pkt.target_pc;
+            if ((state == FETCH_REQ && fch_req_hsk) ||
+                ((state == FETCH_RESP || state == FETCH_DROP) && !fch_rsp_hsk))
+                state <= FETCH_DROP;
+            else
+                state <= FETCH_REQ;
+        end else if (frontend_flush) begin
+            pc <= state == EXEC ? req_pc + 32'd4 : pc;
             if ((state == FETCH_REQ && fch_req_hsk) ||
                 ((state == FETCH_RESP || state == FETCH_DROP) && !fch_rsp_hsk))
                 state <= FETCH_DROP;
