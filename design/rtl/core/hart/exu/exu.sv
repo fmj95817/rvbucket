@@ -15,6 +15,8 @@ module exu(
     tlb_flush_if_t.mst tlb_flush_mst,
     l1_flush_if_t.mst l1i_flush_mst,
     l1_flush_if_t.mst l1d_flush_mst,
+    l1_flush_ack_if_t.slv l1i_flush_ack_slv,
+    l1_flush_ack_if_t.slv l1d_flush_ack_slv,
     hart_expt_if_t.mst ex_expt_mst,
     exu_state_if_t.mst exu_state_mst,
     trap_exu_ctrl_if_t.slv trap_exu_ctrl_slv
@@ -204,6 +206,8 @@ module exu(
         .tlb_flush_mst     (tlb_flush_mst),
         .l1i_flush_mst     (l1i_flush_mst),
         .l1d_flush_mst     (l1d_flush_mst),
+        .l1i_flush_ack_slv (l1i_flush_ack_slv),
+        .l1d_flush_ack_slv (l1d_flush_ack_slv),
         .priv              (priv),
         .pc                (ex_req_slv.pkt.pc),
         .done              (sys_done),

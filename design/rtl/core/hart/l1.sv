@@ -33,6 +33,7 @@ module l1 #(
     bti_req_if_t.slv  host_bti_req_slv,
     bti_rsp_if_t.mst  host_bti_rsp_mst,
     l1_flush_if_t.slv flush_slv,
+    l1_flush_ack_if_t.mst flush_ack_mst,
     axi4_aw_if_t.mst  mem_axi4_aw_mst,
     axi4_w_if_t.mst   mem_axi4_w_mst,
     axi4_b_if_t.slv   mem_axi4_b_slv,
@@ -762,6 +763,7 @@ module l1 #(
     assign host_bti_rsp_mst.pkt.data =
         req_cmd == BTI_REQ_CMD_WRITE ? 32'b0 : rsp_data;
     assign host_bti_rsp_mst.pkt.ok = rsp_ok;
+    assign flush_ack_mst.vld = state == S_FLUSH_DONE;
 
 `ifndef SYNTHESIS
     logic rtl_progress_en;

@@ -14,11 +14,23 @@ module exu_sys_handler(
     tlb_flush_if_t.mst tlb_flush_mst,
     l1_flush_if_t.mst l1i_flush_mst,
     l1_flush_if_t.mst l1d_flush_mst,
+    l1_flush_ack_if_t.slv l1i_flush_ack_slv,
+    l1_flush_ack_if_t.slv l1d_flush_ack_slv,
     input logic [1:0] priv,
     input logic [31:0] pc,
     output logic done,
     hart_expt_if_t.mst ex_expt_mst
 );
+    typedef enum logic [2:0] {
+        FENCE_I_IDLE,
+        FENCE_I_WAIT_D_ACK,
+        FENCE_I_SEND_I_FLUSH,
+        FENCE_I_WAIT_I_ACK,
+        FENCE_I_DONE
+    } fence_i_state_t;
+
+    fence_i_state_t fence_i_state;
+
     wire csr_inst = sel && inst.base.opcode == OPCODE_SYSTEM && inst.i.funct3 != 3'b000;
     wire csr_imm = inst.i.funct3[2];
     wire [31:0] csr_src = csr_imm ? {27'b0, inst.i.rs1} : gpr_mst.rd1;
@@ -29,6 +41,37 @@ module exu_sys_handler(
         inst.r.rd == 5'b00000;
     wire fence_i = sel && inst.base.opcode == OPCODE_MISC_MEM &&
         inst.i.funct3 == 3'b001;
+    wire fence_i_busy = fence_i_state != FENCE_I_IDLE;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            fence_i_state <= FENCE_I_IDLE;
+        end else begin
+            unique case (fence_i_state)
+            FENCE_I_IDLE: begin
+                if (fence_i)
+                    fence_i_state <= FENCE_I_WAIT_D_ACK;
+            end
+            FENCE_I_WAIT_D_ACK: begin
+                if (l1d_flush_ack_slv.vld)
+                    fence_i_state <= FENCE_I_SEND_I_FLUSH;
+            end
+            FENCE_I_SEND_I_FLUSH: begin
+                fence_i_state <= FENCE_I_WAIT_I_ACK;
+            end
+            FENCE_I_WAIT_I_ACK: begin
+                if (l1i_flush_ack_slv.vld)
+                    fence_i_state <= FENCE_I_DONE;
+            end
+            FENCE_I_DONE: begin
+                fence_i_state <= FENCE_I_IDLE;
+            end
+            default: begin
+                fence_i_state <= FENCE_I_IDLE;
+            end
+            endcase
+        end
+    end
 
     always_comb begin
         csr_write_val = csr_read_rsp_slv.pkt.val;
@@ -63,9 +106,10 @@ module exu_sys_handler(
     assign csr_write_req_mst.pkt.val = csr_write_val;
     assign csr_write_req_mst.pkt.priv = priv;
     assign tlb_flush_mst.vld = sfence_vma;
-    assign l1i_flush_mst.vld = fence_i;
-    assign l1d_flush_mst.vld = fence_i;
-    assign done = 1'b1;
+    assign l1d_flush_mst.vld = fence_i && fence_i_state == FENCE_I_IDLE;
+    assign l1i_flush_mst.vld = fence_i_state == FENCE_I_SEND_I_FLUSH;
+    assign done = (fence_i || fence_i_busy) ?
+        (fence_i_state == FENCE_I_DONE) : 1'b1;
 
     assign ex_expt_mst.vld = sel && inst.base.opcode == OPCODE_SYSTEM &&
         inst.i.funct3 == 0 && (inst.i.imm_11_0 == 12'h000 ||

@@ -42,6 +42,8 @@ module hart(
     tlb_flush_if_t tlb_flush_if();
     l1_flush_if_t l1i_flush_if();
     l1_flush_if_t l1d_flush_if();
+    l1_flush_ack_if_t l1i_flush_ack_if();
+    l1_flush_ack_if_t l1d_flush_ack_if();
     hart_expt_if_t fch_expt_if();
     hart_expt_if_t ldst_expt_if();
 
@@ -82,6 +84,8 @@ module hart(
         .tlb_flush_mst         (tlb_flush_if),
         .l1i_flush_mst         (l1i_flush_if),
         .l1d_flush_mst         (l1d_flush_if),
+        .l1i_flush_ack_slv     (l1i_flush_ack_if),
+        .l1d_flush_ack_slv     (l1d_flush_ack_if),
         .ex_expt_mst           (ex_expt_if),
         .exu_state_mst         (exu_state_if),
         .trap_exu_ctrl_slv     (trap_exu_ctrl_if)
@@ -173,6 +177,7 @@ module hart(
         .host_bti_req_slv (pa_i_bti_req_if),
         .host_bti_rsp_mst (pa_i_bti_rsp_if),
         .flush_slv        (l1i_flush_if),
+        .flush_ack_mst    (l1i_flush_ack_if),
         .mem_axi4_aw_mst   (i_axi4_aw_mst),
         .mem_axi4_w_mst    (i_axi4_w_mst),
         .mem_axi4_b_slv    (i_axi4_b_slv),
@@ -199,6 +204,7 @@ module hart(
         .host_bti_req_slv (pa_d_bti_req_if),
         .host_bti_rsp_mst (pa_d_bti_rsp_if),
         .flush_slv        (l1d_flush_if),
+        .flush_ack_mst    (l1d_flush_ack_if),
         .mem_axi4_aw_mst   (d_axi4_aw_mst),
         .mem_axi4_w_mst    (d_axi4_w_mst),
         .mem_axi4_b_slv    (d_axi4_b_slv),

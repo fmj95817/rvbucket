@@ -165,7 +165,8 @@ redirect -file "${rpt_dir}/${top_module}.check_design.pre.rpt" {
 create_clock -name ${clock_name} -period ${clock_period} [get_ports ${clock_port}]
 set_clock_uncertainty ${clock_uncertainty} [get_clocks ${clock_name}]
 set_clock_latency ${clock_latency} [get_clocks ${clock_name}]
-set_ideal_network -no_propagate [get_ports [list ${clock_port} rst_n]]
+set_ideal_network -no_propagate [get_ports ${clock_port}]
+set_ideal_network [get_ports rst_n]
 set_dont_touch_network [get_ports [list ${clock_port} rst_n]]
 
 set inputs [remove_from_collection [all_inputs] [get_ports ${clock_port}]]
