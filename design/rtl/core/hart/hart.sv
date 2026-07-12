@@ -22,6 +22,9 @@ module hart(
     ex_req_if_t ex_req_if();
     ex_rsp_if_t ex_rsp_if();
     fl_req_if_t fl_req_if();
+    bpu_pred_req_if_t bpu_pred_req_if();
+    bpu_pred_rsp_if_t bpu_pred_rsp_if();
+    bpu_update_if_t bpu_update_if();
     ldst_req_if_t exu_lsu_ldst_req_if();
     ldst_rsp_if_t exu_lsu_ldst_rsp_if();
     ldst_req_if_t lsu_hbi_ldst_req_if();
@@ -64,9 +67,20 @@ module hart(
         .ex_req_mst  (ex_req_if),
         .ex_rsp_slv  (ex_rsp_if),
         .fl_req_mst  (fl_req_if),
+        .bpu_pred_req_mst (bpu_pred_req_if),
+        .bpu_pred_rsp_slv (bpu_pred_rsp_if),
+        .bpu_update_mst   (bpu_update_if),
         .tlb_flush_slv  (tlb_flush_if),
         .l1i_flush_vld  (l1i_flush_if.vld),
         .trap_send_slv (trap_send_if)
+    );
+
+    bpu u_bpu(
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .pred_req_slv (bpu_pred_req_if),
+        .pred_rsp_mst (bpu_pred_rsp_if),
+        .update_slv   (bpu_update_if)
     );
 
     exu u_exu(
