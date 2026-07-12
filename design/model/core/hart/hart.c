@@ -14,6 +14,9 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
     EX_REQ_IF_CONSTRUCT(s, ex_req_itf, 1);
     EX_RSP_IF_CONSTRUCT(s, ex_rsp_itf, 1);
     FL_REQ_IF_CONSTRUCT(s, fl_req_itf, 1);
+    BPU_PRED_REQ_SIGNAL_IF_CONSTRUCT(s, bpu_pred_req_sig_itf, false, false);
+    BPU_PRED_RSP_SIGNAL_IF_CONSTRUCT(s, bpu_pred_rsp_sig_itf, false, false);
+    BPU_UPDATE_SIGNAL_IF_CONSTRUCT(s, bpu_update_sig_itf, false, false);
     FCH_REQ_IF_CONSTRUCT(s, fch_req_itf, 1);
     FCH_RSP_IF_CONSTRUCT(s, fch_rsp_itf, 1);
     LDST_REQ_IF_CONSTRUCT(s, exu_lsu_ldst_req_itf, 1);
@@ -50,6 +53,9 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
     s->ifu.ex_req_mst = &s->ex_req_itf;
     s->ifu.ex_rsp_slv = &s->ex_rsp_itf;
     s->ifu.fl_req_mst = &s->fl_req_itf;
+    s->ifu.bpu_pred_req_mst = &s->bpu_pred_req_sig_itf;
+    s->ifu.bpu_pred_rsp_slv = &s->bpu_pred_rsp_sig_itf;
+    s->ifu.bpu_update_mst = &s->bpu_update_sig_itf;
     s->ifu.fch_expt_mst = &s->fch_expt_itf;
     s->ifu.trap_send_slv = &s->trap_send_itf;
     s->ifu.tlb_flush_slv = &s->tlb_flush_itf;
@@ -64,6 +70,12 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
         .fch_ost_depth = conf->ifu_fch_ost_depth
     };
     ifu_construct(&s->ifu, s->mod.hier_name, "u_ifu", &ifu_conf);
+
+    s->bpu.pred_req_slv = &s->bpu_pred_req_sig_itf;
+    s->bpu.pred_rsp_mst = &s->bpu_pred_rsp_sig_itf;
+    s->bpu.update_slv = &s->bpu_update_sig_itf;
+    s->bpu.mod.cycle = s->mod.cycle;
+    bpu_construct(&s->bpu, s->mod.hier_name, "u_bpu");
 
     s->exu.fl_req_slv = &s->fl_req_itf;
     s->exu.ex_req_slv = &s->ex_req_itf;
@@ -213,8 +225,12 @@ void hart_reset(hart_t *s)
     itf_reset(&s->csr_trap_state_sig_itf);
     itf_reset(&s->trap_csr_write_req_sig_itf);
     itf_reset(&s->csr_trap_write_rsp_sig_itf);
+    itf_reset(&s->bpu_pred_req_sig_itf);
+    itf_reset(&s->bpu_pred_rsp_sig_itf);
+    itf_reset(&s->bpu_update_sig_itf);
 
     ifu_reset(&s->ifu);
+    bpu_reset(&s->bpu);
     exu_reset(&s->exu);
     csr_reset(&s->csr);
     lsu_reset(&s->lsu);
@@ -228,6 +244,9 @@ void hart_reset(hart_t *s)
     itf_reset(&s->ex_req_itf);
     itf_reset(&s->ex_rsp_itf);
     itf_reset(&s->fl_req_itf);
+    itf_reset(&s->bpu_pred_req_sig_itf);
+    itf_reset(&s->bpu_pred_rsp_sig_itf);
+    itf_reset(&s->bpu_update_sig_itf);
     itf_reset(&s->fch_req_itf);
     itf_reset(&s->fch_rsp_itf);
     itf_reset(&s->exu_lsu_ldst_req_itf);
@@ -257,6 +276,7 @@ void hart_free(hart_t *s)
 {
     mod_free(&s->mod);
     ifu_free(&s->ifu);
+    bpu_free(&s->bpu);
     exu_free(&s->exu);
     csr_free(&s->csr);
     lsu_free(&s->lsu);
@@ -270,6 +290,9 @@ void hart_free(hart_t *s)
     itf_free(&s->ex_req_itf);
     itf_free(&s->ex_rsp_itf);
     itf_free(&s->fl_req_itf);
+    itf_free(&s->bpu_pred_req_sig_itf);
+    itf_free(&s->bpu_pred_rsp_sig_itf);
+    itf_free(&s->bpu_update_sig_itf);
     itf_free(&s->fch_req_itf);
     itf_free(&s->fch_rsp_itf);
     itf_free(&s->exu_lsu_ldst_req_itf);
@@ -310,6 +333,7 @@ static void hart_clock_real(void *args)
     lsu_clock(&s->lsu);
     trap_clock(&s->trap);
     ifu_clock(&s->ifu);
+    bpu_clock(&s->bpu);
     hbi_clock(&s->hbi);
     mmu_clock(&s->mmu);
     bti_mux_clock(&s->l1d_bti_mux);
@@ -319,6 +343,9 @@ static void hart_clock_real(void *args)
     itf_dbg_clock(&s->ex_req_itf);
     itf_dbg_clock(&s->ex_rsp_itf);
     itf_dbg_clock(&s->fl_req_itf);
+    itf_dbg_clock(&s->bpu_pred_req_sig_itf);
+    itf_dbg_clock(&s->bpu_pred_rsp_sig_itf);
+    itf_dbg_clock(&s->bpu_update_sig_itf);
     itf_dbg_clock(&s->fch_req_itf);
     itf_dbg_clock(&s->fch_rsp_itf);
     itf_dbg_clock(&s->exu_lsu_ldst_req_itf);

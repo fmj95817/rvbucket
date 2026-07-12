@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "core/hart/ifu.h"
+#include "core/hart/bpu.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 #include "utils.h"
@@ -30,7 +31,7 @@ static u32 tb_encode_jalr(u32 rd, u32 rs1, s32 imm)
 
 static u32 tb_cond_bht_idx(u32 pc)
 {
-    return (pc >> 2) & (IFU_COND_BHT_SIZE - 1u);
+    return (pc >> 2) & (BPU_COND_BHT_SIZE - 1u);
 }
 
 typedef struct ifu_tb {
@@ -43,6 +44,9 @@ typedef struct ifu_tb {
     itf_t ex_req_itf;
     itf_t ex_rsp_itf;
     itf_t fl_req_itf;
+    itf_t bpu_pred_req_sig_itf;
+    itf_t bpu_pred_rsp_sig_itf;
+    itf_t bpu_update_sig_itf;
     itf_t fch_expt_itf;
     itf_t trap_send_itf;
     itf_t tlb_flush_itf;
@@ -51,6 +55,7 @@ typedef struct ifu_tb {
     exu_state_if_t *exu_state;
 
     ifu_t dut;
+    bpu_t bpu;
 
     ut_sbd_t sbd;
 } ifu_tb_t;
@@ -70,6 +75,9 @@ static void tb_construct(ifu_tb_t *tb, const char *name)
     EX_REQ_IF_CONSTRUCT(tb, ex_req_itf, 1);
     EX_RSP_IF_CONSTRUCT(tb, ex_rsp_itf, 1);
     FL_REQ_IF_CONSTRUCT(tb, fl_req_itf, 1);
+    BPU_PRED_REQ_SIGNAL_IF_CONSTRUCT(tb, bpu_pred_req_sig_itf, false, false);
+    BPU_PRED_RSP_SIGNAL_IF_CONSTRUCT(tb, bpu_pred_rsp_sig_itf, false, false);
+    BPU_UPDATE_SIGNAL_IF_CONSTRUCT(tb, bpu_update_sig_itf, false, false);
     HART_EXPT_IF_CONSTRUCT(tb, fch_expt_itf, 1);
     TRAP_SEND_IF_CONSTRUCT(tb, trap_send_itf, 1);
     TLB_FLUSH_IF_CONSTRUCT(tb, tlb_flush_itf, 1);
@@ -82,6 +90,9 @@ static void tb_construct(ifu_tb_t *tb, const char *name)
     tb->dut.ex_req_mst = &tb->ex_req_itf;
     tb->dut.ex_rsp_slv = &tb->ex_rsp_itf;
     tb->dut.fl_req_mst = &tb->fl_req_itf;
+    tb->dut.bpu_pred_req_mst = &tb->bpu_pred_req_sig_itf;
+    tb->dut.bpu_pred_rsp_slv = &tb->bpu_pred_rsp_sig_itf;
+    tb->dut.bpu_update_mst = &tb->bpu_update_sig_itf;
     tb->dut.fch_expt_mst = &tb->fch_expt_itf;
     tb->dut.trap_send_slv = &tb->trap_send_itf;
     tb->dut.tlb_flush_slv = &tb->tlb_flush_itf;
@@ -98,24 +109,35 @@ static void tb_construct(ifu_tb_t *tb, const char *name)
     };
     ifu_construct(&tb->dut, tb->mod.hier_name, "u_dut", &conf);
 
+    tb->bpu.pred_req_slv = &tb->bpu_pred_req_sig_itf;
+    tb->bpu.pred_rsp_mst = &tb->bpu_pred_rsp_sig_itf;
+    tb->bpu.update_slv = &tb->bpu_update_sig_itf;
+    tb->bpu.mod.cycle = tb->mod.cycle;
+    bpu_construct(&tb->bpu, tb->mod.hier_name, "u_bpu");
+
     ut_sbd_init(&tb->sbd);
 }
 
 static void tb_reset(ifu_tb_t *tb)
 {
     ifu_reset(&tb->dut);
+    bpu_reset(&tb->bpu);
     dbg_vcd_reset();
 }
 
 static void tb_free(ifu_tb_t *tb)
 {
     ifu_free(&tb->dut);
+    bpu_free(&tb->bpu);
 
     itf_free(&tb->fch_req_itf);
     itf_free(&tb->fch_rsp_itf);
     itf_free(&tb->ex_req_itf);
     itf_free(&tb->ex_rsp_itf);
     itf_free(&tb->fl_req_itf);
+    itf_free(&tb->bpu_pred_req_sig_itf);
+    itf_free(&tb->bpu_pred_rsp_sig_itf);
+    itf_free(&tb->bpu_update_sig_itf);
     itf_free(&tb->fch_expt_itf);
     itf_free(&tb->trap_send_itf);
     itf_free(&tb->tlb_flush_itf);
@@ -126,12 +148,16 @@ static void tb_free(ifu_tb_t *tb)
 static void tb_clock(ifu_tb_t *tb)
 {
     ifu_clock(&tb->dut);
+    bpu_clock(&tb->bpu);
 
     itf_dbg_clock(&tb->fch_req_itf);
     itf_dbg_clock(&tb->fch_rsp_itf);
     itf_dbg_clock(&tb->ex_req_itf);
     itf_dbg_clock(&tb->ex_rsp_itf);
     itf_dbg_clock(&tb->fl_req_itf);
+    itf_dbg_clock(&tb->bpu_pred_req_sig_itf);
+    itf_dbg_clock(&tb->bpu_pred_rsp_sig_itf);
+    itf_dbg_clock(&tb->bpu_update_sig_itf);
     itf_dbg_clock(&tb->fch_expt_itf);
     itf_dbg_clock(&tb->trap_send_itf);
     itf_dbg_clock(&tb->tlb_flush_itf);
@@ -160,12 +186,16 @@ static bool tb_cond_fl_req_ready(ifu_tb_t *tb)
 static void tb_drain_all(ifu_tb_t *tb)
 {
     ifu_reset(&tb->dut);
+    bpu_reset(&tb->bpu);
 
     itf_fifo_pop_all(&tb->fch_req_itf);
     itf_fifo_pop_all(&tb->fch_rsp_itf);
     itf_fifo_pop_all(&tb->ex_req_itf);
     itf_fifo_pop_all(&tb->ex_rsp_itf);
     itf_fifo_pop_all(&tb->fl_req_itf);
+    itf_reset(&tb->bpu_pred_req_sig_itf);
+    itf_reset(&tb->bpu_pred_rsp_sig_itf);
+    itf_reset(&tb->bpu_update_sig_itf);
     itf_fifo_pop_all(&tb->fch_expt_itf);
     itf_fifo_pop_all(&tb->trap_send_itf);
     itf_fifo_pop_all(&tb->tlb_flush_itf);
@@ -359,7 +389,7 @@ TEST_CASE(ifu_tb_t, ras_predicts_return)
     };
     itf_write(&tb->ex_rsp_itf, &call_ex_rsp);
     tb_clock(tb);
-    REQUIRE(tb->dut.bpu.ras.count == 1, "call pushes return pc into RAS");
+    REQUIRE(tb->bpu.ras.count == 1, "call pushes return pc into RAS");
 
     fch_rsp_if_t ret_rsp = { .ir = ret, .ok = true };
     itf_write(&tb->fch_rsp_itf, &ret_rsp);
@@ -373,9 +403,7 @@ TEST_CASE(ifu_tb_t, ras_predicts_return)
         REQUIRE(req.pred_taken, "return predicted taken");
         REQUIRE(req.pred_pc == return_pc, "return predicted from RAS");
     }
-    REQUIRE(*tb->dut.perf.ras_pred == 1, "RAS prediction counter increments");
-    REQUIRE(*tb->dut.perf.jalr_ras_hit == 1,
-        "JALR RAS hit counter increments");
+    REQUIRE(*tb->bpu.perf.ras_pred == 0, "RAS prediction counter waits for update");
 
     ex_rsp_if_t ret_ex_rsp = {
         .pc = call_target,
@@ -385,8 +413,46 @@ TEST_CASE(ifu_tb_t, ras_predicts_return)
     };
     itf_write(&tb->ex_rsp_itf, &ret_ex_rsp);
     tb_clock(tb);
-    REQUIRE(tb->dut.bpu.ras.count == 0, "return pops RAS");
+    REQUIRE(*tb->bpu.perf.ras_pred == 1, "RAS prediction counter increments");
+    REQUIRE(*tb->bpu.perf.jalr_ras_hit == 1,
+        "JALR RAS hit counter increments");
+    REQUIRE(tb->bpu.ras.count == 0, "return pops RAS");
     REQUIRE(itf_fifo_empty(&tb->fl_req_itf), "RAS hit avoids redirect flush");
+
+    TEST_END();
+}
+
+TEST_CASE(ifu_tb_t, pred_taken_redirects_while_ex_req_blocked)
+{
+    TEST_BEGIN("Pred Taken Redirects While EX Req Blocked");
+
+    const u32 call_pc = 0x80000000;
+    const u32 call_target = 0x80000100;
+    const u32 jal_ra = tb_encode_jal(1, call_target - call_pc);
+
+    tb_drain_all(tb);
+
+    RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
+    {
+        fch_req_if_t req;
+        itf_read(&tb->fch_req_itf, &req);
+        REQUIRE(req.pc == call_pc, "initial fch_req at call pc");
+    }
+
+    ex_req_if_t busy = {};
+    itf_write(&tb->ex_req_itf, &busy);
+
+    fch_rsp_if_t call_rsp = { .ir = jal_ra, .ok = true };
+    itf_write(&tb->fch_rsp_itf, &call_rsp);
+    tb_clock(tb);
+
+    RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
+    {
+        fch_req_if_t req;
+        itf_read(&tb->fch_req_itf, &req);
+        REQUIRE(req.pc == call_target,
+            "predicted-taken target fetch starts before EX accepts");
+    }
 
     TEST_END();
 }
@@ -403,8 +469,8 @@ TEST_CASE(ifu_tb_t, cond_bht_predicts_taken_target)
 
     tb_drain_all(tb);
 
-    tb->dut.bpu.cond_bht[bht_idx].vld = true;
-    tb->dut.bpu.cond_bht[bht_idx].counter = 3;
+    tb->bpu.cond_bht[bht_idx].vld = true;
+    tb->bpu.cond_bht[bht_idx].counter = 3;
 
     RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
     {
@@ -424,8 +490,8 @@ TEST_CASE(ifu_tb_t, cond_bht_predicts_taken_target)
         REQUIRE(req.pred_taken, "seeded cond BHT predicts taken");
         REQUIRE(req.pred_pc == branch_target, "branch target is decoded");
     }
-    REQUIRE(*tb->dut.perf.cond_bht_hit == 1,
-        "cond BHT hit counter increments");
+    REQUIRE(*tb->bpu.perf.cond_bht_hit == 0,
+        "cond BHT hit counter waits for update");
 
     ex_rsp_if_t branch_ex_rsp = {
         .pc = branch_pc,
@@ -436,7 +502,9 @@ TEST_CASE(ifu_tb_t, cond_bht_predicts_taken_target)
     itf_write(&tb->ex_rsp_itf, &branch_ex_rsp);
     tb_clock(tb);
 
-    REQUIRE(tb->dut.bpu.cond_bht[bht_idx].counter == 2,
+    REQUIRE(*tb->bpu.perf.cond_bht_hit == 1,
+        "cond BHT hit counter increments");
+    REQUIRE(tb->bpu.cond_bht[bht_idx].counter == 2,
         "not-taken update leaves weak-taken counter");
 
     TEST_END();
@@ -452,10 +520,10 @@ TEST_CASE(ifu_tb_t, jalr_btb_predicts_target)
 
     tb_drain_all(tb);
 
-    tb->dut.bpu.jalr_btb[0].vld = true;
-    tb->dut.bpu.jalr_btb[0].pc = jalr_pc;
-    tb->dut.bpu.jalr_btb[0].target_pc = jalr_target;
-    tb->dut.bpu.jalr_btb[0].last_used = 1;
+    tb->bpu.jalr_btb[0].vld = true;
+    tb->bpu.jalr_btb[0].pc = jalr_pc;
+    tb->bpu.jalr_btb[0].target_pc = jalr_target;
+    tb->bpu.jalr_btb[0].last_used = 1;
 
     RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
     {
@@ -476,9 +544,9 @@ TEST_CASE(ifu_tb_t, jalr_btb_predicts_target)
         REQUIRE(req.pred_taken, "JALR BTB predicts taken");
         REQUIRE(req.pred_pc == jalr_target, "JALR BTB target is used");
     }
-    REQUIRE(*tb->dut.perf.jalr_btb_hit == 1,
-        "JALR BTB hit counter increments");
-    REQUIRE(*tb->dut.perf.jalr_btb_miss == 0,
+    REQUIRE(*tb->bpu.perf.jalr_btb_hit == 0,
+        "JALR BTB hit counter waits for update");
+    REQUIRE(*tb->bpu.perf.jalr_btb_miss == 0,
         "JALR BTB miss counter stays clear");
 
     ex_rsp_if_t jalr_ex_rsp = {
@@ -489,7 +557,9 @@ TEST_CASE(ifu_tb_t, jalr_btb_predicts_target)
     };
     itf_write(&tb->ex_rsp_itf, &jalr_ex_rsp);
     tb_clock(tb);
-    REQUIRE(tb->dut.bpu.jalr_btb[0].target_pc == jalr_target,
+    REQUIRE(*tb->bpu.perf.jalr_btb_hit == 1,
+        "JALR BTB hit counter increments");
+    REQUIRE(tb->bpu.jalr_btb[0].target_pc == jalr_target,
         "JALR BTB target remains trained");
     REQUIRE(itf_fifo_empty(&tb->fl_req_itf), "JALR BTB hit avoids flush");
 
@@ -898,6 +968,7 @@ int main(void)
     TEST_RUN(fetch_error_retry);
     TEST_RUN(branch_mispredict);
     TEST_RUN(ras_predicts_return);
+    TEST_RUN(pred_taken_redirects_while_ex_req_blocked);
     TEST_RUN(cond_bht_predicts_taken_target);
     TEST_RUN(jalr_btb_predicts_target);
     TEST_RUN(fetch_fault_squashed_by_branch);

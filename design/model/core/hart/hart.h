@@ -6,6 +6,7 @@
 #include "base/itf.h"
 #include "itf/bti_if.h"
 #include "ifu.h"
+#include "bpu.h"
 #include "exu/exu.h"
 #include "csr.h"
 #include "hbi.h"
@@ -53,6 +54,7 @@ typedef struct hart {
     itf_t *core_swi_pend_out;
 
     ifu_t ifu;
+    bpu_t bpu;
     exu_t exu;
     csr_t csr;
     lsu_t lsu;
@@ -66,6 +68,9 @@ typedef struct hart {
     itf_t ex_req_itf;
     itf_t ex_rsp_itf;
     itf_t fl_req_itf;
+    itf_t bpu_pred_req_sig_itf;
+    itf_t bpu_pred_rsp_sig_itf;
+    itf_t bpu_update_sig_itf;
     itf_t fch_req_itf;
     itf_t fch_rsp_itf;
     itf_t exu_lsu_ldst_req_itf;

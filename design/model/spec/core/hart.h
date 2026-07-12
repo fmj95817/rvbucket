@@ -3,9 +3,9 @@
 
 #include "base/def.h"
 
-#define IFU_COND_BHT_SIZE 512u
-#define IFU_JALR_BTB_SIZE 64u
-#define IFU_RAS_SIZE 16u
+#define BPU_COND_BHT_SIZE 512u
+#define BPU_JALR_BTB_SIZE 64u
+#define BPU_RAS_SIZE 16u
 #define MMU_ITLB_SIZE 64u
 #define MMU_DTLB_SIZE 32u
 #define FCH_TRANS_ID 0u
