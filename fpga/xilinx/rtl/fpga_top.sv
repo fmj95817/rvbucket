@@ -28,7 +28,10 @@ module fpga_top #(
     output logic [DDR_DM_WIDTH-1:0]     ddr3_dm,
     output logic                        ddr3_odt,
 
-    inout logic [3:0]                   flash_dq,
+    output logic                        flash_dq0,
+    input logic                         flash_dq1,
+    output logic                        flash_dq2,
+    output logic                        flash_dq3,
     output logic                        flash_ce_n
 );
     logic clk_50m;
@@ -157,7 +160,10 @@ module fpga_top #(
         .axi4_b_mst  (flash_axi4_b),
         .axi4_ar_slv (flash_axi4_ar),
         .axi4_r_mst  (flash_axi4_r),
-        .flash_dq    (flash_dq),
+        .flash_dq0   (flash_dq0),
+        .flash_dq1   (flash_dq1),
+        .flash_dq2   (flash_dq2),
+        .flash_dq3   (flash_dq3),
         .flash_ce_n  (flash_ce_n)
     );
 

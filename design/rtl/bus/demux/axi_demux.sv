@@ -125,7 +125,8 @@ module axi_demux #(
                 if (host_axi4_aw_slv.vld && host_axi4_aw_slv.rdy) begin
                     wr_aw_done <= 1'b1;
                 end
-                if (host_axi4_w_slv.vld && host_axi4_w_slv.rdy) begin
+                if (host_axi4_w_slv.vld && host_axi4_w_slv.rdy &&
+                    host_axi4_w_slv.pkt.last) begin
                     wr_w_done <= 1'b1;
                 end
                 if (wr_b_hsk) begin
@@ -140,7 +141,8 @@ module axi_demux #(
                 wr_busy <= 1'b1;
                 wr_sel_q <= wr_sel;
                 wr_aw_done <= host_axi4_aw_slv.vld && host_axi4_aw_slv.rdy;
-                wr_w_done <= host_axi4_w_slv.vld && host_axi4_w_slv.rdy;
+                wr_w_done <= host_axi4_w_slv.vld && host_axi4_w_slv.rdy &&
+                    host_axi4_w_slv.pkt.last;
             end
         end
     end

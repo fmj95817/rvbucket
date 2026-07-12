@@ -13,6 +13,8 @@ module exu(
     exu_csr_write_req_if_t.mst exu_csr_write_req_mst,
     csr_exu_write_rsp_if_t.slv csr_exu_write_rsp_slv,
     tlb_flush_if_t.mst tlb_flush_mst,
+    l1_flush_if_t.mst l1i_flush_mst,
+    l1_flush_if_t.mst l1d_flush_mst,
     hart_expt_if_t.mst ex_expt_mst,
     exu_state_if_t.mst exu_state_mst,
     trap_exu_ctrl_if_t.slv trap_exu_ctrl_slv
@@ -95,6 +97,7 @@ module exu(
     tri alu_done;
     tri branch_done;
     tri ldst_done;
+    logic sys_done;
 
     logic ex_req_rdy;
 
@@ -117,8 +120,8 @@ module exu(
             OPCODE_AMO: ex_req_rdy = ldst_done;
             OPCODE_ALUI: ex_req_rdy = alu_done;
             OPCODE_ALU: ex_req_rdy = alu_done;
-            OPCODE_MISC_MEM: ex_req_rdy = 1'b1;
-            OPCODE_SYSTEM: ex_req_rdy = 1'b1;
+            OPCODE_MISC_MEM: ex_req_rdy = sys_done;
+            OPCODE_SYSTEM: ex_req_rdy = sys_done;
             default: ex_req_rdy = 1'b0;
         endcase
     end
@@ -199,8 +202,11 @@ module exu(
         .csr_write_req_mst (exu_csr_write_req_mst),
         .csr_write_rsp_slv (csr_exu_write_rsp_slv),
         .tlb_flush_mst     (tlb_flush_mst),
+        .l1i_flush_mst     (l1i_flush_mst),
+        .l1d_flush_mst     (l1d_flush_mst),
         .priv              (priv),
         .pc                (ex_req_slv.pkt.pc),
+        .done              (sys_done),
         .ex_expt_mst       (ex_expt_mst)
     );
 
