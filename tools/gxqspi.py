@@ -99,13 +99,18 @@ if {{[llength $cfgmem_parts] == 0}} {{
 create_hw_cfgmem -hw_device $dev [lindex $cfgmem_parts 0]
 set cfgmem [current_hw_cfgmem]
 
-set_property PROGRAM.FILES $mcs_file $cfgmem
-set_property PROGRAM.ADDRESS_RANGE {{use_file}} $cfgmem
+create_hw_bitstream -hw_device $dev [get_property PROGRAM.HW_CFGMEM_BITFILE $dev]
+program_hw_devices $dev
+refresh_hw_device $dev
+
+set cfgmem [current_hw_cfgmem]
+set_property PROGRAM.FILES [list $mcs_file] $cfgmem
+set_property PROGRAM.BLANK_CHECK 0 $cfgmem
 set_property PROGRAM.ERASE 1 $cfgmem
 set_property PROGRAM.CFG_PROGRAM 1 $cfgmem
 set_property PROGRAM.VERIFY 1 $cfgmem
 
-program_hw_cfgmem $cfgmem
+program_hw_cfgmem -hw_cfgmem $cfgmem
 """
 
 
