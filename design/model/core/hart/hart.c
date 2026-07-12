@@ -31,6 +31,9 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
     BTI_IF_CONSTRUCT(s, l1d_, 1);
     TLB_FLUSH_IF_CONSTRUCT(s, tlb_flush_itf, 1);
     L1_FLUSH_IF_CONSTRUCT(s, l1i_flush_itf, 1);
+    L1_FLUSH_IF_CONSTRUCT(s, l1d_flush_itf, 1);
+    L1_FLUSH_ACK_IF_CONSTRUCT(s, l1i_flush_ack_itf, 1);
+    L1_FLUSH_ACK_IF_CONSTRUCT(s, l1d_flush_ack_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, mmu_fch_expt_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, fch_expt_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, ex_expt_itf, 1);
@@ -89,6 +92,9 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
     s->exu.csr_exu_write_rsp_in = &s->csr_exu_write_rsp_sig_itf;
     s->exu.tlb_flush_mst = &s->tlb_flush_itf;
     s->exu.l1i_flush_mst = &s->l1i_flush_itf;
+    s->exu.l1d_flush_mst = &s->l1d_flush_itf;
+    s->exu.l1i_flush_ack_slv = &s->l1i_flush_ack_itf;
+    s->exu.l1d_flush_ack_slv = &s->l1d_flush_ack_itf;
     s->exu.exu_state_out = &s->exu_state_sig_itf;
     s->exu.trap_exu_ctrl_in = &s->trap_exu_ctrl_sig_itf;
     s->exu.mod.cycle = s->mod.cycle;
@@ -183,6 +189,7 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
     BTI_SLV_CONNECT(&s->l1i, , s, pa_i_);
     AXI4_MST_IMPORT(&s->l1i, , s, i_);
     s->l1i.flush_slv = &s->l1i_flush_itf;
+    s->l1i.flush_ack_mst = &s->l1i_flush_ack_itf;
     l1_construct(&s->l1i, s->mod.hier_name, "u_l1i", &l1i_conf);
 
     l1_conf_t l1d_conf = {
@@ -199,7 +206,8 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
     s->l1d.mod.cycle = s->mod.cycle;
     BTI_SLV_CONNECT(&s->l1d, , s, l1d_);
     AXI4_MST_IMPORT(&s->l1d, , s, d_);
-    s->l1d.flush_slv = NULL;
+    s->l1d.flush_slv = &s->l1d_flush_itf;
+    s->l1d.flush_ack_mst = &s->l1d_flush_ack_itf;
     l1_construct(&s->l1d, s->mod.hier_name, "u_l1d", &l1d_conf);
 
     s->trap.fch_expt_slv = &s->fch_expt_itf;
@@ -261,6 +269,9 @@ void hart_reset(hart_t *s)
     BTI_IF_RESET(s, l1d_);
     itf_reset(&s->tlb_flush_itf);
     itf_reset(&s->l1i_flush_itf);
+    itf_reset(&s->l1d_flush_itf);
+    itf_reset(&s->l1i_flush_ack_itf);
+    itf_reset(&s->l1d_flush_ack_itf);
     itf_reset(&s->mmu_fch_expt_itf);
     itf_reset(&s->fch_expt_itf);
     itf_reset(&s->ex_expt_itf);
@@ -307,6 +318,9 @@ void hart_free(hart_t *s)
     BTI_IF_FREE(s, l1d_);
     itf_free(&s->tlb_flush_itf);
     itf_free(&s->l1i_flush_itf);
+    itf_free(&s->l1d_flush_itf);
+    itf_free(&s->l1i_flush_ack_itf);
+    itf_free(&s->l1d_flush_ack_itf);
     itf_free(&s->mmu_fch_expt_itf);
     itf_free(&s->fch_expt_itf);
     itf_free(&s->ex_expt_itf);
@@ -360,6 +374,9 @@ static void hart_clock_real(void *args)
     BTI_IF_DBG_CLOCK(s, l1d_);
     itf_dbg_clock(&s->tlb_flush_itf);
     itf_dbg_clock(&s->l1i_flush_itf);
+    itf_dbg_clock(&s->l1d_flush_itf);
+    itf_dbg_clock(&s->l1i_flush_ack_itf);
+    itf_dbg_clock(&s->l1d_flush_ack_itf);
     itf_dbg_clock(&s->mmu_fch_expt_itf);
     itf_dbg_clock(&s->fch_expt_itf);
     itf_dbg_clock(&s->ex_expt_itf);

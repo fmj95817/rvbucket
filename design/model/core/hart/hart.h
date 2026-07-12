@@ -85,6 +85,9 @@ typedef struct hart {
     BTI_IF_DECL(l1d_);
     itf_t tlb_flush_itf;
     itf_t l1i_flush_itf;
+    itf_t l1d_flush_itf;
+    itf_t l1i_flush_ack_itf;
+    itf_t l1d_flush_ack_itf;
     itf_t mmu_fch_expt_itf;
     itf_t fch_expt_itf;
     itf_t ex_expt_itf;

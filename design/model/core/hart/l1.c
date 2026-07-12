@@ -222,6 +222,7 @@ void l1_reset(l1_t *l1)
     l1->op_ok = true;
     l1->req_byte_idx = 0;
     l1->req_data = 0;
+    l1->flush_line_idx = 0;
     fifo_reset(&l1->req_fifo);
     ostq_reset(&l1->ost);
     *l1->perf_hit = 0;
@@ -400,6 +401,15 @@ static bool l1_has_bypass_ost(l1_t *l1)
     return false;
 }
 
+static bool l1_state_is_flush(l1_state_t state)
+{
+    return state == L1_STATE_FLUSH_CHECK ||
+        state == L1_STATE_FLUSH_WB_AW ||
+        state == L1_STATE_FLUSH_WB_W ||
+        state == L1_STATE_FLUSH_WB_B ||
+        state == L1_STATE_FLUSH_ACK;
+}
+
 static bool l1_active_line_conflict(const l1_t *l1, u32 line_idx)
 {
     return l1->state != L1_STATE_IDLE && line_idx == l1->req_line_idx;
@@ -567,6 +577,10 @@ static void l1_capture_req(l1_t *l1)
 
 static void l1_proc_accept_req(l1_t *l1)
 {
+    if (l1_state_is_flush(l1->state)) {
+        return;
+    }
+
     if (fifo_empty(&l1->req_fifo)) {
         return;
     }
@@ -633,9 +647,83 @@ static void l1_proc_flush(l1_t *l1)
         return;
     }
 
+    if (!ostq_empty(&l1->ost) || l1_has_bypass_ost(l1)) {
+        return;
+    }
+
+    if (l1->conf.ro && l1->flush_ack_mst &&
+        itf_fifo_full(l1->flush_ack_mst)) {
+        return;
+    }
+
     l1_flush_if_t flush;
     itf_read(l1->flush_slv, &flush);
-    l1_invalidate(l1);
+    if (l1->conf.ro) {
+        l1_invalidate(l1);
+        if (l1->flush_ack_mst) {
+            l1_flush_ack_if_t ack = {};
+            itf_write(l1->flush_ack_mst, &ack);
+        }
+        return;
+    }
+
+    l1->flush_line_idx = 0;
+    l1->beat_idx = 0;
+    l1->op_ok = true;
+    l1->state = L1_STATE_FLUSH_CHECK;
+}
+
+static void l1_flush_finish(l1_t *l1)
+{
+    l1->state = l1->flush_ack_mst ? L1_STATE_FLUSH_ACK : L1_STATE_IDLE;
+}
+
+static void l1_flush_advance(l1_t *l1)
+{
+    if (l1->flush_line_idx + 1u >= l1->line_num) {
+        l1_flush_finish(l1);
+        return;
+    }
+
+    l1->flush_line_idx++;
+    l1->state = L1_STATE_FLUSH_CHECK;
+}
+
+static void l1_proc_flush_check(l1_t *l1)
+{
+    if (l1->state != L1_STATE_FLUSH_CHECK) {
+        return;
+    }
+
+    u32 idx = l1->flush_line_idx;
+    if (l1->valids[idx] && l1->dirtys[idx]) {
+        (*l1->perf_writeback)++;
+        u32 set = idx / l1->conf.way_num;
+        l1->wb_line_addr = l1_line_addr(l1, l1->tags[idx], set);
+        l1->beat_idx = 0;
+        l1->op_ok = true;
+        l1->state = L1_STATE_FLUSH_WB_AW;
+        return;
+    }
+
+    l1->valids[idx] = false;
+    l1->dirtys[idx] = false;
+    l1_flush_advance(l1);
+}
+
+static void l1_proc_flush_ack(l1_t *l1)
+{
+    if (l1->state != L1_STATE_FLUSH_ACK) {
+        return;
+    }
+
+    if (itf_fifo_full(l1->flush_ack_mst)) {
+        return;
+    }
+
+    l1_flush_ack_if_t ack = {};
+    itf_write(l1->flush_ack_mst, &ack);
+    l1->state = L1_STATE_IDLE;
 }
 
 static bool l1_find_bypass_issue_slot(l1_t *l1, l1_ost_kind_t kind,
@@ -783,7 +871,9 @@ static void l1_send_ost_rsp(l1_t *l1)
 
 static void l1_proc_wb_aw(l1_t *l1)
 {
-    if (l1->state != L1_STATE_WB_AW || itf_fifo_full(l1->axi4_aw_mst)) {
+    if ((l1->state != L1_STATE_WB_AW &&
+        l1->state != L1_STATE_FLUSH_WB_AW) ||
+        itf_fifo_full(l1->axi4_aw_mst)) {
         return;
     }
 
@@ -801,23 +891,29 @@ static void l1_proc_wb_aw(l1_t *l1)
     };
     itf_write(l1->axi4_aw_mst, &aw);
     l1->beat_idx = 0;
-    l1->state = L1_STATE_WB_W;
+    l1->state = l1->state == L1_STATE_FLUSH_WB_AW ?
+        L1_STATE_FLUSH_WB_W : L1_STATE_WB_W;
 }
 
 static void l1_proc_wb_w(l1_t *l1)
 {
-    if (l1->state != L1_STATE_WB_W || itf_fifo_full(l1->axi4_w_mst)) {
+    if ((l1->state != L1_STATE_WB_W &&
+        l1->state != L1_STATE_FLUSH_WB_W) ||
+        itf_fifo_full(l1->axi4_w_mst)) {
         return;
     }
 
+    u32 line_idx = l1->state == L1_STATE_FLUSH_WB_W ?
+        l1->flush_line_idx : l1->req_line_idx;
     axi4_w_if_t w = {
-        .data = l1->data[l1->req_line_idx * L1_WORD_NUM + l1->beat_idx],
+        .data = l1->data[line_idx * L1_WORD_NUM + l1->beat_idx],
         .strb = 0xf,
         .last = l1->beat_idx == (L1_WORD_NUM - 1u)
     };
     itf_write(l1->axi4_w_mst, &w);
     if (w.last) {
-        l1->state = L1_STATE_WB_B;
+        l1->state = l1->state == L1_STATE_FLUSH_WB_W ?
+            L1_STATE_FLUSH_WB_B : L1_STATE_WB_B;
     } else {
         l1->beat_idx++;
     }
@@ -825,13 +921,23 @@ static void l1_proc_wb_w(l1_t *l1)
 
 static void l1_proc_wb_b(l1_t *l1)
 {
-    if (l1->state != L1_STATE_WB_B || itf_fifo_empty(l1->axi4_b_slv)) {
+    if ((l1->state != L1_STATE_WB_B &&
+        l1->state != L1_STATE_FLUSH_WB_B) ||
+        itf_fifo_empty(l1->axi4_b_slv)) {
         return;
     }
 
     axi4_b_if_t b;
     itf_read(l1->axi4_b_slv, &b);
     l1->op_ok = (b.resp == AXI4_B_RESP_OKAY);
+    if (l1->state == L1_STATE_FLUSH_WB_B) {
+        l1->valids[l1->flush_line_idx] = false;
+        l1->dirtys[l1->flush_line_idx] = false;
+        l1->beat_idx = 0;
+        l1_flush_advance(l1);
+        return;
+    }
+
     l1->dirtys[l1->req_line_idx] = false;
     l1->beat_idx = 0;
     l1->state = l1->op_ok ? L1_STATE_REFILL_AR : L1_STATE_SERVE_MISS;
@@ -936,6 +1042,8 @@ void l1_clock(l1_t *l1)
     if (l1->state == L1_STATE_IDLE) {
         l1_proc_flush(l1);
     }
+    l1_proc_flush_check(l1);
+    l1_proc_flush_ack(l1);
     l1_proc_bypass_rd_wait(l1);
     l1_proc_bypass_wr_wait(l1);
     l1_proc_bypass_rd_issue(l1);

@@ -71,6 +71,54 @@ static bool exu_ldst_issue_blocked(const exu_t *exu,
         itf_fifo_full(exu->ldst_req_mst);
 }
 
+void exu_start_fence_i(exu_t *exu)
+{
+    DBG_CHECK(exu->fence_i_stage == FENCE_I_STAGE_IDLE);
+    DBG_CHECK(!itf_fifo_full(exu->l1d_flush_mst));
+
+    l1_flush_if_t flush = {};
+    itf_write(exu->l1d_flush_mst, &flush);
+    exu->fence_i_stage = FENCE_I_STAGE_WAIT_D_ACK;
+}
+
+static bool exu_proc_fence_i_flush(exu_t *exu)
+{
+    switch (exu->fence_i_stage) {
+    case FENCE_I_STAGE_IDLE:
+        return false;
+    case FENCE_I_STAGE_WAIT_D_ACK:
+        if (itf_fifo_empty(exu->l1d_flush_ack_slv)) {
+            return true;
+        }
+        l1_flush_ack_if_t d_ack;
+        itf_read(exu->l1d_flush_ack_slv, &d_ack);
+        exu->fence_i_stage = FENCE_I_STAGE_SEND_I_FLUSH;
+        return true;
+    case FENCE_I_STAGE_SEND_I_FLUSH:
+        if (itf_fifo_full(exu->l1i_flush_mst)) {
+            return true;
+        }
+        l1_flush_if_t flush = {};
+        itf_write(exu->l1i_flush_mst, &flush);
+        exu->fence_i_stage = FENCE_I_STAGE_WAIT_I_ACK;
+        return true;
+    case FENCE_I_STAGE_WAIT_I_ACK:
+        if (itf_fifo_empty(exu->l1i_flush_ack_slv)) {
+            return true;
+        }
+        l1_flush_ack_if_t i_ack;
+        itf_read(exu->l1i_flush_ack_slv, &i_ack);
+        exu->fence_i_stage = FENCE_I_STAGE_DONE;
+        return true;
+    case FENCE_I_STAGE_DONE:
+        exu->fence_i_stage = FENCE_I_STAGE_IDLE;
+        return true;
+    default:
+        DBG_CHECK(0);
+        return true;
+    }
+}
+
 static void exu_proc_ex_req(exu_t *exu)
 {
     if (!itf_fifo_empty(exu->fl_req_slv)) {
@@ -186,7 +234,10 @@ static void exu_proc_biu_rsp(exu_t *exu)
 void exu_clock(exu_t *exu)
 {
     mod_clock(&exu->mod);
-    exu_proc_ex_req(exu);
+    bool fence_i_busy = exu_proc_fence_i_flush(exu);
+    if (!fence_i_busy) {
+        exu_proc_ex_req(exu);
+    }
     exu_proc_biu_rsp(exu);
     exu_publish_state(exu);
 }
@@ -213,6 +264,7 @@ void exu_construct(exu_t *exu, const char *parent, const char *name)
     dbg_vcd_add_sig("amo_rsvd_addr", DBG_SIG_TYPE_REG, 32, &exu->amo_rsvd_addr);
     dbg_vcd_add_sig("wfi", DBG_SIG_TYPE_REG, 1, &exu->wfi);
     dbg_vcd_add_sig("wfi_resume_pc", DBG_SIG_TYPE_REG, 32, &exu->wfi_resume_pc);
+    dbg_vcd_add_sig("fence_i_stage", DBG_SIG_TYPE_REG, 3, &exu->fence_i_stage);
 
     dbg_vcd_add_sig("gpr_ra", DBG_SIG_TYPE_REG, 32, &exu->gpr[1]);
     dbg_vcd_add_sig("gpr_sp", DBG_SIG_TYPE_REG, 32, &exu->gpr[2]);
@@ -261,6 +313,7 @@ void exu_reset(exu_t *exu)
     exu->amo_rsvd_addr = 0;
     exu->wfi = false;
     exu->wfi_resume_pc = 0;
+    exu->fence_i_stage = FENCE_I_STAGE_IDLE;
     exu->irq_defer = false;
     *exu->perf.exec_inst = 0;
     exu->priv = RV32G_PRIV_MACHINE;

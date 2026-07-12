@@ -9,6 +9,7 @@
 #include "itf/bti_if.h"
 #include "itf/axi4_if.h"
 #include "itf/l1_flush_if.h"
+#include "itf/l1_flush_ack_if.h"
 
 #define L1_BYPASS_RANGE_NUM 8
 #define L1_LINE_SIZE 64u
@@ -33,6 +34,11 @@ typedef enum l1_state {
     L1_STATE_REFILL_AR,
     L1_STATE_REFILL_R,
     L1_STATE_SERVE_MISS,
+    L1_STATE_FLUSH_CHECK,
+    L1_STATE_FLUSH_WB_AW,
+    L1_STATE_FLUSH_WB_W,
+    L1_STATE_FLUSH_WB_B,
+    L1_STATE_FLUSH_ACK,
 } l1_state_t;
 
 typedef enum l1_ost_kind {
@@ -67,6 +73,7 @@ typedef struct l1 {
     itf_t *axi4_ar_mst;
     itf_t *axi4_r_slv;
     itf_t *flush_slv;
+    itf_t *flush_ack_mst;
 
     l1_conf_t conf;
     u32 set_num;
@@ -92,6 +99,7 @@ typedef struct l1 {
     u32 req_data;
     u32 wb_line_addr;
     u32 beat_idx;
+    u32 flush_line_idx;
     bool op_ok;
 
     u64 *perf_hit;

@@ -196,6 +196,11 @@
             "payloads": []
         },
 
+        "l1_flush_ack": {
+            "type": "vld",
+            "payloads": []
+        },
+
         "ldst_req": {
             "type": "vld-rdy",
             "enums": {
