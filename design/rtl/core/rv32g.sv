@@ -11,6 +11,17 @@ module rv32g(
     axi4_b_if_t.slv   mm_axi4_b_slv,
     axi4_ar_if_t.mst  mm_axi4_ar_mst,
     axi4_r_if_t.slv   mm_axi4_r_slv,
+    perf_rv32g_if_t.mst perf_mst,
+    perf_axi_demux_if_t.mst perf_cbi_i_axi_demux_mst,
+    perf_axi_demux_if_t.mst perf_cbi_d_axi_demux_mst,
+    perf_l2_if_t.mst        perf_l2_mst,
+    perf_ifu_if_t.mst       perf_ifu_mst,
+    perf_bpu_if_t.mst       perf_bpu_mst,
+    perf_exu_if_t.mst       perf_exu_mst,
+    perf_lsu_if_t.mst       perf_lsu_mst,
+    perf_mmu_if_t.mst       perf_mmu_mst,
+    perf_l1_if_t.mst        perf_l1i_mst,
+    perf_l1_if_t.mst        perf_l1d_mst,
     ext_irq_if_t.slv  uart_irq_slv,
     ext_irq_if_t.slv  gpio_irq_slv,
     ext_irq_if_t.slv  gtimer_irq_slv
@@ -71,7 +82,6 @@ module rv32g(
     logic boot_rom_cs;
     logic [`BOOT_ROM_WORD_AW-1:0] boot_rom_addr;
     logic [`RV_XLEN-1:0] boot_rom_data;
-
     hart u_hart(
         .clk            (clk),
         .rst_n          (rst_n),
@@ -87,7 +97,14 @@ module rv32g(
         .d_axi4_r_slv   (hart_d_r),
         .core_timer_slv (core_timer),
         .core_m_irq_slv (core_m_irq),
-        .ext_irq_slv    (ext_irq)
+        .ext_irq_slv    (ext_irq),
+        .perf_ifu_mst   (perf_ifu_mst),
+        .perf_bpu_mst   (perf_bpu_mst),
+        .perf_exu_mst   (perf_exu_mst),
+        .perf_lsu_mst   (perf_lsu_mst),
+        .perf_mmu_mst   (perf_mmu_mst),
+        .perf_l1i_mst   (perf_l1i_mst),
+        .perf_l1d_mst   (perf_l1d_mst)
     );
 
     axi_link u_hart_i_axi_link(
@@ -152,13 +169,22 @@ module rv32g(
         .mm_d_axi4_w_mst      (mm_d_w),
         .mm_d_axi4_b_slv      (mm_d_b),
         .mm_d_axi4_ar_mst     (mm_d_ar),
-        .mm_d_axi4_r_slv      (mm_d_r)
+        .mm_d_axi4_r_slv      (mm_d_r),
+        .perf_i_axi_demux_mst (perf_cbi_i_axi_demux_mst),
+        .perf_d_axi_demux_mst (perf_cbi_d_axi_demux_mst)
     );
 
     apb_demux #(
         .GST_NUM  (3),
+`ifdef VERILATOR
+        .GST_BASE ('{32'h30000000, 32'h31000000, 32'h31100000,
+            32'h00000000}),
+        .GST_SIZE ('{32'h01000000, 32'h00100000, 32'h00400000,
+            32'h00000000})
+`else
         .GST_BASE ('{32'h30000000, 32'h31000000, 32'h31100000}),
         .GST_SIZE ('{32'h01000000, 32'h00100000, 32'h00400000})
+`endif
     ) u_cfg_apb_demux(
         .host_apb_req_slv  (cfg_req),
         .host_apb_rsp_mst  (cfg_rsp),
@@ -266,6 +292,46 @@ module rv32g(
         .mem_axi4_w_mst   (mm_axi4_w_mst),
         .mem_axi4_b_slv   (mm_axi4_b_slv),
         .mem_axi4_ar_mst  (mm_axi4_ar_mst),
-        .mem_axi4_r_slv   (mm_axi4_r_slv)
+        .mem_axi4_r_slv   (mm_axi4_r_slv),
+        .perf_mst         (perf_l2_mst)
     );
+
+    assign perf_mst.pkt.hart_i_aw_bp = hart_i_aw.vld && !hart_i_aw.rdy;
+    assign perf_mst.pkt.hart_i_w_bp = hart_i_w.vld && !hart_i_w.rdy;
+    assign perf_mst.pkt.hart_i_ar_bp = hart_i_ar.vld && !hart_i_ar.rdy;
+    assign perf_mst.pkt.hart_i_b_bp = hart_i_b.vld && !hart_i_b.rdy;
+    assign perf_mst.pkt.hart_i_r_bp = hart_i_r.vld && !hart_i_r.rdy;
+
+    assign perf_mst.pkt.hart_d_aw_bp = hart_d_aw.vld && !hart_d_aw.rdy;
+    assign perf_mst.pkt.hart_d_w_bp = hart_d_w.vld && !hart_d_w.rdy;
+    assign perf_mst.pkt.hart_d_ar_bp = hart_d_ar.vld && !hart_d_ar.rdy;
+    assign perf_mst.pkt.hart_d_b_bp = hart_d_b.vld && !hart_d_b.rdy;
+    assign perf_mst.pkt.hart_d_r_bp = hart_d_r.vld && !hart_d_r.rdy;
+
+    assign perf_mst.pkt.cbi_i_aw_bp = cbi_i_aw.vld && !cbi_i_aw.rdy;
+    assign perf_mst.pkt.cbi_i_w_bp = cbi_i_w.vld && !cbi_i_w.rdy;
+    assign perf_mst.pkt.cbi_i_ar_bp = cbi_i_ar.vld && !cbi_i_ar.rdy;
+    assign perf_mst.pkt.cbi_i_b_bp = cbi_i_b.vld && !cbi_i_b.rdy;
+    assign perf_mst.pkt.cbi_i_r_bp = cbi_i_r.vld && !cbi_i_r.rdy;
+
+    assign perf_mst.pkt.cbi_d_aw_bp = cbi_d_aw.vld && !cbi_d_aw.rdy;
+    assign perf_mst.pkt.cbi_d_w_bp = cbi_d_w.vld && !cbi_d_w.rdy;
+    assign perf_mst.pkt.cbi_d_ar_bp = cbi_d_ar.vld && !cbi_d_ar.rdy;
+    assign perf_mst.pkt.cbi_d_b_bp = cbi_d_b.vld && !cbi_d_b.rdy;
+    assign perf_mst.pkt.cbi_d_r_bp = cbi_d_r.vld && !cbi_d_r.rdy;
+
+    assign perf_mst.pkt.l2_i_aw_bp = mm_i_aw.vld && !mm_i_aw.rdy;
+    assign perf_mst.pkt.l2_i_w_bp = mm_i_w.vld && !mm_i_w.rdy;
+    assign perf_mst.pkt.l2_i_ar_bp = mm_i_ar.vld && !mm_i_ar.rdy;
+    assign perf_mst.pkt.l2_i_b_bp = mm_i_b.vld && !mm_i_b.rdy;
+    assign perf_mst.pkt.l2_i_r_bp = mm_i_r.vld && !mm_i_r.rdy;
+
+    assign perf_mst.pkt.l2_d_aw_bp = mm_d_aw.vld && !mm_d_aw.rdy;
+    assign perf_mst.pkt.l2_d_w_bp = mm_d_w.vld && !mm_d_w.rdy;
+    assign perf_mst.pkt.l2_d_ar_bp = mm_d_ar.vld && !mm_d_ar.rdy;
+    assign perf_mst.pkt.l2_d_b_bp = mm_d_b.vld && !mm_d_b.rdy;
+    assign perf_mst.pkt.l2_d_r_bp = mm_d_r.vld && !mm_d_r.rdy;
+
+    assign perf_mst.pkt.cfg_apb_bp =
+        cfg_req.psel && cfg_req.penable && !cfg_rsp.pready;
 endmodule

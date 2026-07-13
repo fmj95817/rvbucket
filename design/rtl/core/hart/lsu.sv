@@ -7,7 +7,8 @@ module lsu(
     ldst_rsp_if_t.mst  exu_ldst_rsp_mst,
     ldst_req_if_t.mst  hbi_ldst_req_mst,
     ldst_rsp_if_t.slv  hbi_ldst_rsp_slv,
-    csr_lsu_state_if_t.slv csr_lsu_state_slv
+    csr_lsu_state_if_t.slv csr_lsu_state_slv,
+    perf_lsu_if_t.mst perf_mst
 );
     localparam logic [12:0] PAGE_SIZE = 13'd4096;
 
@@ -198,4 +199,18 @@ module lsu(
     assign exu_ldst_rsp_mst.vld = state == S_DONE;
     assign exu_ldst_rsp_mst.pkt.data = req_st ? 32'b0 : rsp_data;
     assign exu_ldst_rsp_mst.pkt.ok = rsp_ok;
+
+    assign perf_mst.pkt.exu_req = exu_req_hsk;
+    assign perf_mst.pkt.direct_req_bp = state == S_DIRECT_REQ &&
+        hbi_ldst_req_mst.vld && !hbi_ldst_req_mst.rdy;
+    assign perf_mst.pkt.direct_rsp_wait = state == S_DIRECT_RSP &&
+        !hbi_ldst_rsp_slv.vld;
+    assign perf_mst.pkt.split_req = exu_req_hsk && translation_en &&
+        req_cross_page(exu_ldst_req_slv.pkt.addr, exu_ldst_req_slv.pkt.size);
+    assign perf_mst.pkt.split_req_bp = state == S_SPLIT_REQ &&
+        hbi_ldst_req_mst.vld && !hbi_ldst_req_mst.rdy;
+    assign perf_mst.pkt.split_rsp_wait = state == S_SPLIT_RSP &&
+        !hbi_ldst_rsp_slv.vld;
+    assign perf_mst.pkt.exu_rsp_bp = exu_ldst_rsp_mst.vld &&
+        !exu_ldst_rsp_mst.rdy;
 endmodule

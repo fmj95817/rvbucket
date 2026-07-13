@@ -21,7 +21,8 @@ module mmu #(
     csr_mmu_state_if_t.slv csr_mmu_state_slv,
     tlb_flush_if_t.slv tlb_flush_slv,
     hart_expt_if_t.mst fch_expt_mst,
-    hart_expt_if_t.mst ldst_expt_mst
+    hart_expt_if_t.mst ldst_expt_mst,
+    perf_mmu_if_t.mst perf_mst
 );
     localparam logic [15:0] MMU_PTE_TRANS_ID = 16'hfffe;
     localparam int I_OST_SLOT_W = $clog2(OST_DEPTH);
@@ -584,6 +585,18 @@ module mmu #(
     assign ldst_expt_mst.vld = d_ost_head_vld && d_ost_head_ctx.ready &&
         d_ost_head_ctx.expt_vld;
     assign ldst_expt_mst.pkt = d_ost_head_ctx.expt;
+
+    assign perf_mst.pkt.itlb_hit = itlb_rsp_vld && itlb_hit;
+    assign perf_mst.pkt.itlb_miss = itlb_rsp_vld && !itlb_hit;
+    assign perf_mst.pkt.dtlb_hit = dtlb_rsp_vld && dtlb_hit;
+    assign perf_mst.pkt.dtlb_miss = dtlb_rsp_vld && !dtlb_hit;
+    assign perf_mst.pkt.i_stg_full = va_i_req_slv.vld &&
+        !va_i_req_slv.rdy;
+    assign perf_mst.pkt.d_stg_full = va_d_req_slv.vld &&
+        !va_d_req_slv.rdy;
+    assign perf_mst.pkt.i_ost_full = i_fifo_rd_vld && !i_ost_alloc_rdy;
+    assign perf_mst.pkt.d_ost_full = d_fifo_rd_vld && !d_ost_alloc_rdy;
+    assign perf_mst.pkt.ptw_busy = walk_busy;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin

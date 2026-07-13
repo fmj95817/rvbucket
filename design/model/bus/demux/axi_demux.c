@@ -37,11 +37,11 @@ void axi_demux_construct(axi_demux_t *axi_demux, const char *parent, const char 
         conf->ost_depth);
 
     axi_demux->perf_stg_ar_full = dbg_pcm_reg_perf_cnt(
-        axi_demux->mod.hier_name, "stg_ar_full");
+        axi_demux->mod.hier_name, "ar_stg_full");
     axi_demux->perf_stg_aw_full = dbg_pcm_reg_perf_cnt(
-        axi_demux->mod.hier_name, "stg_aw_full");
+        axi_demux->mod.hier_name, "aw_stg_full");
     axi_demux->perf_stg_w_full = dbg_pcm_reg_perf_cnt(
-        axi_demux->mod.hier_name, "stg_w_full");
+        axi_demux->mod.hier_name, "w_stg_full");
 }
 
 void axi_demux_reset(axi_demux_t *axi_demux)

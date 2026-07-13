@@ -29,11 +29,11 @@ void axi_mux_construct(axi_mux_t *axi_mux, const char *parent, const char *name,
         conf->ost_depth);
 
     axi_mux->perf_stg_ar_full = dbg_pcm_reg_perf_cnt(axi_mux->mod.hier_name,
-        "stg_ar_full");
+        "ar_stg_full");
     axi_mux->perf_stg_aw_full = dbg_pcm_reg_perf_cnt(axi_mux->mod.hier_name,
-        "stg_aw_full");
+        "aw_stg_full");
     axi_mux->perf_stg_w_full = dbg_pcm_reg_perf_cnt(axi_mux->mod.hier_name,
-        "stg_w_full");
+        "w_stg_full");
 }
 
 void axi_mux_reset(axi_mux_t *axi_mux)

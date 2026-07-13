@@ -45,6 +45,7 @@ typedef struct program_header {
 
 typedef struct sim_top {
     mod_t mod;
+    u64 cycle_val;
     itf_t uart_rx_itf;
     itf_t uart_tx_itf;
     AXI4_IF_DECL(ddr_);
@@ -157,8 +158,9 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     const char *prog_path, bool fast_load_linux, bool web_ui, bool no_end_detect,
     bool boot_prog, bool perf_sim, bool smp_opt)
 {
+    sim_top->cycle_val = 0;
+    sim_top->mod.cycle = &sim_top->cycle_val;
     mod_construct(&sim_top->mod, parent, name);
-    sim_top->mod.cycle = dbg_pcm_reg_perf_cnt(sim_top->mod.hier_name, "cycles");
     dbg_pcm_set_cycle(sim_top->mod.cycle);
     DBG_VCD_MODULE_SCOPE(name);
 
@@ -217,6 +219,7 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
 static void sim_top_reset(sim_top_t *sim_top)
 {
     mod_reset(&sim_top->mod);
+    sim_top->cycle_val = 0;
     sim_top->end_sim = false;
     sim_top->exit_code = 0;
     DBG_CHECK(sim_top->ui != NULL);
@@ -274,7 +277,7 @@ static void sim_top_clock(sim_top_t *sim_top)
     AXI4_IF_DBG_CLOCK(sim_top, flash_);
     itf_dbg_clock(&sim_top->gpio_inout_itf);
 
-    (*(u64 *)sim_top->mod.cycle)++;
+    sim_top->cycle_val++;
     dbg_pcm_clock();
     dbg_vcd_clock();
 

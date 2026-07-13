@@ -12,6 +12,7 @@
 #include "peri/uart.h"
 #include "peri/gpio.h"
 #include "peri/gtimer.h"
+#include "peri/pcm.h"
 
 typedef struct peri {
     mod_t mod;
@@ -30,11 +31,13 @@ typedef struct peri {
     uart_t uart;
     gpio_t gpio;
     gtimer_t gtimer;
+    pcm_t pcm;
     apb_demux_t apb_demux;
 
     APB_IF_DECL(uart_);
     APB_IF_DECL(gpio_);
     APB_IF_DECL(gtimer_);
+    APB_IF_DECL(pcm_);
 } peri_t;
 
 extern void peri_construct(peri_t *peri, const char *parent, const char *name, u32 base, u32 size);

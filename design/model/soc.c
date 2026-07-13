@@ -3,6 +3,7 @@
 #include "spec/core/core.h"
 #include "spec/core/hart.h"
 #include "spec/soc.h"
+#include "dbg/pcm.h"
 #include "dbg/vcd.h"
 
 void soc_construct(soc_t *soc, const char *parent, const char *name,
@@ -10,6 +11,7 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
 {
     mod_construct(&soc->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
+    soc->perf_cycle = dbg_pcm_reg_perf_cnt(soc->mod.hier_name, "cycle");
 
     u32 hart_l1_latency = perf_sim ? HART_L1_LATENCY : 0u;
     u32 l2_latency = perf_sim ? L2_LATENCY : 0u;
@@ -128,6 +130,8 @@ void soc_reset(soc_t *soc)
 void soc_clock(soc_t *soc)
 {
     mod_clock(&soc->mod);
+    (*soc->perf_cycle)++;
+    
     rv32g_clock(&soc->cpu);
     peri_clock(&soc->peri);
     axi_demux_clock(&soc->mm_axi_demux);

@@ -19,7 +19,8 @@ module exu(
     l1_flush_ack_if_t.slv l1d_flush_ack_slv,
     hart_expt_if_t.mst ex_expt_mst,
     exu_state_if_t.mst exu_state_mst,
-    trap_exu_ctrl_if_t.slv trap_exu_ctrl_slv
+    trap_exu_ctrl_if_t.slv trap_exu_ctrl_slv,
+    perf_exu_if_t.mst perf_mst
 );
     logic [1:0] priv;
     logic wfi;
@@ -219,6 +220,26 @@ module exu(
         .done              (sys_done),
         .ex_expt_mst       (ex_expt_mst)
     );
+
+    assign perf_mst.pkt.ex_req = ex_req_hsk;
+    assign perf_mst.pkt.alu_inst = ex_req_fire &&
+        (opcode == OPCODE_ALUI || opcode == OPCODE_ALU);
+    assign perf_mst.pkt.branch_inst = ex_req_fire &&
+        (opcode == OPCODE_JAL || opcode == OPCODE_JALR ||
+        opcode == OPCODE_BRANCH);
+    assign perf_mst.pkt.ldst_inst = ex_req_fire &&
+        (opcode == OPCODE_LOAD || opcode == OPCODE_STORE ||
+        opcode == OPCODE_AMO);
+    assign perf_mst.pkt.misc_inst = ex_req_fire &&
+        (opcode == OPCODE_LUI || opcode == OPCODE_AUIPC);
+    assign perf_mst.pkt.sys_inst = ex_req_fire &&
+        (opcode == OPCODE_MISC_MEM || opcode == OPCODE_SYSTEM);
+    assign perf_mst.pkt.wfi_stall = ex_req_slv.vld && wfi;
+    assign perf_mst.pkt.flush_drop = ex_req_slv.vld && flush_active;
+    assign perf_mst.pkt.alu_busy = alu_sel && !alu_done;
+    assign perf_mst.pkt.branch_busy = branch_sel && !branch_done;
+    assign perf_mst.pkt.ldst_busy = ldst_sel && !ldst_done;
+    assign perf_mst.pkt.sys_busy = sys_sel && !sys_done;
 
 `ifndef SYNTHESIS
     logic rtl_progress_en;

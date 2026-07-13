@@ -15,7 +15,14 @@ module hart(
     axi4_r_if_t.slv   d_axi4_r_slv,
     core_timer_if_t.slv core_timer_slv,
     core_m_irq_if_t.slv core_m_irq_slv,
-    ext_irq_if_t.slv ext_irq_slv
+    ext_irq_if_t.slv ext_irq_slv,
+    perf_ifu_if_t.mst perf_ifu_mst,
+    perf_bpu_if_t.mst perf_bpu_mst,
+    perf_exu_if_t.mst perf_exu_mst,
+    perf_lsu_if_t.mst perf_lsu_mst,
+    perf_mmu_if_t.mst perf_mmu_mst,
+    perf_l1_if_t.mst  perf_l1i_mst,
+    perf_l1_if_t.mst  perf_l1d_mst
 );
     fch_req_if_t fch_req_if();
     fch_rsp_if_t fch_rsp_if();
@@ -59,7 +66,6 @@ module hart(
     bti_rsp_if_t pa_i_bti_rsp_if();
     bti_req_if_t pa_d_bti_req_if();
     bti_rsp_if_t pa_d_bti_rsp_if();
-
     ifu u_ifu(
         .clk         (clk),
         .rst_n       (rst_n),
@@ -75,7 +81,8 @@ module hart(
         .l1i_flush_vld  (l1i_flush_if.vld),
         .fch_expt_mst   (fch_expt_if),
         .trap_send_slv (trap_send_if),
-        .exu_state_slv (exu_state_if)
+        .exu_state_slv (exu_state_if),
+        .perf_mst      (perf_ifu_mst)
     );
 
     bpu u_bpu(
@@ -83,7 +90,8 @@ module hart(
         .rst_n        (rst_n),
         .pred_req_slv (bpu_pred_req_if),
         .pred_rsp_mst (bpu_pred_rsp_if),
-        .update_slv   (bpu_update_if)
+        .update_slv   (bpu_update_if),
+        .perf_mst     (perf_bpu_mst)
     );
 
     exu u_exu(
@@ -105,7 +113,8 @@ module hart(
         .l1d_flush_ack_slv     (l1d_flush_ack_if),
         .ex_expt_mst           (ex_expt_if),
         .exu_state_mst         (exu_state_if),
-        .trap_exu_ctrl_slv     (trap_exu_ctrl_if)
+        .trap_exu_ctrl_slv     (trap_exu_ctrl_if),
+        .perf_mst              (perf_exu_mst)
     );
 
     csr u_csr(
@@ -146,7 +155,8 @@ module hart(
         .exu_ldst_rsp_mst  (exu_lsu_ldst_rsp_if),
         .hbi_ldst_req_mst  (lsu_hbi_ldst_req_if),
         .hbi_ldst_rsp_slv  (lsu_hbi_ldst_rsp_if),
-        .csr_lsu_state_slv (csr_lsu_state_if)
+        .csr_lsu_state_slv (csr_lsu_state_if),
+        .perf_mst          (perf_lsu_mst)
     );
 
     mmu u_mmu(
@@ -164,7 +174,8 @@ module hart(
         .csr_mmu_state_slv (csr_mmu_state_if),
         .tlb_flush_slv     (tlb_flush_if),
         .fch_expt_mst      (mmu_fch_expt_if),
-        .ldst_expt_mst     (ldst_expt_if)
+        .ldst_expt_mst     (ldst_expt_if),
+        .perf_mst          (perf_mmu_mst)
     );
 
     hbi u_hbi(
@@ -200,7 +211,8 @@ module hart(
         .mem_axi4_w_mst    (i_axi4_w_mst),
         .mem_axi4_b_slv    (i_axi4_b_slv),
         .mem_axi4_ar_mst   (i_axi4_ar_mst),
-        .mem_axi4_r_slv    (i_axi4_r_slv)
+        .mem_axi4_r_slv    (i_axi4_r_slv),
+        .perf_mst          (perf_l1i_mst)
     );
 
     l1 #(
@@ -227,17 +239,16 @@ module hart(
         .mem_axi4_w_mst    (d_axi4_w_mst),
         .mem_axi4_b_slv    (d_axi4_b_slv),
         .mem_axi4_ar_mst   (d_axi4_ar_mst),
-        .mem_axi4_r_slv    (d_axi4_r_slv)
+        .mem_axi4_r_slv    (d_axi4_r_slv),
+        .perf_mst          (perf_l1d_mst)
     );
 
 `ifndef SYNTHESIS
     logic rtl_progress_en;
-    logic rtl_udelay_probe_en;
     longint unsigned rtl_progress_cycle;
 
     initial begin
         rtl_progress_en = $test$plusargs("rtl_progress");
-        rtl_udelay_probe_en = $test$plusargs("rtl_udelay_probe");
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -261,26 +272,6 @@ module hart(
                     l1i_flush_if.vld,
                     l1d_flush_if.vld);
             end
-        end
-    end
-
-    always_ff @(posedge clk) begin
-        if (rst_n && rtl_udelay_probe_en &&
-            exu_state_if.pkt.pc >= 32'hc02de950 &&
-            exu_state_if.pkt.pc < 32'hc02de980 &&
-            rtl_progress_cycle[19:0] == 20'h0) begin
-            $display("[RTL_UDELAY][%m] cycle=%0d pc=%08x ra=%08x s1=%08x mtime=%016x csr_time=%08x_%08x a3=%08x a4=%08x a5=%08x delta=%08x",
-                rtl_progress_cycle,
-                exu_state_if.pkt.pc,
-                u_exu.u_exu_gpr.gprs[1],
-                u_exu.u_exu_gpr.gprs[9],
-                core_timer_slv.pkt.mtime,
-                u_csr.csr_timeh,
-                u_csr.csr_time,
-                u_exu.u_exu_gpr.gprs[13],
-                u_exu.u_exu_gpr.gprs[14],
-                u_exu.u_exu_gpr.gprs[15],
-                u_exu.u_exu_gpr.gprs[15] - u_exu.u_exu_gpr.gprs[13]);
         end
     end
 `endif

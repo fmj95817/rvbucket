@@ -5,6 +5,9 @@ import sys
 import math
 
 def gen_c_itf(itf_name, desc):
+    if desc.get("rtl_only", False):
+        return
+
     c_path = "design/model/itf/{}_if.h".format(itf_name)
     f = open(c_path, "w")
     f.write("#ifndef {}_IF_H\n".format(itf_name.upper()))

@@ -1,5 +1,5 @@
 module apb_demux #(
-    parameter GST_NUM = 3,
+    parameter int GST_NUM = 4,
     parameter logic [31:0] GST_BASE[GST_NUM],
     parameter logic [31:0] GST_SIZE[GST_NUM]
 )(

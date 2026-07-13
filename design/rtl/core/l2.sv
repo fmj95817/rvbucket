@@ -25,7 +25,8 @@ module l2 #(
     axi4_w_if_t.mst   mem_axi4_w_mst,
     axi4_b_if_t.slv   mem_axi4_b_slv,
     axi4_ar_if_t.mst  mem_axi4_ar_mst,
-    axi4_r_if_t.slv   mem_axi4_r_slv
+    axi4_r_if_t.slv   mem_axi4_r_slv,
+    perf_l2_if_t.mst perf_mst
 );
     localparam int WORD_SIZE = 4;
     localparam int WORD_NUM = LINE_SIZE / WORD_SIZE;
@@ -150,6 +151,18 @@ module l2 #(
         (d_axi4_r_mst.vld && d_axi4_r_mst.rdy);
     wire host_b_hsk = (i_axi4_b_mst.vld && i_axi4_b_mst.rdy) ||
         (d_axi4_b_mst.vld && d_axi4_b_mst.rdy);
+    wire idle_aw_hsk = state == S_IDLE &&
+        ((i_axi4_aw_slv.vld && i_axi4_aw_slv.rdy) ||
+        (d_axi4_aw_slv.vld && d_axi4_aw_slv.rdy));
+    wire idle_ar_hsk = state == S_IDLE &&
+        ((i_axi4_ar_slv.vld && i_axi4_ar_slv.rdy) ||
+        (d_axi4_ar_slv.vld && d_axi4_ar_slv.rdy));
+    wire idle_req_hsk = idle_aw_hsk || idle_ar_hsk;
+    wire idle_req_cacheable = idle_sel_write ?
+        ((idle_sel_port ? d_axi4_aw_slv.pkt.cache :
+            i_axi4_aw_slv.pkt.cache) != 4'h0) :
+        ((idle_sel_port ? d_axi4_ar_slv.pkt.cache :
+            i_axi4_ar_slv.pkt.cache) != 4'h0);
 
     wire [SET_W-1:0] cur_set = req_addr[LINE_OFF_W +: SET_W];
     wire [TAG_W-1:0] cur_tag = req_addr[31 -: TAG_W];
@@ -758,6 +771,26 @@ module l2 #(
         state == S_WB_B ||
         (state == S_BYPASS_B &&
             (req_port ? d_axi4_b_mst.rdy : i_axi4_b_mst.rdy));
+
+    assign perf_mst.pkt.hit = state == S_LOOKUP && req_cacheable && hit;
+    assign perf_mst.pkt.miss = state == S_LOOKUP && req_cacheable && !hit;
+    assign perf_mst.pkt.bypass = idle_req_hsk && !idle_req_cacheable;
+    assign perf_mst.pkt.writeback = state == S_WB_AW && aw_hsk;
+    assign perf_mst.pkt.busy =
+        (i_axi4_aw_slv.vld && !i_axi4_aw_slv.rdy) ||
+        (i_axi4_w_slv.vld && !i_axi4_w_slv.rdy) ||
+        (i_axi4_ar_slv.vld && !i_axi4_ar_slv.rdy) ||
+        (d_axi4_aw_slv.vld && !d_axi4_aw_slv.rdy) ||
+        (d_axi4_w_slv.vld && !d_axi4_w_slv.rdy) ||
+        (d_axi4_ar_slv.vld && !d_axi4_ar_slv.rdy);
+    assign perf_mst.pkt.i_busy =
+        (i_axi4_aw_slv.vld && !i_axi4_aw_slv.rdy) ||
+        (i_axi4_w_slv.vld && !i_axi4_w_slv.rdy) ||
+        (i_axi4_ar_slv.vld && !i_axi4_ar_slv.rdy);
+    assign perf_mst.pkt.d_busy =
+        (d_axi4_aw_slv.vld && !d_axi4_aw_slv.rdy) ||
+        (d_axi4_w_slv.vld && !d_axi4_w_slv.rdy) ||
+        (d_axi4_ar_slv.vld && !d_axi4_ar_slv.rdy);
 
 `ifndef SYNTHESIS
     always_ff @(posedge clk) begin

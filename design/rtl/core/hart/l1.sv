@@ -38,7 +38,8 @@ module l1 #(
     axi4_w_if_t.mst   mem_axi4_w_mst,
     axi4_b_if_t.slv   mem_axi4_b_slv,
     axi4_ar_if_t.mst  mem_axi4_ar_mst,
-    axi4_r_if_t.slv   mem_axi4_r_slv
+    axi4_r_if_t.slv   mem_axi4_r_slv,
+    perf_l1_if_t.mst  perf_mst
 );
     localparam int WORD_SIZE = 4;
     localparam int WORD_NUM = LINE_SIZE / WORD_SIZE;
@@ -769,24 +770,20 @@ module l1 #(
     assign host_bti_rsp_mst.pkt.ok = rsp_ok;
     assign flush_ack_mst.vld = state == S_FLUSH_DONE;
 
+    assign perf_mst.pkt.hit = state == S_LOOKUP_CHECK && hit;
+    assign perf_mst.pkt.miss = state == S_LOOKUP_CHECK && !hit;
+    assign perf_mst.pkt.bypass = state == S_IDLE && host_bti_req_slv.vld &&
+        host_bti_req_slv.rdy && bypass_addr(host_bti_req_slv.pkt.addr);
+    assign perf_mst.pkt.writeback = (state == S_WB_AW ||
+        state == S_FLUSH_WB_AW) && aw_hsk;
+    assign perf_mst.pkt.busy = host_bti_req_slv.vld && !host_bti_req_slv.rdy;
+
 `ifndef SYNTHESIS
     logic rtl_progress_en;
-    logic rtl_l1_probe_en;
     longint unsigned rtl_progress_cycle;
-    wire rtl_probe_req_line = req_addr[31:6] == 26'(32'h41482240 >> 6);
-    wire rtl_probe_host_line =
-        host_bti_req_slv.pkt.addr[31:6] == 26'(32'h41482240 >> 6);
-    wire rtl_probe_refill_line = req_line_addr == 32'h41482240;
-    wire rtl_probe_wb_line = wb_line_addr == 32'h41482240;
-    wire [31:0] rtl_probe_victim_line =
-        {victim_tag, req_set, {LINE_OFF_W{1'b0}}};
-    wire rtl_probe_flush_line =
-        {tag_ram[flush_way][flush_set], flush_set, {LINE_OFF_W{1'b0}}} ==
-            32'h41482240;
 
     initial begin
         rtl_progress_en = $test$plusargs("rtl_progress");
-        rtl_l1_probe_en = $test$plusargs("rtl_l1_probe");
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -814,139 +811,6 @@ module l1 #(
                     mem_axi4_ar_mst.vld, mem_axi4_ar_mst.rdy,
                     mem_axi4_r_slv.vld, mem_axi4_r_slv.rdy,
                     mem_axi4_r_slv.pkt.last);
-            end
-        end
-    end
-
-    always_ff @(posedge clk) begin
-        if (rst_n && rtl_l1_probe_en) begin
-            if (host_bti_req_slv.vld && host_bti_req_slv.rdy &&
-                rtl_probe_host_line) begin
-                $display("[RTL_L1_PROBE][%m] host_req state=%0d addr=%08x cmd=%0d size=%0d data=%08x strb=%x set=%0d tag=%0h",
-                    state,
-                    host_bti_req_slv.pkt.addr,
-                    host_bti_req_slv.pkt.cmd,
-                    host_bti_req_slv.pkt.size,
-                    host_bti_req_slv.pkt.data,
-                    host_bti_req_slv.pkt.strobe,
-                    host_bti_req_slv.pkt.addr[LINE_OFF_W +: SET_W],
-                    host_bti_req_slv.pkt.addr[31 -: TAG_W]);
-            end
-            if (state == S_LOOKUP_CHECK && !hit && valid_ram[victim_way][req_set] &&
-                victim_dirty && rtl_probe_victim_line == 32'h41482240) begin
-                $display("[RTL_L1_PROBE][%m] victim_target miss_addr=%08x miss_set=%0d miss_tag=%0h victim_way=%0d victim_tag=%0h dirty=%0b valid=%0b replace=%0d wb_line=%08x",
-                    cur_addr,
-                    req_set,
-                    req_tag,
-                    victim_way,
-                    victim_tag,
-                    victim_dirty,
-                    valid_ram[victim_way][req_set],
-                    replace_way[req_set],
-                    rtl_probe_victim_line);
-            end
-            if (state == S_LOOKUP_CHECK && !hit &&
-                valid_ram[0][req_set] && valid_ram[1][req_set] &&
-                tag_ram[0][req_set] == tag_ram[1][req_set]) begin
-                $display("[RTL_L1_PROBE][%m] duplicate_tag miss_addr=%08x set=%0d tag=%0h way0_dirty=%0b way1_dirty=%0b way0_tag=%0h way1_tag=%0h",
-                    cur_addr,
-                    req_set,
-                    tag_ram[0][req_set],
-                    dirty_ram[0][req_set],
-                    dirty_ram[1][req_set],
-                    tag_ram[0][req_set],
-                    tag_ram[1][req_set]);
-            end
-            if (state == S_FLUSH_CHECK && valid_ram[flush_way][flush_set] &&
-                dirty_ram[flush_way][flush_set] && rtl_probe_flush_line) begin
-                $display("[RTL_L1_PROBE][%m] flush_target set=%0d way=%0d tag=%0h dirty=%0b valid=%0b line=%08x req_set=%0d req_way=%0d",
-                    flush_set,
-                    flush_way,
-                    tag_ram[flush_way][flush_set],
-                    dirty_ram[flush_way][flush_set],
-                    valid_ram[flush_way][flush_set],
-                    {tag_ram[flush_way][flush_set], flush_set, {LINE_OFF_W{1'b0}}},
-                    req_set,
-                    req_way);
-            end
-            if (state == S_REFILL_R && r_hsk && rtl_probe_refill_line) begin
-                $display("[RTL_L1_PROBE][%m] refill beat=%0d set=%0d way=%0d tag=%0h data=%08x last=%0b resp=%0d",
-                    beat_idx,
-                    req_set,
-                    req_way,
-                    req_tag,
-                    mem_axi4_r_slv.pkt.data,
-                    mem_axi4_r_slv.pkt.last,
-                    mem_axi4_r_slv.pkt.resp);
-            end
-            if (state == S_WB_READ && rtl_probe_wb_line) begin
-                $display("[RTL_L1_PROBE][%m] wb_read beat=%0d set=%0d way=%0d addr=%0d prev_rdata=%08x",
-                    beat_idx,
-                    req_set,
-                    req_way,
-                    beat_data_addr,
-                    data_rdata);
-            end
-            if (state == S_FLUSH_WB_READ && rtl_probe_wb_line) begin
-                $display("[RTL_L1_PROBE][%m] flush_wb_read beat=%0d flush_set=%0d flush_way=%0d addr=%0d prev_rdata=%08x req_set=%0d req_way=%0d",
-                    beat_idx,
-                    flush_set,
-                    flush_way,
-                    flush_data_addr,
-                    data_rdata,
-                    req_set,
-                    req_way);
-            end
-            if (state == S_WB_CAPTURE && rtl_probe_wb_line) begin
-                $display("[RTL_L1_PROBE][%m] wb_capture beat=%0d set=%0d way=%0d addr=%0d rdata=%08x",
-                    beat_idx,
-                    req_set,
-                    req_way,
-                    beat_data_addr,
-                    data_rdata);
-            end
-            if (state == S_FLUSH_WB_CAPTURE && rtl_probe_wb_line) begin
-                $display("[RTL_L1_PROBE][%m] flush_wb_capture beat=%0d flush_set=%0d flush_way=%0d addr=%0d rdata=%08x req_set=%0d req_way=%0d",
-                    beat_idx,
-                    flush_set,
-                    flush_way,
-                    flush_data_addr,
-                    data_rdata,
-                    req_set,
-                    req_way);
-            end
-            if (state == S_SERVE_USE && rtl_probe_req_line) begin
-                $display("[RTL_L1_PROBE][%m] serve_use addr=%08x cmd=%0d byte_idx=%0d set=%0d way=%0d tag=%0h rdata=%08x rsp_data=%08x wdata=%08x wen=%0b",
-                    cur_addr,
-                    req_cmd,
-                    req_byte_idx,
-                    req_set,
-                    req_way,
-                    req_tag,
-                    data_rdata,
-                    rsp_data,
-                    data_wdata,
-                    data_wen);
-            end
-            if (state == S_RESP && rsp_hsk && rtl_probe_req_line) begin
-                $display("[RTL_L1_PROBE][%m] resp addr=%08x cmd=%0d data=%08x ok=%0b",
-                    req_addr,
-                    req_cmd,
-                    host_bti_rsp_mst.pkt.data,
-                    host_bti_rsp_mst.pkt.ok);
-            end
-            if ((state == S_WB_W || state == S_FLUSH_WB_W) && w_hsk &&
-                rtl_probe_wb_line) begin
-                $display("[RTL_L1_PROBE][%m] writeback state=%0d beat=%0d set=%0d way=%0d flush_set=%0d flush_way=%0d data=%08x last=%0b wb_line=%08x",
-                    state,
-                    beat_idx,
-                    req_set,
-                    req_way,
-                    flush_set,
-                    flush_way,
-                    mem_axi4_w_mst.pkt.data,
-                    mem_axi4_w_mst.pkt.last,
-                    wb_line_addr);
             end
         end
     end

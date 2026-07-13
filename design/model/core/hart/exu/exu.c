@@ -280,7 +280,7 @@ void exu_construct(exu_t *exu, const char *parent, const char *name)
     dbg_vcd_add_sig("gpr_t2", DBG_SIG_TYPE_REG, 32, &exu->gpr[7]);
 
     exu->perf.exec_inst = dbg_pcm_reg_perf_cnt(exu->mod.hier_name,
-        "exec_inst");
+        "ex_req");
 
     exu->csr_read_req_o = itf_signal_get_src_and_chk(exu->exu_csr_read_req_out);
     exu->csr_read_rsp_i = itf_signal_get_src_and_chk(exu->csr_exu_read_rsp_in);

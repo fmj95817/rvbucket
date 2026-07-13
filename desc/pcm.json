@@ -1,0 +1,193 @@
+{
+  "types": {
+    "axi_demux": {
+      "events": [
+        "rd_ost_full",
+        "wr_ost_full",
+        "ar_stg_full",
+        "aw_stg_full",
+        "w_stg_full",
+        "ar_issue_bp",
+        "aw_issue_bp",
+        "w_issue_bp",
+        "r_rsp_bp",
+        "b_rsp_bp"
+      ]
+    },
+    "l2": {
+      "events": [
+        "hit",
+        "miss",
+        "bypass",
+        "writeback",
+        "busy",
+        "i_busy",
+        "d_busy"
+      ]
+    },
+    "ifu": {
+      "events": [
+        "fch_rsp_inst",
+        "fch_ost_full",
+        "fch_rspq_bp",
+        "ctrlq_bp",
+        "ex_req_bp",
+        "fch_req_bp",
+        "pred_wait",
+        "issue_hold"
+      ]
+    },
+    "bpu": {
+      "events": [
+        "branch",
+        "pred_true",
+        "pred_false",
+        "cond_branch",
+        "cond_branch_pred_true",
+        "jal",
+        "jal_pred_true",
+        "jalr",
+        "jalr_pred_true",
+        "cond_bht_hit",
+        "jalr_ras_hit",
+        "jalr_btb_hit",
+        "jalr_btb_miss"
+      ]
+    },
+    "mmu": {
+      "events": [
+        "itlb_hit",
+        "itlb_miss",
+        "dtlb_hit",
+        "dtlb_miss",
+        "i_stg_full",
+        "d_stg_full",
+        "i_ost_full",
+        "d_ost_full",
+        "ptw_busy"
+      ]
+    },
+    "l1": {
+      "events": [
+        "hit",
+        "miss",
+        "bypass",
+        "writeback",
+        "busy"
+      ]
+    },
+    "exu": {
+      "events": [
+        "ex_req",
+        "alu_inst",
+        "branch_inst",
+        "ldst_inst",
+        "misc_inst",
+        "sys_inst",
+        "wfi_stall",
+        "flush_drop",
+        "alu_busy",
+        "branch_busy",
+        "ldst_busy",
+        "sys_busy"
+      ]
+    },
+    "lsu": {
+      "events": [
+        "exu_req",
+        "direct_req_bp",
+        "direct_rsp_wait",
+        "split_req",
+        "split_req_bp",
+        "split_rsp_wait",
+        "exu_rsp_bp"
+      ]
+    },
+    "cbi": {
+      "children": {
+        "u_i_axi_demux": "axi_demux",
+        "u_d_axi_demux": "axi_demux"
+      }
+    },
+    "hart": {
+      "children": {
+        "u_ifu": "ifu",
+        "u_bpu": "bpu",
+        "u_mmu": "mmu",
+        "u_l1i": "l1",
+        "u_l1d": "l1",
+        "u_exu": "exu",
+        "u_lsu": "lsu"
+      }
+    },
+    "rv32g": {
+      "events": [
+        "hart_i_aw_bp",
+        "hart_i_w_bp",
+        "hart_i_ar_bp",
+        "hart_i_b_bp",
+        "hart_i_r_bp",
+        "hart_d_aw_bp",
+        "hart_d_w_bp",
+        "hart_d_ar_bp",
+        "hart_d_b_bp",
+        "hart_d_r_bp",
+        "cbi_i_aw_bp",
+        "cbi_i_w_bp",
+        "cbi_i_ar_bp",
+        "cbi_i_b_bp",
+        "cbi_i_r_bp",
+        "cbi_d_aw_bp",
+        "cbi_d_w_bp",
+        "cbi_d_ar_bp",
+        "cbi_d_b_bp",
+        "cbi_d_r_bp",
+        "l2_i_aw_bp",
+        "l2_i_w_bp",
+        "l2_i_ar_bp",
+        "l2_i_b_bp",
+        "l2_i_r_bp",
+        "l2_d_aw_bp",
+        "l2_d_w_bp",
+        "l2_d_ar_bp",
+        "l2_d_b_bp",
+        "l2_d_r_bp",
+        "cfg_apb_bp"
+      ],
+      "children": {
+        "u_cbi": "cbi",
+        "u_l2": "l2",
+        "u_hart": "hart"
+      }
+    },
+    "soc": {
+      "events": [
+        "cycle",
+        "soc_mm_aw_bp",
+        "soc_mm_w_bp",
+        "soc_mm_ar_bp",
+        "soc_mm_b_bp",
+        "soc_mm_r_bp",
+        "soc_ddr_aw_bp",
+        "soc_ddr_w_bp",
+        "soc_ddr_ar_bp",
+        "soc_ddr_b_bp",
+        "soc_ddr_r_bp",
+        "soc_flash_aw_bp",
+        "soc_flash_w_bp",
+        "soc_flash_ar_bp",
+        "soc_flash_b_bp",
+        "soc_flash_r_bp",
+        "peri_apb_bp"
+      ],
+      "children": {
+        "u_mm_axi_demux": "axi_demux",
+        "u_rv32g_cpu": "rv32g"
+      }
+    }
+  },
+  "top": {
+    "name": "u_soc",
+    "type": "soc"
+  }
+}

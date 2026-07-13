@@ -9,6 +9,8 @@
 #define GPIO_MODE_LO (*(volatile uint32_t *)0x30001004u)
 #define GPIO_MODE_HI (*(volatile uint32_t *)0x30001008u)
 
+#define PCM_CLEAR    (*(volatile uint32_t *)0x30003000u)
+
 #define PROG_CHUNK_SHIFT 14u
 #define PROG_CHUNK_BYTES (1u << PROG_CHUNK_SHIFT)
 #define PROG_CHUNK_WORDS (PROG_CHUNK_BYTES >> 2)
@@ -157,6 +159,11 @@ static void copy_sec(const uint32_t *src, volatile uint32_t *dst,
     }
 }
 
+static void perf_clear(void)
+{
+    PCM_CLEAR = 1u;
+}
+
 void boot_main(void)
 {
     uart_init();
@@ -182,6 +189,7 @@ void boot_main(void)
         if (progress_on()) {
             uart_puts("\033[?25h>>>>> bootloader done, jumping to user program ...\n");
         }
+        perf_clear();
         __asm__ volatile("jr %0" : : "r"(ITCM_BASE));
     }
 
@@ -198,6 +206,7 @@ void boot_main(void)
     if (progress_on()) {
         uart_puts("\033[?25h>>>>> bootloader done, jumping to OpenSBI ...\n");
     }
+    perf_clear();
     __asm__ volatile(
         "mv a0, zero\n\t"
         "mv a1, %1\n\t"

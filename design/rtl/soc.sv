@@ -1,5 +1,7 @@
 `include "spec/core/isa.svh"
 `include "spec/soc.svh"
+`include "dbg/pcm_perf.svh"
+
 module soc(
     input logic         clk,
     input logic         rst_n,
@@ -34,6 +36,20 @@ module soc(
     ext_irq_if_t uart_irq();
     ext_irq_if_t gpio_irq();
     ext_irq_if_t gtimer_irq();
+    logic [`RVB_PCM_COUNTER_NUM-1:0] pcm_inc_en;
+    perf_soc_if_t perf_soc_if();
+    perf_rv32g_if_t perf_rv32g_if();
+    perf_axi_demux_if_t perf_mm_axi_demux_if();
+    perf_axi_demux_if_t perf_cbi_i_axi_demux_if();
+    perf_axi_demux_if_t perf_cbi_d_axi_demux_if();
+    perf_l2_if_t perf_l2_if();
+    perf_ifu_if_t perf_ifu_if();
+    perf_bpu_if_t perf_bpu_if();
+    perf_exu_if_t perf_exu_if();
+    perf_lsu_if_t perf_lsu_if();
+    perf_mmu_if_t perf_mmu_if();
+    perf_l1_if_t perf_l1i_if();
+    perf_l1_if_t perf_l1d_if();
 
     rv32g u_rv32g(
         .clk              (clk),
@@ -45,6 +61,17 @@ module soc(
         .mm_axi4_b_slv    (mm_b),
         .mm_axi4_ar_mst   (mm_ar),
         .mm_axi4_r_slv    (mm_r),
+        .perf_mst                 (perf_rv32g_if),
+        .perf_cbi_i_axi_demux_mst (perf_cbi_i_axi_demux_if),
+        .perf_cbi_d_axi_demux_mst (perf_cbi_d_axi_demux_if),
+        .perf_l2_mst              (perf_l2_if),
+        .perf_ifu_mst             (perf_ifu_if),
+        .perf_bpu_mst             (perf_bpu_if),
+        .perf_exu_mst             (perf_exu_if),
+        .perf_lsu_mst             (perf_lsu_if),
+        .perf_mmu_mst             (perf_mmu_if),
+        .perf_l1i_mst             (perf_l1i_if),
+        .perf_l1d_mst             (perf_l1d_if),
         .uart_irq_slv     (uart_irq),
         .gpio_irq_slv     (gpio_irq),
         .gtimer_irq_slv   (gtimer_irq)
@@ -75,7 +102,8 @@ module soc(
         .gst_axi4_w_msts    (mm_gst_w),
         .gst_axi4_b_slvs    (mm_gst_b),
         .gst_axi4_ar_msts   (mm_gst_ar),
-        .gst_axi4_r_slvs    (mm_gst_r)
+        .gst_axi4_r_slvs    (mm_gst_r),
+        .perf_mst           (perf_mm_axi_demux_if)
     );
 
     axi_link u_ddr_axi_link(
@@ -118,8 +146,55 @@ module soc(
         .gpio_in     (gpio_in),
         .gpio_out    (gpio_out),
         .gpio_oe     (gpio_oe),
+        .pcm_inc_en  (pcm_inc_en),
         .uart_irq_mst(uart_irq),
         .gpio_irq_mst(gpio_irq),
         .gtimer_irq_mst(gtimer_irq)
+    );
+
+    assign perf_soc_if.pkt.cycle = 1'b1;
+    assign perf_soc_if.pkt.soc_mm_aw_bp = mm_aw.vld && !mm_aw.rdy;
+    assign perf_soc_if.pkt.soc_mm_w_bp = mm_w.vld && !mm_w.rdy;
+    assign perf_soc_if.pkt.soc_mm_ar_bp = mm_ar.vld && !mm_ar.rdy;
+    assign perf_soc_if.pkt.soc_mm_b_bp = mm_b.vld && !mm_b.rdy;
+    assign perf_soc_if.pkt.soc_mm_r_bp = mm_r.vld && !mm_r.rdy;
+    assign perf_soc_if.pkt.soc_ddr_aw_bp =
+        ddr_axi4_aw_mst.vld && !ddr_axi4_aw_mst.rdy;
+    assign perf_soc_if.pkt.soc_ddr_w_bp =
+        ddr_axi4_w_mst.vld && !ddr_axi4_w_mst.rdy;
+    assign perf_soc_if.pkt.soc_ddr_ar_bp =
+        ddr_axi4_ar_mst.vld && !ddr_axi4_ar_mst.rdy;
+    assign perf_soc_if.pkt.soc_ddr_b_bp =
+        ddr_axi4_b_slv.vld && !ddr_axi4_b_slv.rdy;
+    assign perf_soc_if.pkt.soc_ddr_r_bp =
+        ddr_axi4_r_slv.vld && !ddr_axi4_r_slv.rdy;
+    assign perf_soc_if.pkt.soc_flash_aw_bp =
+        flash_axi4_aw_mst.vld && !flash_axi4_aw_mst.rdy;
+    assign perf_soc_if.pkt.soc_flash_w_bp =
+        flash_axi4_w_mst.vld && !flash_axi4_w_mst.rdy;
+    assign perf_soc_if.pkt.soc_flash_ar_bp =
+        flash_axi4_ar_mst.vld && !flash_axi4_ar_mst.rdy;
+    assign perf_soc_if.pkt.soc_flash_b_bp =
+        flash_axi4_b_slv.vld && !flash_axi4_b_slv.rdy;
+    assign perf_soc_if.pkt.soc_flash_r_bp =
+        flash_axi4_r_slv.vld && !flash_axi4_r_slv.rdy;
+    assign perf_soc_if.pkt.peri_apb_bp =
+        peri_req.psel && peri_req.penable && !peri_rsp.pready;
+
+    pcm_perf u_pcm_perf(
+        .inc_en                                        (pcm_inc_en),
+        .perf_u_soc_slv                                (perf_soc_if),
+        .perf_u_soc_u_mm_axi_demux_slv                 (perf_mm_axi_demux_if),
+        .perf_u_soc_u_rv32g_cpu_slv                    (perf_rv32g_if),
+        .perf_u_soc_u_rv32g_cpu_u_cbi_u_i_axi_demux_slv(perf_cbi_i_axi_demux_if),
+        .perf_u_soc_u_rv32g_cpu_u_cbi_u_d_axi_demux_slv(perf_cbi_d_axi_demux_if),
+        .perf_u_soc_u_rv32g_cpu_u_l2_slv               (perf_l2_if),
+        .perf_u_soc_u_rv32g_cpu_u_hart_u_ifu_slv       (perf_ifu_if),
+        .perf_u_soc_u_rv32g_cpu_u_hart_u_bpu_slv       (perf_bpu_if),
+        .perf_u_soc_u_rv32g_cpu_u_hart_u_mmu_slv       (perf_mmu_if),
+        .perf_u_soc_u_rv32g_cpu_u_hart_u_l1i_slv       (perf_l1i_if),
+        .perf_u_soc_u_rv32g_cpu_u_hart_u_l1d_slv       (perf_l1d_if),
+        .perf_u_soc_u_rv32g_cpu_u_hart_u_exu_slv       (perf_exu_if),
+        .perf_u_soc_u_rv32g_cpu_u_hart_u_lsu_slv       (perf_lsu_if)
     );
 endmodule

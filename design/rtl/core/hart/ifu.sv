@@ -20,7 +20,8 @@ module ifu #(
     input logic l1i_flush_vld,
     hart_expt_if_t.mst fch_expt_mst,
     trap_send_if_t.slv trap_send_slv,
-    exu_state_if_t.slv exu_state_slv
+    exu_state_if_t.slv exu_state_slv,
+    perf_ifu_if_t.mst perf_mst
 );
     localparam int FCH_OST_SLOT_W = $clog2(FCH_OST_DEPTH);
     localparam int FCH_EPOCH_W = FCH_OST_SLOT_W + 1;
@@ -400,6 +401,17 @@ module ifu #(
     assign bpu_update_mst.pkt.pred_jalr_btb_miss = br_rsp_ctrlq.jalr_btb_miss;
 
     assign fl_req_mst.vld = branch_redirect || trap_redirect;
+
+    assign perf_mst.pkt.fch_rsp_inst = fch_rsp_hsk;
+    assign perf_mst.pkt.fch_ost_full = !trap_req_vld &&
+        !redirect_flush && !pred_taken_flush && !fch_ost_alloc_rdy;
+    assign perf_mst.pkt.fch_req_bp = fch_req_mst.vld && !fch_req_mst.rdy;
+    assign perf_mst.pkt.fch_rspq_bp = fch_rspq_wr_vld && !fch_rspq_wr_rdy;
+    assign perf_mst.pkt.ctrlq_bp = ctrlq_wr_vld && !ctrlq_wr_rdy;
+    assign perf_mst.pkt.ex_req_bp = ex_req_mst.vld && !ex_req_mst.rdy;
+    assign perf_mst.pkt.pred_wait = bpu_pred_req_mst.pkt.vld &&
+        !bpu_pred_rsp_slv.pkt.vld;
+    assign perf_mst.pkt.issue_hold = ex_req_mst.vld && !ex_req_mst.rdy;
 
     wire unused_fch_ost = (|fch_ost_alloc_slot) | (|fch_ost_head_slot) |
         inst_is_ctrl(issue_inst) | inst_is_ctrl(rspq_inst);

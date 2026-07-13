@@ -7,6 +7,8 @@
 #define PERI_GPIO_SIZE      16u
 #define PERI_GTIMER_OFFSET  0x2000u
 #define PERI_GTIMER_SIZE    16u
+#define PERI_PCM_OFFSET     0x3000u
+#define PERI_PCM_SIZE       0x1000u
 
 #define GPIO_REG_OUT        0x00u
 #define GPIO_REG_MODE_LO    0x04u

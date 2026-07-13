@@ -151,11 +151,11 @@ void axi2bti_construct(axi2bti_t *br, const char *parent, const char *name,
         conf->ost_depth);
 
     br->perf_stg_ar_full = dbg_pcm_reg_perf_cnt(br->mod.hier_name,
-        "stg_ar_full");
+        "ar_stg_full");
     br->perf_stg_aw_full = dbg_pcm_reg_perf_cnt(br->mod.hier_name,
-        "stg_aw_full");
+        "aw_stg_full");
     br->perf_stg_w_full = dbg_pcm_reg_perf_cnt(br->mod.hier_name,
-        "stg_w_full");
+        "w_stg_full");
 }
 
 void axi2bti_reset(axi2bti_t *br)

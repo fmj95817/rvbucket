@@ -34,7 +34,9 @@ module cbi(
     axi4_w_if_t.mst   mm_d_axi4_w_mst,
     axi4_b_if_t.slv   mm_d_axi4_b_slv,
     axi4_ar_if_t.mst  mm_d_axi4_ar_mst,
-    axi4_r_if_t.slv   mm_d_axi4_r_slv
+    axi4_r_if_t.slv   mm_d_axi4_r_slv,
+    perf_axi_demux_if_t.mst perf_i_axi_demux_mst,
+    perf_axi_demux_if_t.mst perf_d_axi_demux_mst
 );
     localparam I_GST_NUM = 3;
     localparam D_GST_NUM = 5;
@@ -62,7 +64,6 @@ module cbi(
     bti_rsp_if_t dtcm_rsp();
     apb_req_if_t cfg_req();
     apb_rsp_if_t cfg_rsp();
-
     axi_demux #(
         .GST_NUM    (I_GST_NUM),
         .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
@@ -88,7 +89,8 @@ module cbi(
         .gst_axi4_w_msts    (i_w),
         .gst_axi4_b_slvs    (i_b),
         .gst_axi4_ar_msts   (i_ar),
-        .gst_axi4_r_slvs    (i_r)
+        .gst_axi4_r_slvs    (i_r),
+        .perf_mst           (perf_i_axi_demux_mst)
     );
 
     axi_demux #(
@@ -111,7 +113,8 @@ module cbi(
         .gst_axi4_w_msts    (d_w),
         .gst_axi4_b_slvs    (d_b),
         .gst_axi4_ar_msts   (d_ar),
-        .gst_axi4_r_slvs    (d_r)
+        .gst_axi4_r_slvs    (d_r),
+        .perf_mst           (perf_d_axi_demux_mst)
     );
 
     axi2bti u_boot_i_axi2bti(
@@ -252,4 +255,5 @@ module cbi(
     assign cfg_apb_req_mst.pkt = cfg_req.pkt;
     assign cfg_rsp.pready = cfg_apb_rsp_slv.pready;
     assign cfg_rsp.pkt = cfg_apb_rsp_slv.pkt;
+
 endmodule

@@ -6,7 +6,8 @@ module bpu(
     input logic rst_n,
     bpu_pred_req_if_t.slv pred_req_slv,
     bpu_pred_rsp_if_t.mst pred_rsp_mst,
-    bpu_update_if_t.slv update_slv
+    bpu_update_if_t.slv update_slv,
+    perf_bpu_if_t.mst perf_mst
 );
     localparam int COND_BHT_SIZE = `BPU_COND_BHT_SIZE;
     localparam int COND_BHT_AW = $clog2(COND_BHT_SIZE);
@@ -154,6 +155,16 @@ module bpu(
     assign update_btb_set = jalr_btb_set(update_slv.pkt.pc);
     assign pred_btb_tag = jalr_btb_tag_decode(pred_req_slv.pkt.pc);
     assign update_btb_tag = jalr_btb_tag_decode(update_slv.pkt.pc);
+
+    wire perf_update_vld = update_slv.pkt.vld;
+    wire perf_update_branch =
+        perf_update_vld && update_inst.base.opcode == OPCODE_BRANCH;
+    wire perf_update_jal =
+        perf_update_vld && update_inst.base.opcode == OPCODE_JAL;
+    wire perf_update_jalr =
+        perf_update_vld && update_inst.base.opcode == OPCODE_JALR;
+    wire perf_update_ctrl =
+        perf_update_branch || perf_update_jal || perf_update_jalr;
 
     always_comb begin
         pred_bht_vld = cond_bht_vld[pred_bht_idx];
@@ -402,4 +413,27 @@ module bpu(
             end
         end
     end
+
+    assign perf_mst.pkt.branch = perf_update_ctrl;
+    assign perf_mst.pkt.pred_true = perf_update_ctrl &&
+        update_slv.pkt.pred_true;
+    assign perf_mst.pkt.pred_false = perf_update_ctrl &&
+        !update_slv.pkt.pred_true;
+    assign perf_mst.pkt.cond_branch = perf_update_branch;
+    assign perf_mst.pkt.cond_branch_pred_true = perf_update_branch &&
+        update_slv.pkt.pred_true;
+    assign perf_mst.pkt.jal = perf_update_jal;
+    assign perf_mst.pkt.jal_pred_true = perf_update_jal &&
+        update_slv.pkt.pred_true;
+    assign perf_mst.pkt.jalr = perf_update_jalr;
+    assign perf_mst.pkt.jalr_pred_true = perf_update_jalr &&
+        update_slv.pkt.pred_true;
+    assign perf_mst.pkt.cond_bht_hit = perf_update_branch &&
+        update_slv.pkt.pred_cond_bht_hit;
+    assign perf_mst.pkt.jalr_ras_hit = perf_update_jalr &&
+        update_slv.pkt.pred_jalr_ras_hit;
+    assign perf_mst.pkt.jalr_btb_hit = perf_update_jalr &&
+        update_slv.pkt.pred_jalr_btb_hit;
+    assign perf_mst.pkt.jalr_btb_miss = perf_update_jalr &&
+        update_slv.pkt.pred_jalr_btb_miss;
 endmodule

@@ -6,8 +6,9 @@
 #include "base/mod.h"
 #include "dbg/chk.h"
 #include "dbg/env.h"
+#include "dbg/pcm_map.h"
 
-#define DBG_PERF_CNT_MAX 128
+#define DBG_PERF_CNT_MAX DBG_PCM_COUNTER_NUM
 #define DBG_PERF_CNT_NAME_MAX (HIER_NAME_MAX + 128u)
 #define DBG_PCM_SAMPLE_CAP_INIT 64u
 #define DBG_PCM_PERIOD_ENV "PCD_PERIOD"
@@ -34,6 +35,7 @@ typedef struct dbg_pcm {
     u32 sample_cap;
     perf_sample_t *samples;
     perf_cnt_t perf_cnts[DBG_PERF_CNT_MAX];
+    u64 *mapped_cnts[DBG_PCM_COUNTER_NUM];
 } dbg_pcm_t;
 
 typedef enum dump_dst {
@@ -42,6 +44,49 @@ typedef enum dump_dst {
 } dump_dst_t;
 
 static dbg_pcm_t g_pcm;
+
+static bool str_suffix_match(const char *str, const char *suffix)
+{
+    size_t str_len = strlen(str);
+    size_t suffix_len = strlen(suffix);
+
+    if (str_len < suffix_len) {
+        return false;
+    }
+    if (strcmp(str + str_len - suffix_len, suffix) != 0) {
+        return false;
+    }
+    return str_len == suffix_len || str[str_len - suffix_len - 1u] == '.';
+}
+
+static const dbg_pcm_map_entry_t *find_map_entry(const char *hier_name,
+    const char *event)
+{
+    for (u32 i = 0; i < DBG_PCM_COUNTER_NUM; i++) {
+        const dbg_pcm_map_entry_t *entry = &g_dbg_pcm_map[i];
+        if (strcmp(entry->event, event) == 0 &&
+            str_suffix_match(hier_name, entry->hier)) {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+static void map_counter_ptr(const char *hier_name, const char *event,
+    u64 *counter)
+{
+    const dbg_pcm_map_entry_t *entry = find_map_entry(hier_name, event);
+    if (entry == NULL) {
+        return;
+    }
+
+    DBG_CHECK(entry->idx < DBG_PCM_COUNTER_NUM);
+    if (g_pcm.mapped_cnts[entry->idx] != NULL) {
+        DBG_CHECK(g_pcm.mapped_cnts[entry->idx] == counter);
+        return;
+    }
+    g_pcm.mapped_cnts[entry->idx] = counter;
+}
 
 __attribute__((constructor)) void dbg_pcm_constructor()
 {
@@ -57,6 +102,7 @@ __attribute__((constructor)) void dbg_pcm_constructor()
     g_pcm.sample_cap = 0;
     g_pcm.samples = NULL;
     memset(g_pcm.perf_cnts, 0, sizeof(g_pcm.perf_cnts));
+    memset(g_pcm.mapped_cnts, 0, sizeof(g_pcm.mapped_cnts));
 }
 
 static void dump_to_csv()
@@ -68,7 +114,8 @@ static void dump_to_csv()
 
     fprintf(csv_fp, "name, value\n");
     for (u32 i = 0; i < g_pcm.nxt_entry_idx; i++) {
-        fprintf(csv_fp, "%s, %"U64_FMT"\n", g_pcm.perf_cnts[i].name, g_pcm.perf_cnts[i].val);
+        fprintf(csv_fp, "%s, %"U64_FMT"\n", g_pcm.perf_cnts[i].name,
+            g_pcm.perf_cnts[i].val);
     }
 
     fclose(csv_fp);
@@ -77,7 +124,8 @@ static void dump_to_csv()
 static void dump_to_stdout()
 {
     for (u32 i = 0; i < g_pcm.nxt_entry_idx; i++) {
-        printf("%s = %"U64_FMT"\n", g_pcm.perf_cnts[i].name, g_pcm.perf_cnts[i].val);
+        printf("%s = %"U64_FMT"\n", g_pcm.perf_cnts[i].name,
+            g_pcm.perf_cnts[i].val);
     }
 }
 
@@ -152,6 +200,7 @@ u64 *dbg_pcm_reg_perf_cnt(const char *hier_name, const char *name)
 {
     DBG_CHECK(hier_name != NULL);
     DBG_CHECK(name != NULL);
+
     char full_name[DBG_PERF_CNT_NAME_MAX];
     int ret = snprintf(full_name, sizeof(full_name),
         "%s.%s", hier_name, name);
@@ -159,7 +208,9 @@ u64 *dbg_pcm_reg_perf_cnt(const char *hier_name, const char *name)
 
     for (u32 i = 0; i < g_pcm.nxt_entry_idx; i++) {
         if (strcmp(g_pcm.perf_cnts[i].name, full_name) == 0) {
-            return &g_pcm.perf_cnts[i].val;
+            u64 *val = &g_pcm.perf_cnts[i].val;
+            map_counter_ptr(hier_name, name, val);
+            return val;
         }
     }
 
@@ -169,6 +220,7 @@ u64 *dbg_pcm_reg_perf_cnt(const char *hier_name, const char *name)
     g_pcm.perf_cnts[idx].val = 0;
     u64 *val = &g_pcm.perf_cnts[idx].val;
     g_pcm.nxt_entry_idx++;
+    map_counter_ptr(hier_name, name, val);
 
     return val;
 }
@@ -178,6 +230,31 @@ void dbg_pcm_set_cycle(const u64 *cycle)
     g_pcm.cycle = cycle;
     if (cycle != NULL) {
         g_pcm.next_sample_cycle = *cycle + g_pcm.sample_period;
+    }
+}
+
+u64 dbg_pcm_read_counter(u32 idx)
+{
+    if (idx >= DBG_PCM_COUNTER_NUM) {
+        return 0;
+    }
+
+    if (g_pcm.mapped_cnts[idx] == NULL) {
+        return 0;
+    }
+    return *g_pcm.mapped_cnts[idx];
+}
+
+void dbg_pcm_clear(void)
+{
+    for (u32 i = 0; i < g_pcm.nxt_entry_idx; i++) {
+        g_pcm.perf_cnts[i].val = 0;
+    }
+
+    if (g_pcm.cycle != NULL) {
+        g_pcm.next_sample_cycle = *g_pcm.cycle + g_pcm.sample_period;
+    } else {
+        g_pcm.next_sample_cycle = g_pcm.sample_period;
     }
 }
 

@@ -20,12 +20,14 @@ typedef struct soc {
     rv32g_t cpu;
     peri_t peri;
     axi_demux_t mm_axi_demux;
-
+    
     AXI4_IF_DECL(mm_);
     APB_IF_DECL(peri_);
     itf_t peri_uart_irq_itf;
     itf_t peri_gpio_irq_itf;
     itf_t peri_gtimer_irq_itf;
+
+    u64 *perf_cycle;
 } soc_t;
 
 extern void soc_construct(soc_t *soc, const char *parent, const char *name,

@@ -24,7 +24,8 @@ module axi_demux #(
     axi4_w_if_t.mst   gst_axi4_w_msts[GST_NUM],
     axi4_b_if_t.slv   gst_axi4_b_slvs[GST_NUM],
     axi4_ar_if_t.mst  gst_axi4_ar_msts[GST_NUM],
-    axi4_r_if_t.slv   gst_axi4_r_slvs[GST_NUM]
+    axi4_r_if_t.slv   gst_axi4_r_slvs[GST_NUM],
+    perf_axi_demux_if_t.mst perf_mst
 );
     typedef struct packed {
         logic [7:0] id;
@@ -473,6 +474,27 @@ module axi_demux #(
         (wr_data_head_ctx.decerr || gst_w_rdy[wr_data_head_ctx.gst_idx]);
 
     assign b_sel_decerr = decerr_b_sel_vld;
+
+    assign perf_mst.pkt.rd_ost_full = ar_fifo_rd_vld && ar_hit &&
+        !rd_ost_alloc_rdy;
+    assign perf_mst.pkt.wr_ost_full = aw_fifo_rd_vld &&
+        (!wr_data_ost_alloc_rdy || !wr_rsp_ost_alloc_rdy);
+    assign perf_mst.pkt.ar_stg_full = host_axi4_ar_slv.vld &&
+        !host_axi4_ar_slv.rdy;
+    assign perf_mst.pkt.aw_stg_full = host_axi4_aw_slv.vld &&
+        !host_axi4_aw_slv.rdy;
+    assign perf_mst.pkt.w_stg_full = host_axi4_w_slv.vld &&
+        !host_axi4_w_slv.rdy;
+    assign perf_mst.pkt.ar_issue_bp = ar_fifo_rd_vld &&
+        !ar_fifo_rd_rdy;
+    assign perf_mst.pkt.aw_issue_bp = aw_fifo_rd_vld &&
+        !aw_fifo_rd_rdy;
+    assign perf_mst.pkt.w_issue_bp = w_fifo_rd_vld &&
+        !w_fifo_rd_rdy;
+    assign perf_mst.pkt.r_rsp_bp = host_axi4_r_mst.vld &&
+        !host_axi4_r_mst.rdy;
+    assign perf_mst.pkt.b_rsp_bp = host_axi4_b_mst.vld &&
+        !host_axi4_b_mst.rdy;
 
     for (genvar i = 0; i < GST_NUM; i++) begin : gen_gst
         assign gst_ar_rdy[i] = gst_axi4_ar_msts[i].rdy;
