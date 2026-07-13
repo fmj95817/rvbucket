@@ -24,11 +24,21 @@ module rv32g(
     axi4_b_if_t hart_i_b();
     axi4_ar_if_t hart_i_ar();
     axi4_r_if_t hart_i_r();
+    axi4_aw_if_t cbi_i_aw();
+    axi4_w_if_t cbi_i_w();
+    axi4_b_if_t cbi_i_b();
+    axi4_ar_if_t cbi_i_ar();
+    axi4_r_if_t cbi_i_r();
     axi4_aw_if_t hart_d_aw();
     axi4_w_if_t hart_d_w();
     axi4_b_if_t hart_d_b();
     axi4_ar_if_t hart_d_ar();
     axi4_r_if_t hart_d_r();
+    axi4_aw_if_t cbi_d_aw();
+    axi4_w_if_t cbi_d_w();
+    axi4_b_if_t cbi_d_b();
+    axi4_ar_if_t cbi_d_ar();
+    axi4_r_if_t cbi_d_r();
     axi4_aw_if_t mm_i_aw();
     axi4_w_if_t mm_i_w();
     axi4_b_if_t mm_i_b();
@@ -80,19 +90,49 @@ module rv32g(
         .ext_irq_slv    (ext_irq)
     );
 
+    axi_link u_hart_i_axi_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .host_axi4_aw_slv (hart_i_aw),
+        .host_axi4_w_slv  (hart_i_w),
+        .host_axi4_b_mst  (hart_i_b),
+        .host_axi4_ar_slv (hart_i_ar),
+        .host_axi4_r_mst  (hart_i_r),
+        .gst_axi4_aw_mst  (cbi_i_aw),
+        .gst_axi4_w_mst   (cbi_i_w),
+        .gst_axi4_b_slv   (cbi_i_b),
+        .gst_axi4_ar_mst  (cbi_i_ar),
+        .gst_axi4_r_slv   (cbi_i_r)
+    );
+
+    axi_link u_hart_d_axi_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .host_axi4_aw_slv (hart_d_aw),
+        .host_axi4_w_slv  (hart_d_w),
+        .host_axi4_b_mst  (hart_d_b),
+        .host_axi4_ar_slv (hart_d_ar),
+        .host_axi4_r_mst  (hart_d_r),
+        .gst_axi4_aw_mst  (cbi_d_aw),
+        .gst_axi4_w_mst   (cbi_d_w),
+        .gst_axi4_b_slv   (cbi_d_b),
+        .gst_axi4_ar_mst  (cbi_d_ar),
+        .gst_axi4_r_slv   (cbi_d_r)
+    );
+
     cbi u_cbi(
         .clk                  (clk),
         .rst_n                (rst_n),
-        .hart_i_axi4_aw_slv   (hart_i_aw),
-        .hart_i_axi4_w_slv    (hart_i_w),
-        .hart_i_axi4_b_mst    (hart_i_b),
-        .hart_i_axi4_ar_slv   (hart_i_ar),
-        .hart_i_axi4_r_mst    (hart_i_r),
-        .hart_d_axi4_aw_slv   (hart_d_aw),
-        .hart_d_axi4_w_slv    (hart_d_w),
-        .hart_d_axi4_b_mst    (hart_d_b),
-        .hart_d_axi4_ar_slv   (hart_d_ar),
-        .hart_d_axi4_r_mst    (hart_d_r),
+        .hart_i_axi4_aw_slv   (cbi_i_aw),
+        .hart_i_axi4_w_slv    (cbi_i_w),
+        .hart_i_axi4_b_mst    (cbi_i_b),
+        .hart_i_axi4_ar_slv   (cbi_i_ar),
+        .hart_i_axi4_r_mst    (cbi_i_r),
+        .hart_d_axi4_aw_slv   (cbi_d_aw),
+        .hart_d_axi4_w_slv    (cbi_d_w),
+        .hart_d_axi4_b_mst    (cbi_d_b),
+        .hart_d_axi4_ar_slv   (cbi_d_ar),
+        .hart_d_axi4_r_mst    (cbi_d_r),
         .boot_rom_bti_req_mst (boot_rom_req),
         .boot_rom_bti_rsp_slv (boot_rom_rsp),
         .itcm_i_bti_req_mst   (itcm_i_req),

@@ -150,4 +150,56 @@ module trap(
     assign trap_exu_ctrl_mst.pkt.priv = state == REDIRECT ? target_priv : exu_state_slv.pkt.priv;
     assign trap_exu_ctrl_mst.pkt.irq_epc = wfi_wakeup ? exu_state_slv.pkt.wfi_resume_pc : target_pc;
     assign trap_exu_ctrl_mst.pkt.wfi = state != REDIRECT && !wfi_wakeup;
+
+`ifndef SYNTHESIS
+    logic rtl_progress_en;
+    longint unsigned rtl_progress_cycle;
+
+    initial begin
+        rtl_progress_en = $test$plusargs("rtl_progress");
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rtl_progress_cycle <= 0;
+        end else if (rtl_progress_en) begin
+            rtl_progress_cycle <= rtl_progress_cycle + 1;
+            if (state == IDLE && event_valid) begin
+                $display("[RTL_PROGRESS][%m] cycle=%0d event ex=%0b fch=%0b ldst=%0b irq=%0b type=%0d cause=%0d priv=%0d pc=%08x tval=%08x mstatus=%08x medeleg=%08x mtvec=%08x stvec=%08x mepc=%08x sepc=%08x",
+                    rtl_progress_cycle,
+                    ex_expt_slv.vld,
+                    fch_expt_slv.vld,
+                    ldst_expt_slv.vld,
+                    irq_valid,
+                    ex_expt_slv.vld ? ex_expt_slv.pkt.expt_type : HART_EXPT_TYPE_EXCEPTION,
+                    expt_cause,
+                    expt_priv,
+                    expt_pc,
+                    expt_tval,
+                    csr_trap_state_slv.pkt.mstatus,
+                    csr_trap_state_slv.pkt.medeleg,
+                    csr_trap_state_slv.pkt.mtvec,
+                    csr_trap_state_slv.pkt.stvec,
+                    csr_trap_state_slv.pkt.mepc,
+                    csr_trap_state_slv.pkt.sepc);
+            end
+            if (trap_csr_write_req_mst.vld) begin
+                $display("[RTL_PROGRESS][%m] cycle=%0d csr_write addr=%03x val=%08x idx=%0d count=%0d rsp=%0b/%0b",
+                    rtl_progress_cycle,
+                    trap_csr_write_req_mst.pkt.addr,
+                    trap_csr_write_req_mst.pkt.val,
+                    write_idx,
+                    write_count,
+                    csr_trap_write_rsp_slv.vld,
+                    csr_trap_write_rsp_slv.pkt.ok);
+            end
+            if (trap_send_mst.vld) begin
+                $display("[RTL_PROGRESS][%m] cycle=%0d redirect pc=%08x priv=%0d",
+                    rtl_progress_cycle,
+                    trap_send_mst.pkt.target_pc,
+                    target_priv);
+            end
+        end
+    end
+`endif
 endmodule

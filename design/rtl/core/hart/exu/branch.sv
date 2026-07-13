@@ -3,6 +3,7 @@
 module exu_branch_handler(
     input logic                   clk,
     input logic                   rst_n,
+    input logic                   flush,
     input logic                   sel,
     input rv32g_inst_t            inst,
     input logic [`RV_PC_SIZE-1:0] pc,
@@ -80,6 +81,11 @@ module exu_branch_handler(
             rsp_target_pc <= {`RV_PC_SIZE{1'b0}};
             rsp_pc <= {`RV_PC_SIZE{1'b0}};
             rsp_pred_true <= 1'b0;
+            rsp_gpr_wen <= 1'b0;
+            rsp_gpr_wa <= {`RV_GPR_AW{1'b0}};
+            rsp_gpr_wd <= {`RV_XLEN{1'b0}};
+        end else if (flush) begin
+            state <= IDLE;
             rsp_gpr_wen <= 1'b0;
             rsp_gpr_wa <= {`RV_GPR_AW{1'b0}};
             rsp_gpr_wd <= {`RV_XLEN{1'b0}};

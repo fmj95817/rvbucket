@@ -18,11 +18,13 @@ module exu_sys_handler(
     l1_flush_ack_if_t.slv l1d_flush_ack_slv,
     input logic [1:0] priv,
     input logic [31:0] pc,
+    input logic inst_hsk,
     output logic done,
     hart_expt_if_t.mst ex_expt_mst
 );
     typedef enum logic [2:0] {
         FENCE_I_IDLE,
+        FENCE_I_SEND_D_FLUSH,
         FENCE_I_WAIT_D_ACK,
         FENCE_I_SEND_I_FLUSH,
         FENCE_I_WAIT_I_ACK,
@@ -50,7 +52,10 @@ module exu_sys_handler(
             unique case (fence_i_state)
             FENCE_I_IDLE: begin
                 if (fence_i)
-                    fence_i_state <= FENCE_I_WAIT_D_ACK;
+                    fence_i_state <= FENCE_I_SEND_D_FLUSH;
+            end
+            FENCE_I_SEND_D_FLUSH: begin
+                fence_i_state <= FENCE_I_WAIT_D_ACK;
             end
             FENCE_I_WAIT_D_ACK: begin
                 if (l1d_flush_ack_slv.vld)
@@ -64,7 +69,8 @@ module exu_sys_handler(
                     fence_i_state <= FENCE_I_DONE;
             end
             FENCE_I_DONE: begin
-                fence_i_state <= FENCE_I_IDLE;
+                if (inst_hsk)
+                    fence_i_state <= FENCE_I_IDLE;
             end
             default: begin
                 fence_i_state <= FENCE_I_IDLE;
@@ -106,7 +112,7 @@ module exu_sys_handler(
     assign csr_write_req_mst.pkt.val = csr_write_val;
     assign csr_write_req_mst.pkt.priv = priv;
     assign tlb_flush_mst.vld = sfence_vma;
-    assign l1d_flush_mst.vld = fence_i && fence_i_state == FENCE_I_IDLE;
+    assign l1d_flush_mst.vld = fence_i_state == FENCE_I_SEND_D_FLUSH;
     assign l1i_flush_mst.vld = fence_i_state == FENCE_I_SEND_I_FLUSH;
     assign done = (fence_i || fence_i_busy) ?
         (fence_i_state == FENCE_I_DONE) : 1'b1;

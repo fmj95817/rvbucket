@@ -47,6 +47,7 @@ module hart(
     l1_flush_if_t l1d_flush_if();
     l1_flush_ack_if_t l1i_flush_ack_if();
     l1_flush_ack_if_t l1d_flush_ack_if();
+    hart_expt_if_t mmu_fch_expt_if();
     hart_expt_if_t fch_expt_if();
     hart_expt_if_t ldst_expt_if();
 
@@ -72,7 +73,9 @@ module hart(
         .bpu_update_mst   (bpu_update_if),
         .tlb_flush_slv  (tlb_flush_if),
         .l1i_flush_vld  (l1i_flush_if.vld),
-        .trap_send_slv (trap_send_if)
+        .fch_expt_mst   (fch_expt_if),
+        .trap_send_slv (trap_send_if),
+        .exu_state_slv (exu_state_if)
     );
 
     bpu u_bpu(
@@ -160,7 +163,7 @@ module hart(
         .exu_state_slv     (exu_state_if),
         .csr_mmu_state_slv (csr_mmu_state_if),
         .tlb_flush_slv     (tlb_flush_if),
-        .fch_expt_mst      (fch_expt_if),
+        .fch_expt_mst      (mmu_fch_expt_if),
         .ldst_expt_mst     (ldst_expt_if)
     );
 
@@ -169,6 +172,7 @@ module hart(
         .rst_n         (rst_n),
         .fch_req_slv   (fch_req_if),
         .fch_rsp_mst   (fch_rsp_if),
+        .mmu_fch_expt_slv (mmu_fch_expt_if),
         .ldst_req_slv  (lsu_hbi_ldst_req_if),
         .ldst_rsp_mst  (lsu_hbi_ldst_rsp_if),
         .i_bti_req_mst (hbi_i_bti_req_if),

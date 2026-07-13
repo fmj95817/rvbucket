@@ -1,4 +1,5 @@
 `include "spec/core/isa.svh"
+`include "spec/core/core.svh"
 `include "boot.svh"
 
 module cbi(
@@ -64,6 +65,8 @@ module cbi(
 
     axi_demux #(
         .GST_NUM    (I_GST_NUM),
+        .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH       (`CORE_BUS_OST_DEPTH),
 `ifdef VERILATOR
         .GST_BASE   ('{32'h00000000, 32'h10000000, 32'h40000000,
             32'h00000000, 32'h00000000}),
@@ -90,6 +93,8 @@ module cbi(
 
     axi_demux #(
         .GST_NUM    (D_GST_NUM),
+        .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH       (`CORE_BUS_OST_DEPTH),
         .GST_BASE   ('{32'h00000000, 32'h10000000, 32'h20000000,
             32'h40000000, 32'h30000000}),
         .GST_SIZE   ('{32'h00000800, 32'h00080000, 32'h00040000,
@@ -134,6 +139,8 @@ module cbi(
     );
 
     axi_link u_mm_i_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
         .host_axi4_aw_slv (i_aw[2]),
         .host_axi4_w_slv  (i_w[2]),
         .host_axi4_b_mst  (i_b[2]),
@@ -183,6 +190,8 @@ module cbi(
     );
 
     axi_link u_mm_d_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
         .host_axi4_aw_slv (d_aw[3]),
         .host_axi4_w_slv  (d_w[3]),
         .host_axi4_b_mst  (d_b[3]),

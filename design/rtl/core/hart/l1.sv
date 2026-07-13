@@ -65,6 +65,7 @@ module l1 #(
         S_BYPASS_WR_SEND1,
         S_BYPASS_WR_RESP1,
         S_LOOKUP,
+        S_LOOKUP_CHECK,
         S_WB_AW,
         S_WB_READ,
         S_WB_CAPTURE,
@@ -309,8 +310,8 @@ module l1 #(
         hit = 1'b0;
         hit_way = '0;
         for (int unsigned i = 0; i < WAY_NUM; i++) begin
-            if (!hit && valid_ram[i][cur_set] &&
-                tag_ram[i][cur_set] == cur_tag) begin
+            if (!hit && valid_ram[i][req_set] &&
+                tag_ram[i][req_set] == req_tag) begin
                 hit = 1'b1;
                 hit_way = way_idx(i);
             end
@@ -319,15 +320,15 @@ module l1 #(
 
     always_comb begin
         found_invalid = 1'b0;
-        victim_way = replace_way[cur_set];
+        victim_way = replace_way[req_set];
         for (int unsigned i = 0; i < WAY_NUM; i++) begin
-            if (!found_invalid && !valid_ram[i][cur_set]) begin
+            if (!found_invalid && !valid_ram[i][req_set]) begin
                 found_invalid = 1'b1;
                 victim_way = way_idx(i);
             end
         end
-        victim_dirty = dirty_ram[victim_way][cur_set];
-        victim_tag = tag_ram[victim_way][cur_set];
+        victim_dirty = dirty_ram[victim_way][req_set];
+        victim_tag = tag_ram[victim_way][req_set];
     end
 
     always_comb begin
@@ -517,15 +518,18 @@ module l1 #(
                 req_set <= cur_set;
                 req_tag <= cur_tag;
                 req_line_addr <= {cur_addr[31:LINE_OFF_W], {LINE_OFF_W{1'b0}}};
+                state <= S_LOOKUP_CHECK;
+            end
+            S_LOOKUP_CHECK: begin
                 if (hit) begin
                     req_way <= hit_way;
                     state <= S_SERVE_READ;
                 end else begin
                     req_way <= victim_way;
                     if (!found_invalid)
-                        replace_way[cur_set] <= victim_way + 1'b1;
-                    if (valid_ram[victim_way][cur_set] && victim_dirty) begin
-                        wb_line_addr <= {victim_tag, cur_set, {LINE_OFF_W{1'b0}}};
+                        replace_way[req_set] <= victim_way + 1'b1;
+                    if (valid_ram[victim_way][req_set] && victim_dirty) begin
+                        wb_line_addr <= {victim_tag, req_set, {LINE_OFF_W{1'b0}}};
                         beat_idx <= '0;
                         state <= S_WB_AW;
                     end else begin
@@ -775,7 +779,7 @@ module l1 #(
     wire rtl_probe_refill_line = req_line_addr == 32'h41482240;
     wire rtl_probe_wb_line = wb_line_addr == 32'h41482240;
     wire [31:0] rtl_probe_victim_line =
-        {victim_tag, cur_set, {LINE_OFF_W{1'b0}}};
+        {victim_tag, req_set, {LINE_OFF_W{1'b0}}};
     wire rtl_probe_flush_line =
         {tag_ram[flush_way][flush_set], flush_set, {LINE_OFF_W{1'b0}}} ==
             32'h41482240;
@@ -828,30 +832,30 @@ module l1 #(
                     host_bti_req_slv.pkt.addr[LINE_OFF_W +: SET_W],
                     host_bti_req_slv.pkt.addr[31 -: TAG_W]);
             end
-            if (state == S_LOOKUP && !hit && valid_ram[victim_way][cur_set] &&
+            if (state == S_LOOKUP_CHECK && !hit && valid_ram[victim_way][req_set] &&
                 victim_dirty && rtl_probe_victim_line == 32'h41482240) begin
                 $display("[RTL_L1_PROBE][%m] victim_target miss_addr=%08x miss_set=%0d miss_tag=%0h victim_way=%0d victim_tag=%0h dirty=%0b valid=%0b replace=%0d wb_line=%08x",
                     cur_addr,
-                    cur_set,
-                    cur_tag,
+                    req_set,
+                    req_tag,
                     victim_way,
                     victim_tag,
                     victim_dirty,
-                    valid_ram[victim_way][cur_set],
-                    replace_way[cur_set],
+                    valid_ram[victim_way][req_set],
+                    replace_way[req_set],
                     rtl_probe_victim_line);
             end
-            if (state == S_LOOKUP && !hit &&
-                valid_ram[0][cur_set] && valid_ram[1][cur_set] &&
-                tag_ram[0][cur_set] == tag_ram[1][cur_set]) begin
+            if (state == S_LOOKUP_CHECK && !hit &&
+                valid_ram[0][req_set] && valid_ram[1][req_set] &&
+                tag_ram[0][req_set] == tag_ram[1][req_set]) begin
                 $display("[RTL_L1_PROBE][%m] duplicate_tag miss_addr=%08x set=%0d tag=%0h way0_dirty=%0b way1_dirty=%0b way0_tag=%0h way1_tag=%0h",
                     cur_addr,
-                    cur_set,
-                    tag_ram[0][cur_set],
-                    dirty_ram[0][cur_set],
-                    dirty_ram[1][cur_set],
-                    tag_ram[0][cur_set],
-                    tag_ram[1][cur_set]);
+                    req_set,
+                    tag_ram[0][req_set],
+                    dirty_ram[0][req_set],
+                    dirty_ram[1][req_set],
+                    tag_ram[0][req_set],
+                    tag_ram[1][req_set]);
             end
             if (state == S_FLUSH_CHECK && valid_ram[flush_way][flush_set] &&
                 dirty_ram[flush_way][flush_set] && rtl_probe_flush_line) begin

@@ -1,4 +1,5 @@
 `include "spec/core/isa.svh"
+`include "spec/soc.svh"
 module soc(
     input logic         clk,
     input logic         rst_n,
@@ -51,6 +52,8 @@ module soc(
 
     axi_demux #(
         .GST_NUM  (2),
+        .STG_FIFO_DEPTH (`SOC_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH       (`SOC_BUS_OST_DEPTH),
 `ifdef VERILATOR
         .GST_BASE ('{32'h40000000, 32'h80000000, 32'h00000000,
             32'h00000000, 32'h00000000}),
@@ -76,6 +79,8 @@ module soc(
     );
 
     axi_link u_ddr_axi_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
         .host_axi4_aw_slv (mm_gst_aw[0]),
         .host_axi4_w_slv  (mm_gst_w[0]),
         .host_axi4_b_mst  (mm_gst_b[0]),
@@ -89,6 +94,8 @@ module soc(
     );
 
     axi_link u_flash_axi_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
         .host_axi4_aw_slv (mm_gst_aw[1]),
         .host_axi4_w_slv  (mm_gst_w[1]),
         .host_axi4_b_mst  (mm_gst_b[1]),

@@ -12,8 +12,9 @@ module axi2apb(
     apb_req_if_t.mst apb_req_mst,
     apb_rsp_if_t.slv apb_rsp_slv
 );
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         S_IDLE,
+        S_WR_WAIT,
         S_SETUP,
         S_ACCESS,
         S_RESP
@@ -21,6 +22,8 @@ module axi2apb(
 
     state_t state;
     state_t state_nxt;
+    logic aw_pending;
+    logic w_pending;
     logic req_write;
     logic [7:0] req_id;
     logic [31:0] req_addr;
@@ -28,11 +31,12 @@ module axi2apb(
     logic [3:0] req_strb;
     logic [31:0] rsp_data;
     logic rsp_err;
-    logic capture_req;
     logic capture_rsp;
 
-    wire write_req = axi4_aw_slv.vld && axi4_w_slv.vld;
-    wire read_req = axi4_ar_slv.vld && !write_req;
+    wire aw_hsk = axi4_aw_slv.vld && axi4_aw_slv.rdy;
+    wire w_hsk = axi4_w_slv.vld && axi4_w_slv.rdy;
+    wire ar_hsk = axi4_ar_slv.vld && axi4_ar_slv.rdy;
+    wire write_complete = (aw_pending || aw_hsk) && (w_pending || w_hsk);
     wire apb_hsk = state == S_ACCESS && apb_rsp_slv.pready;
     wire axi_rsp_hsk = req_write ?
         (axi4_b_mst.vld && axi4_b_mst.rdy) :
@@ -40,15 +44,19 @@ module axi2apb(
 
     always_comb begin
         state_nxt = state;
-        capture_req = 1'b0;
         capture_rsp = 1'b0;
 
         unique case (state)
         S_IDLE: begin
-            if (write_req || read_req) begin
-                capture_req = 1'b1;
+            if (ar_hsk) begin
                 state_nxt = S_SETUP;
+            end else if (aw_hsk || w_hsk) begin
+                state_nxt = write_complete ? S_SETUP : S_WR_WAIT;
             end
+        end
+        S_WR_WAIT: begin
+            if (write_complete)
+                state_nxt = S_SETUP;
         end
         S_SETUP: begin
             state_nxt = S_ACCESS;
@@ -72,6 +80,8 @@ module axi2apb(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= S_IDLE;
+            aw_pending <= 1'b0;
+            w_pending <= 1'b0;
             req_write <= 1'b0;
             req_id <= '0;
             req_addr <= '0;
@@ -82,12 +92,30 @@ module axi2apb(
         end else begin
             state <= state_nxt;
 
-            if (capture_req) begin
-                req_write <= write_req;
-                req_id <= write_req ? axi4_aw_slv.pkt.id : axi4_ar_slv.pkt.id;
-                req_addr <= write_req ? axi4_aw_slv.pkt.addr : axi4_ar_slv.pkt.addr;
-                req_data <= write_req ? axi4_w_slv.pkt.data : '0;
-                req_strb <= write_req ? axi4_w_slv.pkt.strb : '0;
+            if (state == S_IDLE && ar_hsk) begin
+                req_write <= 1'b0;
+                req_id <= axi4_ar_slv.pkt.id;
+                req_addr <= axi4_ar_slv.pkt.addr;
+                req_data <= '0;
+                req_strb <= '0;
+            end
+
+            if (aw_hsk) begin
+                aw_pending <= 1'b1;
+                req_id <= axi4_aw_slv.pkt.id;
+                req_addr <= axi4_aw_slv.pkt.addr;
+            end
+
+            if (w_hsk) begin
+                w_pending <= 1'b1;
+                req_data <= axi4_w_slv.pkt.data;
+                req_strb <= axi4_w_slv.pkt.strb;
+            end
+
+            if (state_nxt == S_SETUP && write_complete) begin
+                req_write <= 1'b1;
+                aw_pending <= 1'b0;
+                w_pending <= 1'b0;
             end
 
             if (capture_rsp) begin
@@ -97,9 +125,18 @@ module axi2apb(
         end
     end
 
-    assign axi4_aw_slv.rdy = state == S_IDLE && write_req;
-    assign axi4_w_slv.rdy = state == S_IDLE && write_req;
-    assign axi4_ar_slv.rdy = state == S_IDLE && read_req;
+    assign axi4_aw_slv.rdy =
+        (state == S_IDLE || state == S_WR_WAIT) &&
+        !aw_pending &&
+        !(state == S_IDLE && axi4_ar_slv.vld);
+    assign axi4_w_slv.rdy =
+        (state == S_IDLE || state == S_WR_WAIT) &&
+        !w_pending &&
+        !(state == S_IDLE && axi4_ar_slv.vld);
+    assign axi4_ar_slv.rdy =
+        state == S_IDLE &&
+        !axi4_aw_slv.vld &&
+        !axi4_w_slv.vld;
 
     assign apb_req_mst.psel = state == S_SETUP || state == S_ACCESS;
     assign apb_req_mst.penable = state == S_ACCESS;

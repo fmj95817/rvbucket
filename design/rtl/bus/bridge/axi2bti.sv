@@ -36,6 +36,7 @@ module axi2bti(
     logic [31:0] wr_data;
     logic [3:0] wr_strobe;
     logic wr_last;
+    logic addr_sel_rd;
 
     wire req_hsk = bti_req_mst.vld && bti_req_mst.rdy;
     wire rsp_hsk = bti_rsp_slv.vld && bti_rsp_slv.rdy;
@@ -70,6 +71,7 @@ module axi2bti(
             wr_data <= '0;
             wr_strobe <= '0;
             wr_last <= 1'b0;
+            addr_sel_rd <= 1'b0;
         end else begin
             unique case (state)
             S_IDLE: begin
@@ -81,6 +83,7 @@ module axi2bti(
                     ax_len <= axi4_aw_slv.pkt.len;
                     ax_size <= axi4_aw_slv.pkt.size;
                     ax_burst <= axi4_aw_slv.pkt.burst;
+                    addr_sel_rd <= 1'b1;
                     state <= S_WR_WAIT_W;
                 end else if (ar_hsk) begin
                     ax_id <= axi4_ar_slv.pkt.id;
@@ -88,7 +91,12 @@ module axi2bti(
                     ax_len <= axi4_ar_slv.pkt.len;
                     ax_size <= axi4_ar_slv.pkt.size;
                     ax_burst <= axi4_ar_slv.pkt.burst;
+                    addr_sel_rd <= 1'b0;
                     state <= S_RD_REQ;
+                end else if (!addr_sel_rd && !axi4_aw_slv.vld && axi4_ar_slv.vld) begin
+                    addr_sel_rd <= 1'b1;
+                end else if (addr_sel_rd && !axi4_ar_slv.vld && axi4_aw_slv.vld) begin
+                    addr_sel_rd <= 1'b0;
                 end
             end
             S_RD_REQ: begin
@@ -157,9 +165,9 @@ module axi2bti(
     assign bti_req_mst.pkt.data = wr_data;
     assign bti_req_mst.pkt.strobe = wr_strobe;
 
-    assign axi4_aw_slv.rdy = state == S_IDLE;
+    assign axi4_aw_slv.rdy = state == S_IDLE && !addr_sel_rd;
     assign axi4_w_slv.rdy = state == S_WR_WAIT_W;
-    assign axi4_ar_slv.rdy = state == S_IDLE && !axi4_aw_slv.vld;
+    assign axi4_ar_slv.rdy = state == S_IDLE && addr_sel_rd;
 
     assign axi4_r_mst.vld = state == S_RD_SEND;
     assign axi4_r_mst.pkt.id = ax_id;

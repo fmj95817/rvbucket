@@ -27,9 +27,11 @@ module exu(
     logic irq_defer;
 
     tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.inst.base.opcode;
-    wire sys_hsk = ex_req_slv.vld && ex_req_slv.rdy && opcode == OPCODE_SYSTEM;
     logic [31:0] ex_req_next_pc;
     wire ex_req_hsk = ex_req_slv.vld && ex_req_slv.rdy;
+    wire flush_active;
+    wire ex_req_fire = ex_req_hsk && !flush_active;
+    wire sys_hsk = ex_req_fire && opcode == OPCODE_SYSTEM;
     wire branch_redirect;
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -44,7 +46,7 @@ module exu(
             irq_epc <= trap_exu_ctrl_slv.pkt.irq_epc;
             irq_defer <= 1'b0;
         end else begin
-            if (ex_req_hsk)
+            if (ex_req_fire)
                 irq_epc <= ex_req_next_pc;
             irq_defer <= !wfi && !ex_req_slv.rdy;
             if (sys_hsk && ex_req_slv.pkt.inst.i.funct3 == 3'b000 &&
@@ -67,12 +69,13 @@ module exu(
     localparam SYS_CHN_IDX = 4;
 
     logic need_fl;
+    assign flush_active = fl_req_slv.vld || need_fl;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             need_fl <= 1'b0;
         else if (fl_req_slv.vld)
             need_fl <= 1'b1;
-        else if (ex_req_slv.vld)
+        else if (need_fl)
             need_fl <= 1'b0;
     end
 
@@ -89,9 +92,10 @@ module exu(
     tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MISC_MEM);
     tri is_sys = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
 
-    tri inst_fire_en = (~need_fl) & (~wfi);
+    tri inst_fire_en = (~flush_active) & (~wfi);
     tri alu_sel = inst_fire_en & (is_alu | is_alui);
     tri branch_sel = inst_fire_en & (is_jal | is_jalr | is_branch);
+    tri branch_gpr_sel = branch_sel | ex_rsp_mst.vld;
     tri ldst_sel = inst_fire_en & (is_load | is_store | is_amo);
     tri misc_sel = inst_fire_en & (is_lui | is_auipc);
     tri sys_sel = inst_fire_en & (is_mem | is_sys);
@@ -108,7 +112,7 @@ module exu(
     assign ex_req_next_pc = branch_redirect ? ex_rsp_mst.pkt.target_pc :
         ex_req_slv.pkt.pc + 32'd4;
 
-    assign ex_req_slv.rdy = wfi ? 1'b0 : (need_fl ? 1'b1 : ex_req_rdy);
+    assign ex_req_slv.rdy = wfi ? 1'b0 : (flush_active ? 1'b1 : ex_req_rdy);
 
     always_comb begin
         case (opcode)
@@ -130,7 +134,7 @@ module exu(
 
     logic chn_sels[INST_HANDLER_NUM];
     assign chn_sels[ALU_CHN_IDX] = alu_sel;
-    assign chn_sels[BRANCH_CHN_IDX] = branch_sel;
+    assign chn_sels[BRANCH_CHN_IDX] = branch_gpr_sel;
     assign chn_sels[LDST_CHN_IDX] = ldst_sel;
     assign chn_sels[MISC_CHN_IDX] = misc_sel;
     assign chn_sels[SYS_CHN_IDX] = sys_sel;
@@ -163,6 +167,7 @@ module exu(
     exu_branch_handler u_exu_branch_handler(
         .clk          (clk),
         .rst_n        (rst_n),
+        .flush        (flush_active),
         .sel          (branch_sel),
         .inst         (ex_req_slv.pkt.inst),
         .pc           (ex_req_slv.pkt.pc),
@@ -210,8 +215,47 @@ module exu(
         .l1d_flush_ack_slv (l1d_flush_ack_slv),
         .priv              (priv),
         .pc                (ex_req_slv.pkt.pc),
+        .inst_hsk          (ex_req_fire),
         .done              (sys_done),
         .ex_expt_mst       (ex_expt_mst)
     );
+
+`ifndef SYNTHESIS
+    logic rtl_progress_en;
+    longint unsigned rtl_progress_cycle;
+
+    initial begin
+        rtl_progress_en = $test$plusargs("rtl_progress");
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rtl_progress_cycle <= 0;
+        end else if (rtl_progress_en) begin
+            rtl_progress_cycle <= rtl_progress_cycle + 1;
+            if (ex_req_hsk && ex_req_slv.pkt.pc >= 32'h10000180 &&
+                ex_req_slv.pkt.pc <= 32'h10000260) begin
+                $display("[RTL_PROGRESS][%m] cycle=%0d exec pc=%08x inst=%08x opcode=%02x priv=%0d fire=%0b drop=%0b sys=%0b csr_addr=%03x csr_rd_ok=%0b csr_wr=%0b/%0b expt=%0b type=%0d cause=%0d flush=%0b wfi=%0b",
+                    rtl_progress_cycle,
+                    ex_req_slv.pkt.pc,
+                    ex_req_slv.pkt.inst.raw,
+                    opcode,
+                    priv,
+                    ex_req_fire,
+                    flush_active,
+                    sys_sel,
+                    exu_csr_read_req_mst.pkt.addr,
+                    csr_exu_read_rsp_slv.pkt.ok,
+                    exu_csr_write_req_mst.vld,
+                    csr_exu_write_rsp_slv.pkt.ok,
+                    ex_expt_mst.vld,
+                    ex_expt_mst.pkt.expt_type,
+                    ex_expt_mst.pkt.cause,
+                    flush_active,
+                    wfi);
+            end
+        end
+    end
+`endif
 
 endmodule
