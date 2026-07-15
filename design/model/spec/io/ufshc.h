@@ -4,10 +4,11 @@
 #include "base/def.h"
 
 #define UFSHC_REG_SIZE              0x2000u
+#define UFSHC_AXI_ID                0x80u
 #define UFSHC_MAX_QNUM              4u
 #define UFSHC_BLOCK_SHIFT           12u
 #define UFSHC_BLOCK_SIZE            (1u << UFSHC_BLOCK_SHIFT)
-#define UFSHC_STORAGE_SIZE          (64u * MiB)
+#define UFSHC_STORAGE_SIZE          (128u * MiB)
 #define UFSHC_MAX_PRDT              64u
 #define UFSHC_MAX_XFER              (1024u * KiB)
 #define UFSHC_MAX_QUERY_DATA_SIZE   256u

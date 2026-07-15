@@ -1,3 +1,5 @@
+`include "spec/core/hart.svh"
+
 module hart(
     input logic       clk,
     input logic       rst_n,
@@ -13,15 +15,27 @@ module hart(
     axi4_r_if_t.slv   d_axi4_r_slv,
     core_timer_if_t.slv core_timer_slv,
     core_m_irq_if_t.slv core_m_irq_slv,
-    ext_irq_if_t.slv ext_irq_slv
+    ext_irq_if_t.slv ext_irq_slv,
+    perf_ifu_if_t.mst perf_ifu_mst,
+    perf_bpu_if_t.mst perf_bpu_mst,
+    perf_exu_if_t.mst perf_exu_mst,
+    perf_lsu_if_t.mst perf_lsu_mst,
+    perf_mmu_if_t.mst perf_mmu_mst,
+    perf_l1_if_t.mst  perf_l1i_mst,
+    perf_l1_if_t.mst  perf_l1d_mst
 );
     fch_req_if_t fch_req_if();
     fch_rsp_if_t fch_rsp_if();
     ex_req_if_t ex_req_if();
     ex_rsp_if_t ex_rsp_if();
     fl_req_if_t fl_req_if();
-    ldst_req_if_t ldst_req_if();
-    ldst_rsp_if_t ldst_rsp_if();
+    bpu_pred_req_if_t bpu_pred_req_if();
+    bpu_pred_rsp_if_t bpu_pred_rsp_if();
+    bpu_update_if_t bpu_update_if();
+    ldst_req_if_t exu_lsu_ldst_req_if();
+    ldst_rsp_if_t exu_lsu_ldst_rsp_if();
+    ldst_req_if_t lsu_hbi_ldst_req_if();
+    ldst_rsp_if_t lsu_hbi_ldst_rsp_if();
     exu_csr_read_req_if_t exu_csr_read_req_if();
     csr_exu_read_rsp_if_t csr_exu_read_rsp_if();
     exu_csr_write_req_if_t exu_csr_write_req_if();
@@ -33,12 +47,25 @@ module hart(
     trap_csr_write_req_if_t trap_csr_write_req_if();
     csr_trap_write_rsp_if_t csr_trap_write_rsp_if();
     trap_send_if_t trap_send_if();
+    csr_mmu_state_if_t csr_mmu_state_if();
+    csr_lsu_state_if_t csr_lsu_state_if();
+    tlb_flush_if_t tlb_flush_if();
+    l1_flush_if_t l1i_flush_if();
+    l1_flush_if_t l1d_flush_if();
+    l1_flush_ack_if_t l1i_flush_ack_if();
+    l1_flush_ack_if_t l1d_flush_ack_if();
+    hart_expt_if_t mmu_fch_expt_if();
+    hart_expt_if_t fch_expt_if();
+    hart_expt_if_t ldst_expt_if();
 
     bti_req_if_t hbi_i_bti_req_if();
     bti_rsp_if_t hbi_i_bti_rsp_if();
     bti_req_if_t hbi_d_bti_req_if();
     bti_rsp_if_t hbi_d_bti_rsp_if();
-
+    bti_req_if_t pa_i_bti_req_if();
+    bti_rsp_if_t pa_i_bti_rsp_if();
+    bti_req_if_t pa_d_bti_req_if();
+    bti_rsp_if_t pa_d_bti_rsp_if();
     ifu u_ifu(
         .clk         (clk),
         .rst_n       (rst_n),
@@ -47,7 +74,24 @@ module hart(
         .ex_req_mst  (ex_req_if),
         .ex_rsp_slv  (ex_rsp_if),
         .fl_req_mst  (fl_req_if),
-        .trap_send_slv (trap_send_if)
+        .bpu_pred_req_mst (bpu_pred_req_if),
+        .bpu_pred_rsp_slv (bpu_pred_rsp_if),
+        .bpu_update_mst   (bpu_update_if),
+        .tlb_flush_slv  (tlb_flush_if),
+        .l1i_flush_vld  (l1i_flush_if.vld),
+        .fch_expt_mst   (fch_expt_if),
+        .trap_send_slv (trap_send_if),
+        .exu_state_slv (exu_state_if),
+        .perf_mst      (perf_ifu_mst)
+    );
+
+    bpu u_bpu(
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .pred_req_slv (bpu_pred_req_if),
+        .pred_rsp_mst (bpu_pred_rsp_if),
+        .update_slv   (bpu_update_if),
+        .perf_mst     (perf_bpu_mst)
     );
 
     exu u_exu(
@@ -56,15 +100,21 @@ module hart(
         .ex_req_slv   (ex_req_if),
         .ex_rsp_mst   (ex_rsp_if),
         .fl_req_slv   (fl_req_if),
-        .ldst_req_mst (ldst_req_if),
-        .ldst_rsp_slv (ldst_rsp_if),
+        .ldst_req_mst (exu_lsu_ldst_req_if),
+        .ldst_rsp_slv (exu_lsu_ldst_rsp_if),
         .exu_csr_read_req_mst  (exu_csr_read_req_if),
         .csr_exu_read_rsp_slv  (csr_exu_read_rsp_if),
         .exu_csr_write_req_mst (exu_csr_write_req_if),
         .csr_exu_write_rsp_slv (csr_exu_write_rsp_if),
+        .tlb_flush_mst         (tlb_flush_if),
+        .l1i_flush_mst         (l1i_flush_if),
+        .l1d_flush_mst         (l1d_flush_if),
+        .l1i_flush_ack_slv     (l1i_flush_ack_if),
+        .l1d_flush_ack_slv     (l1d_flush_ack_if),
         .ex_expt_mst           (ex_expt_if),
         .exu_state_mst         (exu_state_if),
-        .trap_exu_ctrl_slv     (trap_exu_ctrl_if)
+        .trap_exu_ctrl_slv     (trap_exu_ctrl_if),
+        .perf_mst              (perf_exu_mst)
     );
 
     csr u_csr(
@@ -79,13 +129,17 @@ module hart(
         .ext_irq_slv            (ext_irq_slv),
         .trap_csr_write_req_slv (trap_csr_write_req_if),
         .csr_trap_write_rsp_mst (csr_trap_write_rsp_if),
-        .csr_trap_state_mst     (csr_trap_state_if)
+        .csr_trap_state_mst     (csr_trap_state_if),
+        .csr_mmu_state_mst      (csr_mmu_state_if),
+        .csr_lsu_state_mst      (csr_lsu_state_if)
     );
 
     trap u_trap(
         .clk                    (clk),
         .rst_n                  (rst_n),
         .ex_expt_slv            (ex_expt_if),
+        .fch_expt_slv           (fch_expt_if),
+        .ldst_expt_slv          (ldst_expt_if),
         .exu_state_slv          (exu_state_if),
         .trap_exu_ctrl_mst      (trap_exu_ctrl_if),
         .csr_trap_state_slv     (csr_trap_state_if),
@@ -94,40 +148,131 @@ module hart(
         .trap_send_mst          (trap_send_if)
     );
 
+    lsu u_lsu(
+        .clk               (clk),
+        .rst_n             (rst_n),
+        .exu_ldst_req_slv  (exu_lsu_ldst_req_if),
+        .exu_ldst_rsp_mst  (exu_lsu_ldst_rsp_if),
+        .hbi_ldst_req_mst  (lsu_hbi_ldst_req_if),
+        .hbi_ldst_rsp_slv  (lsu_hbi_ldst_rsp_if),
+        .csr_lsu_state_slv (csr_lsu_state_if),
+        .perf_mst          (perf_lsu_mst)
+    );
+
+    mmu u_mmu(
+        .clk               (clk),
+        .rst_n             (rst_n),
+        .va_i_req_slv      (hbi_i_bti_req_if),
+        .va_i_rsp_mst      (hbi_i_bti_rsp_if),
+        .va_d_req_slv      (hbi_d_bti_req_if),
+        .va_d_rsp_mst      (hbi_d_bti_rsp_if),
+        .pa_i_req_mst      (pa_i_bti_req_if),
+        .pa_i_rsp_slv      (pa_i_bti_rsp_if),
+        .pa_d_req_mst      (pa_d_bti_req_if),
+        .pa_d_rsp_slv      (pa_d_bti_rsp_if),
+        .exu_state_slv     (exu_state_if),
+        .csr_mmu_state_slv (csr_mmu_state_if),
+        .tlb_flush_slv     (tlb_flush_if),
+        .fch_expt_mst      (mmu_fch_expt_if),
+        .ldst_expt_mst     (ldst_expt_if),
+        .perf_mst          (perf_mmu_mst)
+    );
+
     hbi u_hbi(
         .clk           (clk),
         .rst_n         (rst_n),
         .fch_req_slv   (fch_req_if),
         .fch_rsp_mst   (fch_rsp_if),
-        .ldst_req_slv  (ldst_req_if),
-        .ldst_rsp_mst  (ldst_rsp_if),
+        .mmu_fch_expt_slv (mmu_fch_expt_if),
+        .ldst_req_slv  (lsu_hbi_ldst_req_if),
+        .ldst_rsp_mst  (lsu_hbi_ldst_rsp_if),
         .i_bti_req_mst (hbi_i_bti_req_if),
         .i_bti_rsp_slv (hbi_i_bti_rsp_if),
         .d_bti_req_mst (hbi_d_bti_req_if),
         .d_bti_rsp_slv (hbi_d_bti_rsp_if)
     );
 
-    l1 u_l1i(
+    l1 #(
+        .RO           (1),
+        .SIZE         (`L1I_SIZE),
+        .WAY_NUM      (`L1I_WAY_NUM),
+        .BYPASS0_BASE (32'h00000000),
+        .BYPASS0_SIZE (32'h00000800),
+        .BYPASS1_BASE (32'h10000000),
+        .BYPASS1_SIZE (32'h00080000)
+    ) u_l1i(
         .clk              (clk),
         .rst_n            (rst_n),
-        .host_bti_req_slv (hbi_i_bti_req_if),
-        .host_bti_rsp_mst (hbi_i_bti_rsp_if),
+        .host_bti_req_slv (pa_i_bti_req_if),
+        .host_bti_rsp_mst (pa_i_bti_rsp_if),
+        .flush_slv        (l1i_flush_if),
+        .flush_ack_mst    (l1i_flush_ack_if),
         .mem_axi4_aw_mst   (i_axi4_aw_mst),
         .mem_axi4_w_mst    (i_axi4_w_mst),
         .mem_axi4_b_slv    (i_axi4_b_slv),
         .mem_axi4_ar_mst   (i_axi4_ar_mst),
-        .mem_axi4_r_slv    (i_axi4_r_slv)
+        .mem_axi4_r_slv    (i_axi4_r_slv),
+        .perf_mst          (perf_l1i_mst)
     );
 
-    l1 u_l1d(
+    l1 #(
+        .RO           (0),
+        .FULL_BYPASS  (0),
+        .SIZE         (`L1D_SIZE),
+        .WAY_NUM      (`L1D_WAY_NUM),
+        .BYPASS0_BASE (32'h00000000),
+        .BYPASS0_SIZE (32'h00000800),
+        .BYPASS1_BASE (32'h10000000),
+        .BYPASS1_SIZE (32'h00080000),
+        .BYPASS2_BASE (32'h20000000),
+        .BYPASS2_SIZE (32'h00040000),
+        .BYPASS3_BASE (32'h30000000),
+        .BYPASS3_SIZE (32'h02000000)
+    ) u_l1d(
         .clk              (clk),
         .rst_n            (rst_n),
-        .host_bti_req_slv (hbi_d_bti_req_if),
-        .host_bti_rsp_mst (hbi_d_bti_rsp_if),
+        .host_bti_req_slv (pa_d_bti_req_if),
+        .host_bti_rsp_mst (pa_d_bti_rsp_if),
+        .flush_slv        (l1d_flush_if),
+        .flush_ack_mst    (l1d_flush_ack_if),
         .mem_axi4_aw_mst   (d_axi4_aw_mst),
         .mem_axi4_w_mst    (d_axi4_w_mst),
         .mem_axi4_b_slv    (d_axi4_b_slv),
         .mem_axi4_ar_mst   (d_axi4_ar_mst),
-        .mem_axi4_r_slv    (d_axi4_r_slv)
+        .mem_axi4_r_slv    (d_axi4_r_slv),
+        .perf_mst          (perf_l1d_mst)
     );
+
+`ifndef SYNTHESIS
+    logic rtl_progress_en;
+    longint unsigned rtl_progress_cycle;
+
+    initial begin
+        rtl_progress_en = $test$plusargs("rtl_progress");
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rtl_progress_cycle <= 0;
+        end else if (rtl_progress_en) begin
+            rtl_progress_cycle <= rtl_progress_cycle + 1;
+            if (rtl_progress_cycle[19:0] == 20'h0) begin
+                $display("[RTL_PROGRESS][%m] cycle=%0d pc=%08x ex=%0b/%0b fch=%0b/%0b:%0b/%0b ldst=%0b/%0b:%0b/%0b pa_i=%0b/%0b:%0b/%0b pa_d=%0b/%0b:%0b/%0b flush_i=%0b flush_d=%0b",
+                    rtl_progress_cycle,
+                    exu_state_if.pkt.pc,
+                    ex_req_if.vld, ex_req_if.rdy,
+                    fch_req_if.vld, fch_req_if.rdy,
+                    fch_rsp_if.vld, fch_rsp_if.rdy,
+                    lsu_hbi_ldst_req_if.vld, lsu_hbi_ldst_req_if.rdy,
+                    lsu_hbi_ldst_rsp_if.vld, lsu_hbi_ldst_rsp_if.rdy,
+                    pa_i_bti_req_if.vld, pa_i_bti_req_if.rdy,
+                    pa_i_bti_rsp_if.vld, pa_i_bti_rsp_if.rdy,
+                    pa_d_bti_req_if.vld, pa_d_bti_req_if.rdy,
+                    pa_d_bti_rsp_if.vld, pa_d_bti_rsp_if.rdy,
+                    l1i_flush_if.vld,
+                    l1d_flush_if.vld);
+            end
+        end
+    end
+`endif
 endmodule

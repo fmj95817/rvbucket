@@ -16,6 +16,7 @@
 #include "itf/csr_exu_write_rsp_if.h"
 #include "itf/tlb_flush_if.h"
 #include "itf/l1_flush_if.h"
+#include "itf/l1_flush_ack_if.h"
 #include "itf/exu_state_if.h"
 #include "itf/trap_exu_ctrl_if.h"
 #include "spec/core/isa.h"
@@ -25,6 +26,14 @@ typedef enum amo_stage {
     AMO_STAGE_READ = 1,
     AMO_STAGE_WRITE = 2
 } amo_stage_t;
+
+typedef enum fence_i_stage {
+    FENCE_I_STAGE_IDLE = 0,
+    FENCE_I_STAGE_WAIT_D_ACK,
+    FENCE_I_STAGE_SEND_I_FLUSH,
+    FENCE_I_STAGE_WAIT_I_ACK,
+    FENCE_I_STAGE_DONE
+} fence_i_stage_t;
 
 typedef struct exu {
     mod_t mod;
@@ -40,6 +49,9 @@ typedef struct exu {
     itf_t *csr_exu_write_rsp_in;
     itf_t *tlb_flush_mst;
     itf_t *l1i_flush_mst;
+    itf_t *l1d_flush_mst;
+    itf_t *l1i_flush_ack_slv;
+    itf_t *l1d_flush_ack_slv;
     itf_t *exu_state_out;
     itf_t *trap_exu_ctrl_in;
 
@@ -58,6 +70,8 @@ typedef struct exu {
     u32 cur_opcode;
 
     bool ldst_req_pend;
+    u32 ldst_opcode;
+    u32 ldst_pc;
     u32 ld_rd;
     u32 ld_funct3;
 
@@ -71,8 +85,13 @@ typedef struct exu {
 
     bool wfi;
     u32 wfi_resume_pc;
+    fence_i_stage_t fence_i_stage;
 
     u32 gpr[RV32G_GPR_NUM];
+
+    struct {
+        u64 *exec_inst;
+    } perf;
 } exu_t;
 
 extern void exu_construct(exu_t *exu, const char *parent, const char *name);
@@ -87,6 +106,7 @@ extern void misc_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void mem_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void sys_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
 extern void amo_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req);
+extern void exu_start_fence_i(exu_t *exu);
 
 extern void ldst_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp);
 extern void amo_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp);

@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define UFS_BASE        0x30003000u
+#define UFS_BASE        0x30004000u
 #define DDR_BASE        0x40000000u
 #define UFS_DMA_POOL_BASE 0x4f000000u
 #define SQ_BASE         (UFS_DMA_POOL_BASE + 0x0000u)

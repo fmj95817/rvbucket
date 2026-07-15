@@ -6,6 +6,8 @@
 #include "utils.h"
 
 #define TB_MEM_WORDS 256
+#define TB_L1_STG_FIFO_DEPTH 8u
+#define TB_L1_OST_DEPTH 16u
 
 typedef struct l1_tb {
     mod_t mod;
@@ -20,9 +22,11 @@ typedef struct l1_tb {
     itf_t axi_ar;
     itf_t axi_r;
     itf_t flush;
+    itf_t flush_ack;
 
     l1_t dut;
     u32 mem[TB_MEM_WORDS];
+    bool stall_axi_r;
 
     bool rd_active;
     u32 rd_addr;
@@ -68,6 +72,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     AXI4_AR_IF_CONSTRUCT(tb, axi_ar, 2);
     AXI4_R_IF_CONSTRUCT(tb, axi_r, 16);
     L1_FLUSH_IF_CONSTRUCT(tb, flush, 1);
+    L1_FLUSH_ACK_IF_CONSTRUCT(tb, flush_ack, 1);
 
     tb->dut.mod.cycle = tb->mod.cycle;
     tb->dut.bti_req_slv = &tb->bti_req;
@@ -78,6 +83,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     tb->dut.axi4_ar_mst = &tb->axi_ar;
     tb->dut.axi4_r_slv = &tb->axi_r;
     tb->dut.flush_slv = &tb->flush;
+    tb->dut.flush_ack_mst = &tb->flush_ack;
     tb->dut.mod.cycle = tb->mod.cycle;
     l1_construct(&tb->dut, tb->mod.hier_name, "u_dut", conf);
 
@@ -87,10 +93,12 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
 static void tb_reset(l1_tb_t *tb)
 {
     l1_reset(&tb->dut);
+    itf_reset(&tb->flush_ack);
     dbg_vcd_reset();
     tb->rd_active = false;
     tb->wr_active = false;
     tb->b_pending = false;
+    tb->stall_axi_r = false;
     tb->ar_count = 0;
     tb->aw_count = 0;
     for (u32 i = 0; i < TB_MEM_WORDS; i++) {
@@ -109,6 +117,7 @@ static void tb_free(l1_tb_t *tb)
     itf_free(&tb->axi_ar);
     itf_free(&tb->axi_r);
     itf_free(&tb->flush);
+    itf_free(&tb->flush_ack);
 }
 
 static void tb_mock_axi(l1_tb_t *tb)
@@ -119,7 +128,7 @@ static void tb_mock_axi(l1_tb_t *tb)
         tb->b_pending = false;
     }
 
-    if (tb->rd_active && !itf_fifo_full(&tb->axi_r)) {
+    if (tb->rd_active && !tb->stall_axi_r && !itf_fifo_full(&tb->axi_r)) {
         u32 word_idx = tb->rd_addr / 4u;
         axi4_r_if_t r = {
             .id = tb->rd_id,
@@ -195,6 +204,7 @@ static void tb_clock(l1_tb_t *tb)
     itf_dbg_clock(&tb->axi_ar);
     itf_dbg_clock(&tb->axi_r);
     itf_dbg_clock(&tb->flush);
+    itf_dbg_clock(&tb->flush_ack);
     (*tb->cycle)++;
     dbg_vcd_clock();
 }
@@ -392,6 +402,60 @@ TEST_CASE(l1_tb_t, bypass_range)
     TEST_END();
 }
 
+TEST_CASE(l1_tb_t, bypass_unaligned_read_write)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Bypass Unaligned Read and Write");
+
+    tb_bti_read_size(tb, 1, 0x83, BTI_REQ_SIZE_B2);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb_read_bytes(tb, 0x83, 2), true),
+        "bypass halfword read crosses an AXI word");
+
+    tb_bti_write_size(tb, 2, 0x83, 0x44332211, 0xf, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, 0, true),
+        "bypass word write crossing an AXI word completes once");
+    REQUIRE(tb_read_bytes(tb, 0x83, 4) == 0x44332211,
+        "bypass split write updates the addressed bytes");
+
+    tb_bti_read_size(tb, 3, 0x83, BTI_REQ_SIZE_B4);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, 0x44332211, true),
+        "bypass split read observes the split write data");
+
+    TEST_END();
+}
+
+TEST_CASE(l1_tb_t, bypass_split_multi_outstanding)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Bypass Split Multi Outstanding");
+
+    tb->stall_axi_r = true;
+    tb_bti_read_size(tb, 1, 0x83, BTI_REQ_SIZE_B4);
+    RUN_CYCLES(2);
+
+    tb_bti_read(tb, 2, 0x88);
+    RUN_CYCLES(4);
+    REQUIRE(tb->dut.ost.count == 2,
+        "split bypass read and younger bypass read are both outstanding");
+    REQUIRE(itf_fifo_empty(&tb->bti_req),
+        "younger bypass read is accepted while older split read waits");
+    REQUIRE(itf_fifo_empty(&tb->bti_rsp),
+        "no BTI response is returned before AXI responses arrive");
+
+    tb->stall_axi_r = false;
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb_read_bytes(tb, 0x83, 4), true),
+        "older split bypass read returns first");
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, tb->mem[0x88 / 4], true),
+        "younger bypass read returns second");
+
+    TEST_END();
+}
+
 TEST_CASE(l1_tb_t, flush_invalidates)
 {
     tb_reset(tb);
@@ -502,13 +566,48 @@ TEST_CASE(l1_tb_t, cbo_inval_discards_dirty_line)
     TEST_END();
 }
 
+TEST_CASE(l1_tb_t, hit_under_miss_uses_ost)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Hit Under Miss Uses OST");
+
+    tb_bti_read(tb, 1, 0x00);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb->mem[0], true), "line 0 filled");
+
+    tb->stall_axi_r = true;
+    tb_bti_read(tb, 2, 0x40);
+    RUN_CYCLES(4);
+    REQUIRE(tb->dut.state != L1_STATE_IDLE, "miss is active");
+    REQUIRE(itf_fifo_empty(&tb->bti_rsp), "older miss has no response yet");
+
+    tb_bti_read(tb, 3, 0x00);
+    RUN_CYCLES(4);
+    REQUIRE(tb->dut.ost.count == 2, "hit under miss occupies another ost slot");
+    REQUIRE(itf_fifo_empty(&tb->bti_req), "hit under miss request was accepted");
+    REQUIRE(itf_fifo_empty(&tb->bti_rsp), "younger hit waits behind older miss");
+
+    tb->stall_axi_r = false;
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, tb->mem[0x40 / 4], true),
+        "older miss response returns first");
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, tb->mem[0], true),
+        "younger hit response returns second");
+
+    TEST_END();
+}
+
 int main(void)
 {
     l1_conf_t cached_conf = {
         .full_bypass = false,
         .ro = false,
         .size = L1_LINE_SIZE,
-        .way_num = 1
+        .way_num = 1,
+        .latency = 1,
+        .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
+        .ost_depth = TB_L1_OST_DEPTH
     };
     l1_tb_t tb;
     tb_setup(&tb, &cached_conf);
@@ -527,15 +626,38 @@ int main(void)
         return ret;
     }
 
+    l1_conf_t hit_under_miss_conf = {
+        .full_bypass = false,
+        .ro = false,
+        .size = L1_LINE_SIZE * 2,
+        .way_num = 1,
+        .latency = 1,
+        .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
+        .ost_depth = TB_L1_OST_DEPTH
+    };
+    tb_setup(&tb, &hit_under_miss_conf);
+    TEST_RUN(hit_under_miss_uses_ost);
+    ut_sbd_summary(&tb.sbd);
+    ret = ut_sbd_ret(&tb.sbd);
+    tb_free(&tb);
+    if (ret != 0) {
+        return ret;
+    }
+
     l1_conf_t bypass_conf = {
         .ro = false,
         .size = L1_LINE_SIZE,
         .way_num = 1,
+        .latency = 1,
+        .stg_fifo_depth = TB_L1_STG_FIFO_DEPTH,
+        .ost_depth = TB_L1_OST_DEPTH,
         .bypass_bases = { 0x80 },
         .bypass_sizes = { 0x40 }
     };
     tb_setup(&tb, &bypass_conf);
     TEST_RUN(bypass_range);
+    TEST_RUN(bypass_unaligned_read_write);
+    TEST_RUN(bypass_split_multi_outstanding);
     ut_sbd_summary(&tb.sbd);
     ret = ut_sbd_ret(&tb.sbd);
     tb_free(&tb);

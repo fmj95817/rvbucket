@@ -79,13 +79,26 @@ static u32 plic_find_best_irq(plic_t *plic)
     return best_source;
 }
 
+static ext_irq_if_t plic_read_ext_irq(plic_t *plic)
+{
+    ext_irq_if_t irq = {};
+    itf_read(plic->conv_ext_irq_out, &irq);
+    return irq;
+}
+
+static void plic_write_ext_irq(plic_t *plic, const ext_irq_if_t *irq)
+{
+    itf_write(plic->conv_ext_irq_out, irq);
+}
+
 static void plic_update_irq(plic_t *plic)
 {
     bool irq = plic_find_best_irq(plic) != 0u;
+    ext_irq_if_t ext_irq = plic_read_ext_irq(plic);
 
-    if (irq != plic->ext_irq_o->irq) {
-        plic->ext_irq_o->irq = irq;
-        itf_signal_write_notify(plic->conv_ext_irq_out);
+    if (irq != ext_irq.irq) {
+        ext_irq.irq = irq;
+        plic_write_ext_irq(plic, &ext_irq);
     }
 }
 
@@ -214,9 +227,10 @@ static void plic_sample_inputs(plic_t *plic)
             continue;
         }
 
-        const ext_irq_if_t *src = itf_signal_get_src_and_chk(plic->div_ext_irq_ins[i]);
+        ext_irq_if_t src = {};
+        itf_read(plic->div_ext_irq_ins[i], &src);
         u32 source = i + 1u;
-        if (src->irq && !plic_get_bit(plic->claimed, source)) {
+        if (src.irq && !plic_get_bit(plic->claimed, source)) {
             plic_set_bit(plic->pending, source, true);
         }
     }
@@ -233,7 +247,6 @@ void plic_construct(plic_t *plic, const char *parent, const char *name, const pl
     dbg_vcd_add_sig("enable0", DBG_SIG_TYPE_REG, 32, &plic->enable[0]);
     dbg_vcd_add_sig("claimed0", DBG_SIG_TYPE_REG, 32, &plic->claimed[0]);
 
-    plic->ext_irq_o = itf_signal_get_src_and_chk(plic->conv_ext_irq_out);
 }
 
 void plic_reset(plic_t *plic)
@@ -249,8 +262,8 @@ void plic_reset(plic_t *plic)
     }
     plic->threshold = 0u;
 
-    plic->ext_irq_o->irq = false;
-    itf_signal_write_notify(plic->conv_ext_irq_out);
+    ext_irq_if_t ext_irq = {};
+    plic_write_ext_irq(plic, &ext_irq);
 }
 
 void plic_clock(plic_t *plic)

@@ -1,4 +1,5 @@
 `include "itf/axi4_aw_if.svh"
+`include "dbg/itf_trace.svh"
 
 interface axi4_aw_if_t;
     logic vld;
@@ -17,6 +18,26 @@ interface axi4_aw_if_t;
         logic [31:0] user;
     } pkt;
 
+`ifdef RVB_ITF_TRACE_ENABLED
+
+    function automatic string __itf_trace_pkt_str;
+        __itf_trace_pkt_str = $sformatf(
+            "%02x %08x %02x %01x %01x %01x %01x %01x %01x %08x",
+            pkt.id,
+            pkt.addr,
+            pkt.len,
+            pkt.size,
+            pkt.burst,
+            pkt.lock,
+            pkt.cache,
+            pkt.prot,
+            pkt.qos,
+            pkt.user
+        );
+    endfunction
+`endif
     modport mst (output vld, pkt, input rdy);
     modport slv (input vld, pkt, output rdy);
+
+    `RVB_ITF_TRACE_WHEN("mst", "slv", vld && rdy)
 endinterface

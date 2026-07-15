@@ -3,14 +3,20 @@
 #include "dbg/chk.h"
 #include "spec/core/hart.h"
 
-void hart_construct(hart_t *s, const char *parent, const char *name, const hart_conf_t *conf)
+static void hart_clock_real(void *args);
+
+void hart_construct(hart_t *s, const char *parent, const char *name,
+    const hart_conf_t *conf, bool smp_opt)
 {
-    mod_construct(&s->mod, parent, name);
+    mod_construct_smp_opt(&s->mod, parent, name, &hart_clock_real, s, smp_opt);
     DBG_VCD_MODULE_SCOPE(name);
 
     EX_REQ_IF_CONSTRUCT(s, ex_req_itf, 1);
     EX_RSP_IF_CONSTRUCT(s, ex_rsp_itf, 1);
     FL_REQ_IF_CONSTRUCT(s, fl_req_itf, 1);
+    BPU_PRED_REQ_SIGNAL_IF_CONSTRUCT(s, bpu_pred_req_sig_itf, false, false);
+    BPU_PRED_RSP_SIGNAL_IF_CONSTRUCT(s, bpu_pred_rsp_sig_itf, false, false);
+    BPU_UPDATE_SIGNAL_IF_CONSTRUCT(s, bpu_update_sig_itf, false, false);
     FCH_REQ_IF_CONSTRUCT(s, fch_req_itf, 1);
     FCH_RSP_IF_CONSTRUCT(s, fch_rsp_itf, 1);
     LDST_REQ_IF_CONSTRUCT(s, exu_lsu_ldst_req_itf, 1);
@@ -25,6 +31,9 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     BTI_IF_CONSTRUCT(s, l1d_, 1);
     TLB_FLUSH_IF_CONSTRUCT(s, tlb_flush_itf, 1);
     L1_FLUSH_IF_CONSTRUCT(s, l1i_flush_itf, 1);
+    L1_FLUSH_IF_CONSTRUCT(s, l1d_flush_itf, 1);
+    L1_FLUSH_ACK_IF_CONSTRUCT(s, l1i_flush_ack_itf, 1);
+    L1_FLUSH_ACK_IF_CONSTRUCT(s, l1d_flush_ack_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, mmu_fch_expt_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, fch_expt_itf, 1);
     HART_EXPT_IF_CONSTRUCT(s, ex_expt_itf, 1);
@@ -47,11 +56,29 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->ifu.ex_req_mst = &s->ex_req_itf;
     s->ifu.ex_rsp_slv = &s->ex_rsp_itf;
     s->ifu.fl_req_mst = &s->fl_req_itf;
+    s->ifu.bpu_pred_req_mst = &s->bpu_pred_req_sig_itf;
+    s->ifu.bpu_pred_rsp_slv = &s->bpu_pred_rsp_sig_itf;
+    s->ifu.bpu_update_mst = &s->bpu_update_sig_itf;
     s->ifu.fch_expt_mst = &s->fch_expt_itf;
     s->ifu.trap_send_slv = &s->trap_send_itf;
+    s->ifu.tlb_flush_slv = &s->tlb_flush_itf;
+    s->ifu.l1i_flush_slv = &s->l1i_flush_itf;
+    s->ifu.exu_state_in = &s->exu_state_sig_itf;
     s->ifu.mod.cycle = s->mod.cycle;
-    ifu_construct(&s->ifu, s->mod.hier_name, "u_ifu", conf->boot_rom_base,
-        conf->boot_rom_base, conf->boot_rom_size);
+    ifu_conf_t ifu_conf = {
+        .reset_pc = conf->boot_rom_base,
+        .boot_rom_base = conf->boot_rom_base,
+        .boot_rom_size = conf->boot_rom_size,
+        .ctrlq_depth = conf->ifu_ctrlq_depth,
+        .fch_ost_depth = conf->ifu_fch_ost_depth
+    };
+    ifu_construct(&s->ifu, s->mod.hier_name, "u_ifu", &ifu_conf);
+
+    s->bpu.pred_req_slv = &s->bpu_pred_req_sig_itf;
+    s->bpu.pred_rsp_mst = &s->bpu_pred_rsp_sig_itf;
+    s->bpu.update_slv = &s->bpu_update_sig_itf;
+    s->bpu.mod.cycle = s->mod.cycle;
+    bpu_construct(&s->bpu, s->mod.hier_name, "u_bpu");
 
     s->exu.fl_req_slv = &s->fl_req_itf;
     s->exu.ex_req_slv = &s->ex_req_itf;
@@ -65,6 +92,9 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->exu.csr_exu_write_rsp_in = &s->csr_exu_write_rsp_sig_itf;
     s->exu.tlb_flush_mst = &s->tlb_flush_itf;
     s->exu.l1i_flush_mst = &s->l1i_flush_itf;
+    s->exu.l1d_flush_mst = &s->l1d_flush_itf;
+    s->exu.l1i_flush_ack_slv = &s->l1i_flush_ack_itf;
+    s->exu.l1d_flush_ack_slv = &s->l1d_flush_ack_itf;
     s->exu.exu_state_out = &s->exu_state_sig_itf;
     s->exu.trap_exu_ctrl_in = &s->trap_exu_ctrl_sig_itf;
     s->exu.mod.cycle = s->mod.cycle;
@@ -93,7 +123,11 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->lsu.hbi_ldst_rsp_slv = &s->lsu_hbi_ldst_rsp_itf;
     s->lsu.csr_lsu_state_in = &s->csr_lsu_state_sig_itf;
     s->lsu.mod.cycle = s->mod.cycle;
-    lsu_construct(&s->lsu, s->mod.hier_name, "u_lsu");
+    lsu_conf_t lsu_conf = {
+        .stg_fifo_depth = conf->lsu_stg_fifo_depth,
+        .ost_depth = conf->lsu_ost_depth
+    };
+    lsu_construct(&s->lsu, s->mod.hier_name, "u_lsu", &lsu_conf);
 
     BTI_MST_CONNECT(&s->hbi, i_, s, va_i_);
     BTI_MST_CONNECT(&s->hbi, d_, s, va_d_);
@@ -103,7 +137,12 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->hbi.ldst_req_slv = &s->lsu_hbi_ldst_req_itf;
     s->hbi.ldst_rsp_mst = &s->lsu_hbi_ldst_rsp_itf;
     s->hbi.mod.cycle = s->mod.cycle;
-    hbi_construct(&s->hbi, s->mod.hier_name, "u_hbi");
+    hbi_conf_t hbi_conf = {
+        .stg_fifo_depth = conf->hbi_stg_fifo_depth,
+        .i_ost_depth = conf->hbi_i_ost_depth,
+        .d_ost_depth = conf->hbi_d_ost_depth
+    };
+    hbi_construct(&s->hbi, s->mod.hier_name, "u_hbi", &hbi_conf);
 
     BTI_SLV_CONNECT(&s->mmu, va_i_, s, va_i_);
     BTI_SLV_CONNECT(&s->mmu, va_d_, s, va_d_);
@@ -115,7 +154,11 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     s->mmu.tlb_flush_slv = &s->tlb_flush_itf;
     s->mmu.exu_state_in = &s->exu_state_sig_itf;
     s->mmu.csr_mmu_state_in = &s->csr_mmu_state_sig_itf;
-    mmu_conf_t mmu_conf = {};
+    mmu_conf_t mmu_conf = {
+        .i_stg_fifo_depth = conf->mmu_i_stg_fifo_depth,
+        .d_stg_fifo_depth = conf->mmu_d_stg_fifo_depth,
+        .ost_depth = conf->mmu_ost_depth
+    };
     s->mmu.mod.cycle = s->mod.cycle;
     mmu_construct(&s->mmu, s->mod.hier_name, "u_mmu", &mmu_conf);
 
@@ -123,13 +166,22 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     BTI_SLV_ARR_CONNECT(&s->l1d_bti_mux, host_, 1, s, pa_ptw_);
     BTI_MST_CONNECT(&s->l1d_bti_mux, gst_, s, l1d_);
     s->l1d_bti_mux.mod.cycle = s->mod.cycle;
-    bti_mux_construct(&s->l1d_bti_mux, s->mod.hier_name, "u_l1d_bti_mux", 2);
+    bti_mux_conf_t l1d_bti_mux_conf = {
+        .host_num = 2,
+        .stg_fifo_depth = conf->l1d_bti_mux_stg_fifo_depth,
+        .ost_depth = conf->l1d_bti_mux_ost_depth
+    };
+    bti_mux_construct(&s->l1d_bti_mux, s->mod.hier_name, "u_l1d_bti_mux",
+        &l1d_bti_mux_conf);
 
     l1_conf_t l1i_conf = {
         .full_bypass = false,
         .ro = true,
         .size = L1I_SIZE,
         .way_num = L1I_WAY_NUM,
+        .latency = conf->l1_latency,
+        .stg_fifo_depth = conf->l1i_stg_fifo_depth,
+        .ost_depth = conf->l1_ost_depth,
         .bypass_bases = { conf->boot_rom_base, conf->itcm_base },
         .bypass_sizes = { conf->boot_rom_size, conf->itcm_size }
     };
@@ -137,6 +189,7 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
     BTI_SLV_CONNECT(&s->l1i, , s, pa_i_);
     AXI4_MST_IMPORT(&s->l1i, , s, i_);
     s->l1i.flush_slv = &s->l1i_flush_itf;
+    s->l1i.flush_ack_mst = &s->l1i_flush_ack_itf;
     l1_construct(&s->l1i, s->mod.hier_name, "u_l1i", &l1i_conf);
 
     l1_conf_t l1d_conf = {
@@ -144,13 +197,23 @@ void hart_construct(hart_t *s, const char *parent, const char *name, const hart_
         .ro = false,
         .size = L1D_SIZE,
         .way_num = L1D_WAY_NUM,
-        .bypass_bases = { conf->boot_rom_base, conf->itcm_base, conf->dtcm_base, conf->cfg_base },
-        .bypass_sizes = { conf->boot_rom_size, conf->itcm_size, conf->dtcm_size, conf->cfg_size }
+        .latency = conf->l1_latency,
+        .stg_fifo_depth = conf->l1d_stg_fifo_depth,
+        .ost_depth = conf->l1_ost_depth,
+        .bypass_bases = {
+            conf->boot_rom_base, conf->itcm_base, conf->dtcm_base,
+            conf->cfg_base, conf->dma_nc_base
+        },
+        .bypass_sizes = {
+            conf->boot_rom_size, conf->itcm_size, conf->dtcm_size,
+            conf->cfg_size, conf->dma_nc_size
+        }
     };
     s->l1d.mod.cycle = s->mod.cycle;
     BTI_SLV_CONNECT(&s->l1d, , s, l1d_);
     AXI4_MST_IMPORT(&s->l1d, , s, d_);
-    s->l1d.flush_slv = NULL;
+    s->l1d.flush_slv = &s->l1d_flush_itf;
+    s->l1d.flush_ack_mst = &s->l1d_flush_ack_itf;
     l1_construct(&s->l1d, s->mod.hier_name, "u_l1d", &l1d_conf);
 
     s->trap.fch_expt_slv = &s->fch_expt_itf;
@@ -176,8 +239,12 @@ void hart_reset(hart_t *s)
     itf_reset(&s->csr_trap_state_sig_itf);
     itf_reset(&s->trap_csr_write_req_sig_itf);
     itf_reset(&s->csr_trap_write_rsp_sig_itf);
+    itf_reset(&s->bpu_pred_req_sig_itf);
+    itf_reset(&s->bpu_pred_rsp_sig_itf);
+    itf_reset(&s->bpu_update_sig_itf);
 
     ifu_reset(&s->ifu);
+    bpu_reset(&s->bpu);
     exu_reset(&s->exu);
     csr_reset(&s->csr);
     lsu_reset(&s->lsu);
@@ -191,6 +258,9 @@ void hart_reset(hart_t *s)
     itf_reset(&s->ex_req_itf);
     itf_reset(&s->ex_rsp_itf);
     itf_reset(&s->fl_req_itf);
+    itf_reset(&s->bpu_pred_req_sig_itf);
+    itf_reset(&s->bpu_pred_rsp_sig_itf);
+    itf_reset(&s->bpu_update_sig_itf);
     itf_reset(&s->fch_req_itf);
     itf_reset(&s->fch_rsp_itf);
     itf_reset(&s->exu_lsu_ldst_req_itf);
@@ -205,6 +275,9 @@ void hart_reset(hart_t *s)
     BTI_IF_RESET(s, l1d_);
     itf_reset(&s->tlb_flush_itf);
     itf_reset(&s->l1i_flush_itf);
+    itf_reset(&s->l1d_flush_itf);
+    itf_reset(&s->l1i_flush_ack_itf);
+    itf_reset(&s->l1d_flush_ack_itf);
     itf_reset(&s->mmu_fch_expt_itf);
     itf_reset(&s->fch_expt_itf);
     itf_reset(&s->ex_expt_itf);
@@ -220,6 +293,7 @@ void hart_free(hart_t *s)
 {
     mod_free(&s->mod);
     ifu_free(&s->ifu);
+    bpu_free(&s->bpu);
     exu_free(&s->exu);
     csr_free(&s->csr);
     lsu_free(&s->lsu);
@@ -233,6 +307,9 @@ void hart_free(hart_t *s)
     itf_free(&s->ex_req_itf);
     itf_free(&s->ex_rsp_itf);
     itf_free(&s->fl_req_itf);
+    itf_free(&s->bpu_pred_req_sig_itf);
+    itf_free(&s->bpu_pred_rsp_sig_itf);
+    itf_free(&s->bpu_update_sig_itf);
     itf_free(&s->fch_req_itf);
     itf_free(&s->fch_rsp_itf);
     itf_free(&s->exu_lsu_ldst_req_itf);
@@ -247,6 +324,9 @@ void hart_free(hart_t *s)
     BTI_IF_FREE(s, l1d_);
     itf_free(&s->tlb_flush_itf);
     itf_free(&s->l1i_flush_itf);
+    itf_free(&s->l1d_flush_itf);
+    itf_free(&s->l1i_flush_ack_itf);
+    itf_free(&s->l1d_flush_ack_itf);
     itf_free(&s->mmu_fch_expt_itf);
     itf_free(&s->fch_expt_itf);
     itf_free(&s->ex_expt_itf);
@@ -265,14 +345,15 @@ void hart_free(hart_t *s)
     itf_free(&s->csr_trap_write_rsp_sig_itf);
 }
 
-void hart_clock(hart_t *s)
+static void hart_clock_real(void *args)
 {
-    mod_clock(&s->mod);
+    hart_t *s = args;
     exu_clock(&s->exu);
     csr_clock(&s->csr);
     lsu_clock(&s->lsu);
     trap_clock(&s->trap);
     ifu_clock(&s->ifu);
+    bpu_clock(&s->bpu);
     hbi_clock(&s->hbi);
     mmu_clock(&s->mmu);
     bti_mux_clock(&s->l1d_bti_mux);
@@ -282,6 +363,9 @@ void hart_clock(hart_t *s)
     itf_dbg_clock(&s->ex_req_itf);
     itf_dbg_clock(&s->ex_rsp_itf);
     itf_dbg_clock(&s->fl_req_itf);
+    itf_dbg_clock(&s->bpu_pred_req_sig_itf);
+    itf_dbg_clock(&s->bpu_pred_rsp_sig_itf);
+    itf_dbg_clock(&s->bpu_update_sig_itf);
     itf_dbg_clock(&s->fch_req_itf);
     itf_dbg_clock(&s->fch_rsp_itf);
     itf_dbg_clock(&s->exu_lsu_ldst_req_itf);
@@ -296,6 +380,9 @@ void hart_clock(hart_t *s)
     BTI_IF_DBG_CLOCK(s, l1d_);
     itf_dbg_clock(&s->tlb_flush_itf);
     itf_dbg_clock(&s->l1i_flush_itf);
+    itf_dbg_clock(&s->l1d_flush_itf);
+    itf_dbg_clock(&s->l1i_flush_ack_itf);
+    itf_dbg_clock(&s->l1d_flush_ack_itf);
     itf_dbg_clock(&s->mmu_fch_expt_itf);
     itf_dbg_clock(&s->fch_expt_itf);
     itf_dbg_clock(&s->ex_expt_itf);
@@ -312,4 +399,11 @@ void hart_clock(hart_t *s)
     itf_dbg_clock(&s->csr_trap_state_sig_itf);
     itf_dbg_clock(&s->trap_csr_write_req_sig_itf);
     itf_dbg_clock(&s->csr_trap_write_rsp_sig_itf);
+}
+
+void hart_clock(hart_t *s)
+{
+    if (!mod_clock_async(&s->mod)) {
+        hart_clock_real(s);
+    }
 }

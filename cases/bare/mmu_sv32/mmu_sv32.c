@@ -112,8 +112,29 @@ static void uart_puts_raw(const char *str)
     }
 }
 
+static void sim_finish(uint32_t exit_code) __attribute__((noreturn));
+
+static void sim_finish(uint32_t exit_code)
+{
+    asm volatile(
+        "mv t0, %0\n"
+        "li t1, 0x30000004\n"
+        "li t2, 0x10\n"
+        "sw t2, 0(t1)\n"
+        "1:\n"
+        "wfi\n"
+        "j 1b\n"
+        :
+        : "r"(exit_code)
+        : "t0", "t1", "t2", "memory");
+
+    __builtin_unreachable();
+}
+
 void s_finish(void)
 {
+    uint32_t exit_code;
+
     if (s_started == 1u &&
         va_rw_ok == 1u &&
         target == 0x5a5a0001u &&
@@ -121,14 +142,13 @@ void s_finish(void)
         bad_scause == 0u &&
         bad_mcause == 0u) {
         uart_puts_raw("mmu_sv32: PASS\n");
+        exit_code = 0u;
     } else {
         uart_puts_raw("mmu_sv32: FAIL\n");
+        exit_code = 1u;
     }
 
-    UART_TX = 0x10u;
-    while (1) {
-        asm volatile("wfi");
-    }
+    sim_finish(exit_code);
 }
 
 __attribute__((noinline)) static void enter_supervisor_with_mmu(void)

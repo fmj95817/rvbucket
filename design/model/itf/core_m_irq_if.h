@@ -6,7 +6,13 @@
 #include "base/def.h"
 #include "dbg/vcd.h"
 
-#define CORE_M_IRQ_SIGNAL_IF_CONSTRUCT(module, itf, dis_dump, ext_src) do { \
+#define CORE_M_IRQ_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, ext_src) \
+    CORE_M_IRQ_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, false)
+
+#define CORE_M_IRQ_SIM_PROT_SIGNAL_IF_CONSTRUCT(module, itf, dis_trace, sim_prot) \
+    CORE_M_IRQ_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, false, sim_prot)
+
+#define CORE_M_IRQ_SIGNAL_IF_CONSTRUCT_INNER(module, itf, dis_trace, ext_src, sim_prot_) do { \
     itf_conf_t conf = { \
         .cycle = module->mod.cycle, \
         .hier_name = module->mod.hier_name, \
@@ -14,13 +20,20 @@
         .pkt_size = sizeof(core_m_irq_if_t), \
         .pkt2str = &core_m_irq_if_to_str, \
         .reg_vcd = &core_m_irq_if_reg_vcd, \
-        .force_disable_dump = dis_dump, \
-        .ext_sig_src = ext_src \
+        .force_disable_trace = dis_trace, \
+        .ext_sig_src = ext_src, \
+        .sim_prot = sim_prot_ \
     }; \
     itf_construct(&module->itf, #itf, &conf); \
 } while (0)
 
-#define CORE_M_IRQ_IF_CONSTRUCT(module, itf, depth) do { \
+#define CORE_M_IRQ_IF_CONSTRUCT(module, itf, depth) \
+    CORE_M_IRQ_IF_CONSTRUCT_INNER(module, itf, depth, false)
+
+#define CORE_M_IRQ_SIM_PROT_IF_CONSTRUCT(module, itf, depth, sim_prot) \
+    CORE_M_IRQ_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot)
+
+#define CORE_M_IRQ_IF_CONSTRUCT_INNER(module, itf, depth, sim_prot_) do { \
     itf_conf_t conf = { \
         .cycle = module->mod.cycle, \
         .hier_name = module->mod.hier_name, \
@@ -28,7 +41,8 @@
         .pkt_size = sizeof(core_m_irq_if_t), \
         .pkt2str = &core_m_irq_if_to_str, \
         .reg_vcd = &core_m_irq_if_reg_vcd, \
-        .force_disable_dump = false, \
+        .force_disable_trace = false, \
+        .sim_prot = sim_prot_, \
         .fifo_depth = depth \
     }; \
     itf_construct(&module->itf, #itf, &conf); \

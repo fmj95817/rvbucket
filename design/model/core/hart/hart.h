@@ -6,6 +6,7 @@
 #include "base/itf.h"
 #include "itf/bti_if.h"
 #include "ifu.h"
+#include "bpu.h"
 #include "exu/exu.h"
 #include "csr.h"
 #include "hbi.h"
@@ -22,8 +23,26 @@ typedef struct hart_conf {
     u32 itcm_size;
     u32 dtcm_base;
     u32 dtcm_size;
+    u32 dma_nc_base;
+    u32 dma_nc_size;
     u32 cfg_base;
     u32 cfg_size;
+    u32 ifu_ctrlq_depth;
+    u32 ifu_fch_ost_depth;
+    u32 hbi_stg_fifo_depth;
+    u32 hbi_i_ost_depth;
+    u32 hbi_d_ost_depth;
+    u32 lsu_stg_fifo_depth;
+    u32 lsu_ost_depth;
+    u32 mmu_i_stg_fifo_depth;
+    u32 mmu_d_stg_fifo_depth;
+    u32 mmu_ost_depth;
+    u32 l1_latency;
+    u32 l1i_stg_fifo_depth;
+    u32 l1d_stg_fifo_depth;
+    u32 l1_ost_depth;
+    u32 l1d_bti_mux_stg_fifo_depth;
+    u32 l1d_bti_mux_ost_depth;
 } hart_conf_t;
 
 typedef struct hart {
@@ -37,6 +56,7 @@ typedef struct hart {
     itf_t *core_swi_pend_out;
 
     ifu_t ifu;
+    bpu_t bpu;
     exu_t exu;
     csr_t csr;
     lsu_t lsu;
@@ -50,6 +70,9 @@ typedef struct hart {
     itf_t ex_req_itf;
     itf_t ex_rsp_itf;
     itf_t fl_req_itf;
+    itf_t bpu_pred_req_sig_itf;
+    itf_t bpu_pred_rsp_sig_itf;
+    itf_t bpu_update_sig_itf;
     itf_t fch_req_itf;
     itf_t fch_rsp_itf;
     itf_t exu_lsu_ldst_req_itf;
@@ -64,6 +87,9 @@ typedef struct hart {
     BTI_IF_DECL(l1d_);
     itf_t tlb_flush_itf;
     itf_t l1i_flush_itf;
+    itf_t l1d_flush_itf;
+    itf_t l1i_flush_ack_itf;
+    itf_t l1d_flush_ack_itf;
     itf_t mmu_fch_expt_itf;
     itf_t fch_expt_itf;
     itf_t ex_expt_itf;
@@ -82,7 +108,8 @@ typedef struct hart {
     itf_t csr_trap_write_rsp_sig_itf;
 } hart_t;
 
-extern void hart_construct(hart_t *s, const char *parent, const char *name, const hart_conf_t *conf);
+extern void hart_construct(hart_t *s, const char *parent, const char *name,
+    const hart_conf_t *conf, bool smp_opt);
 extern void hart_reset(hart_t *s);
 extern void hart_clock(hart_t *s);
 extern void hart_free(hart_t *s);

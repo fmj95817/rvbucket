@@ -358,7 +358,7 @@ static void ufshc_dma_clock(ufshc_t *u)
                                                AXI4_AR_SIZE_B1;
         {
             axi4_ar_if_t ar = {
-                .id = 0,
+                .id = UFSHC_AXI_ID,
                 .addr = d->beat_addr,
                 .len = 0,
                 .size = d->beat_size,
@@ -402,7 +402,7 @@ static void ufshc_dma_clock(ufshc_t *u)
             u32 data = 0;
             memcpy(&data, d->buf + d->pos, d->beat_bytes);
             axi4_aw_if_t aw = {
-                .id = 0,
+                .id = UFSHC_AXI_ID,
                 .addr = d->beat_addr,
                 .len = 0,
                 .size = d->beat_size,

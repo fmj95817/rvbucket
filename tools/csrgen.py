@@ -143,6 +143,8 @@ def gen_c_src(csr_desc, fp):
 
 
 def rtl_reset_value(csr):
+    if csr["name"] in ("stimecmp", "stimecmph"):
+        return "32'hffffffff"
     reset = csr.get("reset", 0)
     if csr["name"] == "misa" and isinstance(reset, str):
         value = 1 << 30
@@ -152,6 +154,28 @@ def rtl_reset_value(csr):
     if isinstance(reset, str):
         return reset
     return f"32'h{reset:08x}"
+
+
+RTL_ALIAS_MASKS = {
+    "sstatus": ("mstatus", "32'h800de762"),
+    "sie": ("mie", "32'h00002222"),
+    "sip": ("mip", "32'h00002222"),
+}
+
+
+def rtl_csr_value(name):
+    if name in RTL_ALIAS_MASKS:
+        parent, mask = RTL_ALIAS_MASKS[name]
+        return f"(csr_{parent} & {mask})"
+    return f"csr_{name}"
+
+
+def rtl_write_stmt(csr, value):
+    name = csr["name"]
+    if name in RTL_ALIAS_MASKS:
+        parent, mask = RTL_ALIAS_MASKS[name]
+        return f"csr_{parent} <= (csr_{parent} & ~{mask}) | ({value} & {mask});"
+    return f"csr_{name} <= {value};"
 
 
 def gen_rtl(csr_desc, fp):
@@ -168,34 +192,41 @@ def gen_rtl(csr_desc, fp):
     fp.write("    ext_irq_if_t.slv                ext_irq_slv,\n")
     fp.write("    trap_csr_write_req_if_t.slv     trap_csr_write_req_slv,\n")
     fp.write("    csr_trap_write_rsp_if_t.mst     csr_trap_write_rsp_mst,\n")
-    fp.write("    csr_trap_state_if_t.mst         csr_trap_state_mst\n")
+    fp.write("    csr_trap_state_if_t.mst         csr_trap_state_mst,\n")
+    fp.write("    csr_mmu_state_if_t.mst          csr_mmu_state_mst\n")
     fp.write(");\n")
     for csr in csr_desc["csr"]:
-        fp.write(f"    logic [31:0] csr_{csr['name']};\n")
+        if csr["name"] not in RTL_ALIAS_MASKS:
+            fp.write(f"    logic [31:0] csr_{csr['name']};\n")
     fp.write("\n")
     fp.write("    always_ff @(posedge clk or negedge rst_n) begin\n")
     fp.write("        if (!rst_n) begin\n")
     for csr in csr_desc["csr"]:
-        fp.write(f"            csr_{csr['name']} <= {rtl_reset_value(csr)};\n")
+        if csr["name"] not in RTL_ALIAS_MASKS:
+            fp.write(f"            csr_{csr['name']} <= {rtl_reset_value(csr)};\n")
     fp.write("        end else begin\n")
     fp.write("            csr_cycle <= csr_cycle + 1'b1;\n")
     fp.write("            csr_time <= core_timer_slv.pkt.mtime[31:0];\n")
     fp.write("            csr_timeh <= core_timer_slv.pkt.mtime[63:32];\n")
     fp.write("            csr_mip[7] <= core_m_irq_slv.pkt.mtimer;\n")
     fp.write("            csr_mip[3] <= core_m_irq_slv.pkt.msw;\n")
+    fp.write("            csr_mip[5] <= core_timer_slv.pkt.mtime >= {csr_stimecmph, csr_stimecmp};\n")
     fp.write("            csr_mip[11] <= ext_irq_slv.pkt.irq;\n")
+    fp.write("            csr_mip[9] <= ext_irq_slv.pkt.irq;\n")
     fp.write("            if (trap_csr_write_req_slv.vld && csr_trap_write_rsp_mst.pkt.ok) begin\n")
     fp.write("                case (trap_csr_write_req_slv.pkt.addr)\n")
     for csr in csr_desc["csr"]:
         if 'w' in csr["prop"]:
-            fp.write(f"                    12'h{int(csr['addr'], 0):03x}: csr_{csr['name']} <= trap_csr_write_req_slv.pkt.val;\n")
+            stmt = rtl_write_stmt(csr, "trap_csr_write_req_slv.pkt.val")
+            fp.write(f"                    12'h{int(csr['addr'], 0):03x}: {stmt}\n")
     fp.write("                    default: ;\n")
     fp.write("                endcase\n")
     fp.write("            end else if (exu_csr_write_req_slv.vld && csr_exu_write_rsp_mst.pkt.ok) begin\n")
     fp.write("                case (exu_csr_write_req_slv.pkt.addr)\n")
     for csr in csr_desc["csr"]:
         if 'w' in csr["prop"]:
-            fp.write(f"                    12'h{int(csr['addr'], 0):03x}: csr_{csr['name']} <= exu_csr_write_req_slv.pkt.val;\n")
+            stmt = rtl_write_stmt(csr, "exu_csr_write_req_slv.pkt.val")
+            fp.write(f"                    12'h{int(csr['addr'], 0):03x}: {stmt}\n")
     fp.write("                    default: ;\n")
     fp.write("                endcase\n")
     fp.write("            end\n")
@@ -213,7 +244,7 @@ def gen_rtl(csr_desc, fp):
             fp.write("                csr_exu_read_rsp_mst.pkt.ok = 1'b1;\n")
         else:
             fp.write(f"                csr_exu_read_rsp_mst.pkt.ok = exu_csr_read_req_slv.pkt.priv >= 2'd{priv};\n")
-        fp.write(f"                csr_exu_read_rsp_mst.pkt.val = csr_{csr['name']};\n")
+        fp.write(f"                csr_exu_read_rsp_mst.pkt.val = {rtl_csr_value(csr['name'])};\n")
         fp.write("            end\n")
     fp.write("            default: ;\n")
     fp.write("        endcase\n")
@@ -237,7 +268,9 @@ def gen_rtl(csr_desc, fp):
     fp.write("\n    assign csr_trap_write_rsp_mst.vld = trap_csr_write_req_slv.vld;\n")
     fp.write("    assign csr_trap_write_rsp_mst.pkt.ok = 1'b1;\n")
     for name in ["mstatus", "mip", "mie", "mtvec", "mepc", "medeleg", "mideleg", "sstatus", "sip", "sie", "stvec", "sepc"]:
-        fp.write(f"    assign csr_trap_state_mst.pkt.{name} = csr_{name};\n")
+        fp.write(f"    assign csr_trap_state_mst.pkt.{name} = {rtl_csr_value(name)};\n")
+    fp.write("    assign csr_mmu_state_mst.pkt.satp = csr_satp;\n")
+    fp.write("    assign csr_mmu_state_mst.pkt.mstatus = csr_mstatus;\n")
     fp.write("endmodule\n")
 
 

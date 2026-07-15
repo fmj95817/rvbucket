@@ -1,16 +1,29 @@
 {
-    "name": "rv32_soc",
+    "name": "rvbucket_k7ecor2p",
 
     "inc_dir": [
-        "rtl"
+        ".",
+        "fpga/xilinx/rtl",
+        "base/rtl",
+        "design/rtl"
     ],
     "rtl_dir": [
-        "rtl",
-        "fpga/xilinx/lib"
+        "base/rtl",
+        "design/rtl",
+        "fpga/xilinx/lib",
+        "fpga/xilinx/rtl"
     ],
+    "defines": [],
 
-    "top_module": "soc",
-    "params": {},
+    "top_module": "fpga_top",
+    "params": {
+        "DDR_ADDR_WIDTH": 15,
+        "DDR_DQ_WIDTH": 32,
+        "DDR_DQS_WIDTH": 4,
+        "DDR_DM_WIDTH": 4,
+        "DDR_BA_WIDTH": 3,
+        "FLASH_AW": 32
+    },
     "clocks": [
         {
             "name": "main_clk",
@@ -19,10 +32,83 @@
             "genclk": false
         }
     ],
+    "jobs": 4,
+
+    "ip": {
+        "clk_wiz": {
+            "enabled": true,
+            "module_name": "rvbucket_clk_wiz",
+            "input_freq_mhz": 50,
+            "reset_type": "ACTIVE_LOW",
+            "outputs": [
+                {
+                    "name": "clk_out1",
+                    "freq_mhz": 50
+                },
+                {
+                    "name": "clk_out2",
+                    "freq_mhz": 200
+                }
+            ]
+        },
+        "ddr": {
+            "enabled": true,
+            "module_name": "rvbucket_ddr",
+            "generate_config": true,
+            "required": true,
+            "target_fpga": "xc7k325t-ffg676/-2",
+            "memory_device": "DDR3_SDRAM/Components/MT41J256M16XX-125",
+            "system_clock": "No Buffer",
+            "reference_clock": "No Buffer",
+            "sys_reset_polarity": "ACTIVE LOW",
+            "time_period_ps": 2500,
+            "input_clk_freq_mhz": 50,
+            "data_width": 32,
+            "dqs_width": 4,
+            "dm_width": 4,
+            "addr_width": 15,
+            "ba_width": 3,
+            "col_address": 10,
+            "memory_size": 1073741824,
+            "axi_addr_width": 30,
+            "axi_data_width": 32,
+            "axi_id_width": 8,
+            "cas_latency": 6,
+            "cas_write_latency": 5,
+            "timing": {
+                "tcke": "5",
+                "tfaw": "40",
+                "tras": "35",
+                "trcd": "13.75",
+                "trefi": "7.8",
+                "trfc": "260",
+                "trp": "13.75",
+                "trrd": "7.5",
+                "trtp": "7.5",
+                "twtr": "7.5"
+            }
+        },
+        "qspi": {
+            "enabled": false,
+            "module_name": "rvbucket_qspi",
+            "xip_mode": true,
+            "xip_perf_mode": false,
+            "use_startup": true,
+            "use_startup_int": true,
+            "spi_mode": 0,
+            "spi_memory": 2,
+            "sck_ratio": 32,
+            "addr_bits": 32,
+            "axi_id_width": 8,
+            "num_ss_bits": 1
+        }
+    },
 
     "props": {
+        "rst_n": ["PULLUP"],
         "uart_tx": ["PULLUP"],
-        "uart_rx": ["PULLUP"]
+        "uart_rx": ["PULLUP"],
+        "flash_ce_n": ["PULLUP"]
     },
 
     "board": "fpga/xilinx/boards/k7ecor2p.json"

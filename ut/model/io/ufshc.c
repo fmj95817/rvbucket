@@ -92,7 +92,7 @@ static void tb_construct(ufshc_tb_t *tb, const char *name)
     AXI4_SLV_CONNECT(&tb->ram, , tb, dma_);
     tb->ram.mod.cycle = tb->mod.cycle;
     ram_construct(&tb->ram, tb->mod.hier_name, "u_ram", 1, RAM_MODE_AXI,
-                  TB_DDR_SIZE, TB_DDR_BASE);
+                  TB_DDR_SIZE, TB_DDR_BASE, 0);
 
     ut_sbd_init(&tb->sbd);
 }

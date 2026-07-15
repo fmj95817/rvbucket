@@ -5,6 +5,7 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
 {
     mod_construct(&s->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
+    bool smp_opt = conf->smp_opt;
 
     BTI_IF_CONSTRUCT(s, boot_rom_, 1);
     BTI_IF_CONSTRUCT(s, itcm_i_, 1);
@@ -12,15 +13,15 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     BTI_IF_CONSTRUCT(s, dtcm_, 1);
     APB_IF_CONSTRUCT(s, aclint_cfg_, 1);
     APB_IF_CONSTRUCT(s, plic_cfg_, 1);
-    AXI4_IF_CONSTRUCT(s, hart_i_, 1);
-    AXI4_IF_CONSTRUCT(s, hart_d_, 1);
+    AXI4_SIM_PROT_IF_CONSTRUCT(s, hart_i_, 1, smp_opt);
+    AXI4_SIM_PROT_IF_CONSTRUCT(s, hart_d_, 1, smp_opt);
     AXI4_IF_CONSTRUCT(s, cbi_mm_i_, 2);
     AXI4_IF_CONSTRUCT(s, cbi_mm_d_, 2);
-    CORE_TIMER_SIGNAL_IF_CONSTRUCT(s, core_timer_sig_itf, false, false);
-    CORE_M_IRQ_SIGNAL_IF_CONSTRUCT(s, core_m_irq_sig_itf, false, false);
-    CORE_SWI_PEND_SIGNAL_IF_CONSTRUCT(s, core_swi_pend_sig_itf, false, false);
-    CORE_S_IRQ_IF_CONSTRUCT(s, core_s_irq_itf, 1);
-    EXT_IRQ_SIGNAL_IF_CONSTRUCT(s, conv_ext_irq_sig_itf, false, false);
+    CORE_TIMER_SIM_PROT_SIGNAL_IF_CONSTRUCT(s, core_timer_sig_itf, false, smp_opt);
+    CORE_M_IRQ_SIM_PROT_SIGNAL_IF_CONSTRUCT(s, core_m_irq_sig_itf, false, smp_opt);
+    CORE_SWI_PEND_SIM_PROT_SIGNAL_IF_CONSTRUCT(s, core_swi_pend_sig_itf, false, smp_opt);
+    CORE_S_IRQ_SIM_PROT_IF_CONSTRUCT(s, core_s_irq_itf, 1, smp_opt);
+    EXT_IRQ_SIM_PROT_SIGNAL_IF_CONSTRUCT(s, conv_ext_irq_sig_itf, false, smp_opt);
 
     s->hart.mod.cycle = s->mod.cycle;
     AXI4_MST_CONNECT(&s->hart, i_, s, hart_i_);
@@ -37,10 +38,28 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
         .itcm_size = conf->itcm_size,
         .dtcm_base = conf->dtcm_base,
         .dtcm_size = conf->dtcm_size,
+        .dma_nc_base = conf->dma_nc_base,
+        .dma_nc_size = conf->dma_nc_size,
         .cfg_base = conf->cfg_base,
-        .cfg_size = conf->cfg_size
+        .cfg_size = conf->cfg_size,
+        .ifu_ctrlq_depth = conf->hart_ifu_ctrlq_depth,
+        .ifu_fch_ost_depth = conf->hart_ifu_fch_ost_depth,
+        .hbi_stg_fifo_depth = conf->hart_hbi_stg_fifo_depth,
+        .hbi_i_ost_depth = conf->hart_hbi_i_ost_depth,
+        .hbi_d_ost_depth = conf->hart_hbi_d_ost_depth,
+        .lsu_stg_fifo_depth = conf->hart_lsu_stg_fifo_depth,
+        .lsu_ost_depth = conf->hart_lsu_ost_depth,
+        .mmu_i_stg_fifo_depth = conf->hart_mmu_i_stg_fifo_depth,
+        .mmu_d_stg_fifo_depth = conf->hart_mmu_d_stg_fifo_depth,
+        .mmu_ost_depth = conf->hart_mmu_ost_depth,
+        .l1_latency = conf->hart_l1_latency,
+        .l1i_stg_fifo_depth = conf->hart_l1i_stg_fifo_depth,
+        .l1d_stg_fifo_depth = conf->hart_l1d_stg_fifo_depth,
+        .l1_ost_depth = conf->hart_l1_ost_depth,
+        .l1d_bti_mux_stg_fifo_depth = conf->hart_l1d_bti_mux_stg_fifo_depth,
+        .l1d_bti_mux_ost_depth = conf->hart_l1d_bti_mux_ost_depth
     };
-    hart_construct(&s->hart, s->mod.hier_name, "u_hart", &hart_conf);
+    hart_construct(&s->hart, s->mod.hier_name, "u_hart", &hart_conf, smp_opt);
 
     s->cbi.mod.cycle = s->mod.cycle;
     AXI4_MST_CONNECT(&s->cbi, mm_i_, s, cbi_mm_i_);
@@ -70,7 +89,9 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
         .aclint_base = conf->aclint_base,
         .aclint_size = conf->aclint_size,
         .plic_base = conf->plic_base,
-        .plic_size = conf->plic_size
+        .plic_size = conf->plic_size,
+        .bus_stg_fifo_depth = conf->cbi_bus_stg_fifo_depth,
+        .bus_ost_depth = conf->cbi_bus_ost_depth
     };
     cbi_construct(&s->cbi, s->mod.hier_name, "u_cbi", &cbi_conf);
 
@@ -92,7 +113,10 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     s->l2.mod.cycle = s->mod.cycle;
     l2_conf_t l2_conf = {
         .size = L2_SIZE,
-        .way_num = L2_WAY_NUM
+        .way_num = L2_WAY_NUM,
+        .latency = conf->l2_latency,
+        .stg_fifo_depth = conf->l2_stg_fifo_depth,
+        .bypass_ost_depth = conf->l2_bypass_ost_depth
     };
     l2_construct(&s->l2, s->mod.hier_name, "u_l2", &l2_conf);
 
@@ -107,12 +131,12 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     BTI_SLV_ARR_CONNECT(&s->itcm, , 1, s, itcm_d_);
     s->itcm.mod.cycle = s->mod.cycle;
     ram_construct(&s->itcm, s->mod.hier_name, "u_itcm", 2, RAM_MODE_BTI,
-        conf->itcm_size, conf->itcm_base);
+        conf->itcm_size, conf->itcm_base, conf->itcm_latency);
 
     BTI_SLV_ARR_CONNECT(&s->dtcm, , 0, s, dtcm_);
     s->dtcm.mod.cycle = s->mod.cycle;
     ram_construct(&s->dtcm, s->mod.hier_name, "u_dtcm", 1, RAM_MODE_BTI,
-        conf->dtcm_size, conf->dtcm_base);
+        conf->dtcm_size, conf->dtcm_base, conf->dtcm_latency);
 
     s->aclint.mod.cycle = s->mod.cycle;
     APB_SLV_CONNECT(&s->aclint, cfg_, s, aclint_cfg_);
@@ -201,10 +225,8 @@ void rv32g_free(rv32g_t *s)
     itf_free(&s->conv_ext_irq_sig_itf);
 }
 
-void rv32g_clock(rv32g_t *s)
+static void rv32g_rest_clock(rv32g_t *s)
 {
-    mod_clock(&s->mod);
-    hart_clock(&s->hart);
     cbi_clock(&s->cbi);
     rom_clock(&s->boot_rom);
     ram_clock(&s->itcm);
@@ -212,6 +234,13 @@ void rv32g_clock(rv32g_t *s)
     aclint_clock(&s->aclint);
     plic_clock(&s->plic);
     l2_clock(&s->l2);
+}
+
+void rv32g_clock(rv32g_t *s)
+{
+    mod_clock(&s->mod);
+    hart_clock(&s->hart);
+    rv32g_rest_clock(s);
 
     BTI_IF_DBG_CLOCK(s, boot_rom_);
     BTI_IF_DBG_CLOCK(s, itcm_i_);

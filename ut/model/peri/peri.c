@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "peri/peri.h"
+#include "spec/peri.h"
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 #include "utils.h"
@@ -18,6 +19,8 @@ typedef struct peri_tb {
     itf_t gpio_sig_itf;
     itf_t gpio_irq_itf;
     itf_t gtimer_irq_itf;
+    itf_t ufshc_irq_itf;
+    AXI4_IF_DECL(ufshc_dma_);
 
     ext_irq_if_t *irq_o;
     gpio_if_t *gpio_o;
@@ -45,6 +48,8 @@ static void tb_construct(peri_tb_t *tb, const char *name)
     GPIO_SIGNAL_IF_CONSTRUCT(tb, gpio_sig_itf, true, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, gpio_irq_itf, true, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, gtimer_irq_itf, true, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(tb, ufshc_irq_itf, true, false);
+    AXI4_IF_CONSTRUCT(tb, ufshc_dma_, 4);
 
     tb->irq_o = itf_signal_get_src_and_chk(&tb->uart_irq_itf);
     tb->gpio_o = itf_signal_get_src_and_chk(&tb->gpio_sig_itf);
@@ -58,8 +63,18 @@ static void tb_construct(peri_tb_t *tb, const char *name)
     tb->dut.gpio_inout = &tb->gpio_sig_itf;
     tb->dut.gpio_irq_out = &tb->gpio_irq_itf;
     tb->dut.gtimer_irq_out = &tb->gtimer_irq_itf;
+    tb->dut.ufshc_irq_out = &tb->ufshc_irq_itf;
+    AXI4_MST_CONNECT(&tb->dut, ufshc_, tb, ufshc_dma_);
     tb->dut.mod.cycle = tb->mod.cycle;
-    peri_construct(&tb->dut, tb->mod.hier_name, "u_dut", 0x30000000, 0x3000);
+    peri_conf_t conf = {
+        .base = 0x30000000,
+        .size = PERI_UFSHC_OFFSET + PERI_UFSHC_SIZE,
+        .ufshc = {
+            .en = false,
+            .backing_path = NULL
+        }
+    };
+    peri_construct(&tb->dut, tb->mod.hier_name, "u_dut", &conf);
 
     ut_sbd_init(&tb->sbd);
 }
@@ -67,6 +82,8 @@ static void tb_construct(peri_tb_t *tb, const char *name)
 static void tb_reset(peri_tb_t *tb)
 {
     peri_reset(&tb->dut);
+    itf_reset(&tb->ufshc_irq_itf);
+    AXI4_IF_RESET(tb, ufshc_dma_);
     dbg_vcd_reset();
 }
 
@@ -81,6 +98,8 @@ static void tb_free(peri_tb_t *tb)
     itf_free(&tb->gpio_sig_itf);
     itf_free(&tb->gpio_irq_itf);
     itf_free(&tb->gtimer_irq_itf);
+    itf_free(&tb->ufshc_irq_itf);
+    AXI4_IF_FREE(tb, ufshc_dma_);
 }
 
 static void tb_clock(peri_tb_t *tb)
@@ -94,6 +113,8 @@ static void tb_clock(peri_tb_t *tb)
     itf_dbg_clock(&tb->gpio_sig_itf);
     itf_dbg_clock(&tb->gpio_irq_itf);
     itf_dbg_clock(&tb->gtimer_irq_itf);
+    itf_dbg_clock(&tb->ufshc_irq_itf);
+    AXI4_IF_DBG_CLOCK(tb, ufshc_dma_);
     (*tb->cycle)++; dbg_vcd_clock();
 }
 

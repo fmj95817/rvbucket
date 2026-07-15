@@ -55,10 +55,11 @@ static void tb_construct_bti(ram_tb_t *tb)
     tb->dut.bti_req_slvs[0] = &tb->bti_req_itf;
     tb->dut.bti_rsp_msts[0] = &tb->bti_rsp_itf;
     tb->dut.mod.cycle = tb->mod.cycle;
-    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_BTI, RAM_SIZE, RAM_BASE);
+    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_BTI,
+        RAM_SIZE, RAM_BASE, 1);
 }
 
-static void tb_construct_axi(ram_tb_t *tb)
+static void tb_construct_axi_latency(ram_tb_t *tb, u32 latency)
 {
     tb->dut.axi4_aw_slv = &tb->axi4_aw_itf;
     tb->dut.axi4_w_slv = &tb->axi4_w_itf;
@@ -66,7 +67,13 @@ static void tb_construct_axi(ram_tb_t *tb)
     tb->dut.axi4_ar_slv = &tb->axi4_ar_itf;
     tb->dut.axi4_r_mst = &tb->axi4_r_itf;
     tb->dut.mod.cycle = tb->mod.cycle;
-    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_AXI, RAM_SIZE, RAM_BASE);
+    ram_construct(&tb->dut, tb->mod.hier_name, "u_ram", 1, RAM_MODE_AXI,
+        RAM_SIZE, RAM_BASE, latency);
+}
+
+static void tb_construct_axi(ram_tb_t *tb)
+{
+    tb_construct_axi_latency(tb, 1);
 }
 
 static void tb_dut_reset(ram_tb_t *tb)
@@ -89,6 +96,13 @@ static void tb_clock(ram_tb_t *tb)
 
     (*tb->cycle)++;
     dbg_vcd_clock();
+}
+
+static void tb_clock_n(ram_tb_t *tb, u32 n)
+{
+    for (u32 i = 0; i < n; i++) {
+        tb_clock(tb);
+    }
 }
 
 static void tb_free_dut(ram_tb_t *tb)
@@ -480,6 +494,96 @@ TEST_CASE(ram_tb_t, axi_write_strobe)
     TEST_END();
 }
 
+TEST_CASE(ram_tb_t, axi_multi_outstanding_read_fifo_order)
+{
+    TEST_BEGIN("AXI Multi-outstanding Read FIFO Order");
+
+    tb_construct_axi_latency(tb, 4);
+    tb_dut_reset(tb);
+
+    u32 word0 = 0x13572468;
+    u32 word1 = 0x24681357;
+    ram_load(&tb->dut, &word0, 0x700, sizeof(word0));
+    ram_load(&tb->dut, &word1, 0x704, sizeof(word1));
+
+    tb_axi_write_ar(tb, 0x70, RAM_BASE + 0x700, 0, AXI4_AR_SIZE_B4,
+        AXI4_AR_BURST_INCR);
+    tb_axi_write_ar(tb, 0x71, RAM_BASE + 0x704, 0, AXI4_AR_SIZE_B4,
+        AXI4_AR_BURST_INCR);
+
+    tb_clock_n(tb, 5);
+    REQUIRE(tb_axi_check_and_pop_r(tb, 0x70, word0, AXI4_R_RESP_OKAY, true),
+        "first read response returns first");
+
+    tb_clock(tb);
+    REQUIRE(tb_axi_check_and_pop_r(tb, 0x71, word1, AXI4_R_RESP_OKAY, true),
+        "second read response returns one cycle later");
+
+    tb_free_dut(tb);
+    TEST_END();
+}
+
+TEST_CASE(ram_tb_t, axi_write_data_progress_under_b_wait)
+{
+    TEST_BEGIN("AXI Write Data Progress Under B Wait");
+
+    tb_construct_axi_latency(tb, 4);
+    tb_dut_reset(tb);
+
+    tb_axi_write_aw(tb, 0x80, RAM_BASE + 0x800, 0, AXI4_AW_SIZE_B4,
+        AXI4_AW_BURST_INCR);
+    tb_axi_write_aw(tb, 0x81, RAM_BASE + 0x804, 0, AXI4_AW_SIZE_B4,
+        AXI4_AW_BURST_INCR);
+    tb_axi_write_w(tb, 0xaaaabbbb, 0x0f, true);
+    tb_axi_write_w(tb, 0xccccdddd, 0x0f, true);
+
+    tb_clock_n(tb, 6);
+    REQUIRE(tb_axi_check_and_pop_b(tb, 0x80, AXI4_B_RESP_OKAY),
+        "first write response returns after latency");
+
+    tb_clock(tb);
+    REQUIRE(tb_axi_check_and_pop_b(tb, 0x81, AXI4_B_RESP_OKAY),
+        "second write response was not blocked by first B wait");
+
+    tb_axi_write_ar(tb, 0x82, RAM_BASE + 0x804, 0, AXI4_AR_SIZE_B4,
+        AXI4_AR_BURST_INCR);
+    bool got_r = RUN_POLL_UNTIL(tb_cond_axi_r_ready, UT_TIMEOUT);
+    REQUIRE(got_r, "read back second write");
+    REQUIRE(tb_axi_check_and_pop_r(tb, 0x82, 0xccccdddd, AXI4_R_RESP_OKAY,
+        true), "second write data committed");
+
+    tb_free_dut(tb);
+    TEST_END();
+}
+
+TEST_CASE(ram_tb_t, axi_fast_back_to_back_write_responses)
+{
+    TEST_BEGIN("AXI Fast Back-to-back Write Responses");
+
+    tb_construct_axi_latency(tb, 0);
+    tb_dut_reset(tb);
+
+    tb_axi_write_aw(tb, 0x90, RAM_BASE + 0x900, 0, AXI4_AW_SIZE_B4,
+        AXI4_AW_BURST_INCR);
+    tb_axi_write_aw(tb, 0x91, RAM_BASE + 0x904, 0, AXI4_AW_SIZE_B4,
+        AXI4_AW_BURST_INCR);
+    tb_axi_write_w(tb, 0x11223344, 0x0f, true);
+    tb_axi_write_w(tb, 0x55667788, 0x0f, true);
+
+    bool got_b = RUN_POLL_UNTIL(tb_cond_axi_b_ready, UT_TIMEOUT);
+    REQUIRE(got_b, "first write response received");
+    REQUIRE(tb_axi_check_and_pop_b(tb, 0x90, AXI4_B_RESP_OKAY),
+        "first write response keeps its ID");
+
+    got_b = RUN_POLL_UNTIL(tb_cond_axi_b_ready, UT_TIMEOUT);
+    REQUIRE(got_b, "second write response received");
+    REQUIRE(tb_axi_check_and_pop_b(tb, 0x91, AXI4_B_RESP_OKAY),
+        "second write response keeps its ID");
+
+    tb_free_dut(tb);
+    TEST_END();
+}
+
 int main()
 {
     ram_tb_t tb;
@@ -494,6 +598,9 @@ int main()
     TEST_RUN(axi_burst_fixed);
     TEST_RUN(axi_concurrent_rw);
     TEST_RUN(axi_write_strobe);
+    TEST_RUN(axi_multi_outstanding_read_fifo_order);
+    TEST_RUN(axi_write_data_progress_under_b_wait);
+    TEST_RUN(axi_fast_back_to_back_write_responses);
 
     ut_sbd_summary(&tb.sbd);
     int ret = ut_sbd_ret(&tb.sbd);

@@ -8,7 +8,9 @@
 
 #define TB_HOST_NUM 4
 
-#define AXI4_FIFO_DEPTH    4
+#define AXI4_FIFO_DEPTH   16
+#define AXI_MUX_TB_STG_FIFO_DEPTH 8
+#define AXI_MUX_TB_OST_DEPTH 8
 #define STRESS_TOTAL     1000
 
 typedef struct axi_mux_tb {
@@ -62,6 +64,7 @@ typedef struct axi_mux_tb {
     u32 mock_r_data;
     u8  mock_r_resp;
     u8  mock_b_resp;
+    bool mock_auto_rsp;
 
     bool mock_aw_pending;
     u32  mock_pending_aw_addr;
@@ -145,7 +148,12 @@ static void tb_construct(axi_mux_tb_t *tb, const char *name)
     tb->dut.gst_axi4_ar_mst = &tb->gst_axi4_ar_itf;
     tb->dut.gst_axi4_r_slv  = &tb->gst_axi4_r_itf;
     tb->dut.mod.cycle = tb->mod.cycle;
-    axi_mux_construct(&tb->dut, tb->mod.hier_name, "u_dut", TB_HOST_NUM);
+    axi_mux_conf_t conf = {
+        .host_num = TB_HOST_NUM,
+        .stg_fifo_depth = AXI_MUX_TB_STG_FIFO_DEPTH,
+        .ost_depth = AXI_MUX_TB_OST_DEPTH
+    };
+    axi_mux_construct(&tb->dut, tb->mod.hier_name, "u_dut", &conf);
 
     ut_sbd_init(&tb->sbd);
 }
@@ -153,6 +161,31 @@ static void tb_construct(axi_mux_tb_t *tb, const char *name)
 static void tb_reset(axi_mux_tb_t *tb)
 {
     axi_mux_reset(&tb->dut);
+    itf_reset(&tb->h0_axi4_aw_itf);
+    itf_reset(&tb->h0_axi4_w_itf);
+    itf_reset(&tb->h0_axi4_b_itf);
+    itf_reset(&tb->h0_axi4_ar_itf);
+    itf_reset(&tb->h0_axi4_r_itf);
+    itf_reset(&tb->h1_axi4_aw_itf);
+    itf_reset(&tb->h1_axi4_w_itf);
+    itf_reset(&tb->h1_axi4_b_itf);
+    itf_reset(&tb->h1_axi4_ar_itf);
+    itf_reset(&tb->h1_axi4_r_itf);
+    itf_reset(&tb->h2_axi4_aw_itf);
+    itf_reset(&tb->h2_axi4_w_itf);
+    itf_reset(&tb->h2_axi4_b_itf);
+    itf_reset(&tb->h2_axi4_ar_itf);
+    itf_reset(&tb->h2_axi4_r_itf);
+    itf_reset(&tb->h3_axi4_aw_itf);
+    itf_reset(&tb->h3_axi4_w_itf);
+    itf_reset(&tb->h3_axi4_b_itf);
+    itf_reset(&tb->h3_axi4_ar_itf);
+    itf_reset(&tb->h3_axi4_r_itf);
+    itf_reset(&tb->gst_axi4_aw_itf);
+    itf_reset(&tb->gst_axi4_w_itf);
+    itf_reset(&tb->gst_axi4_b_itf);
+    itf_reset(&tb->gst_axi4_ar_itf);
+    itf_reset(&tb->gst_axi4_r_itf);
     dbg_vcd_reset();
 
     tb->mock_ar_seen = false;
@@ -161,6 +194,7 @@ static void tb_reset(axi_mux_tb_t *tb)
     tb->mock_r_data = 0;
     tb->mock_r_resp = 0;
     tb->mock_b_resp = 0;
+    tb->mock_auto_rsp = true;
     tb->mock_aw_pending = false;
     tb->mock_rd_count = 0;
     tb->mock_wr_count = 0;
@@ -168,6 +202,10 @@ static void tb_reset(axi_mux_tb_t *tb)
 
 static void tb_mock_axi4_guest(axi_mux_tb_t *tb)
 {
+    if (!tb->mock_auto_rsp) {
+        return;
+    }
+
     if (!itf_fifo_empty(&tb->gst_axi4_ar_itf) && !itf_fifo_full(&tb->gst_axi4_r_itf)) {
         axi4_ar_if_t ar;
         itf_read(&tb->gst_axi4_ar_itf, &ar);
@@ -344,6 +382,27 @@ static void tb_host_write_aw_w(axi_mux_tb_t *tb, u32 host_idx, u8 id, u32 addr,
 static bool tb_cond_mock_ar_seen(axi_mux_tb_t *tb) { return tb->mock_ar_seen; }
 static bool tb_cond_mock_aw_seen(axi_mux_tb_t *tb) { return tb->mock_aw_seen; }
 
+static u32 tb_fifo_count(itf_t *itf)
+{
+    return itf->ctx.fifo.pkt_num;
+}
+
+static bool tb_cond_two_gst_ar(axi_mux_tb_t *tb)
+{
+    return tb_fifo_count(&tb->gst_axi4_ar_itf) >= 2;
+}
+
+static bool tb_cond_two_gst_aw_w(axi_mux_tb_t *tb)
+{
+    return tb_fifo_count(&tb->gst_axi4_aw_itf) >= 2 &&
+           tb_fifo_count(&tb->gst_axi4_w_itf) >= 2;
+}
+
+static bool tb_cond_rd_table_full(axi_mux_tb_t *tb)
+{
+    return tb_fifo_count(&tb->gst_axi4_ar_itf) >= AXI_MUX_TB_OST_DEPTH;
+}
+
 static bool tb_cond_host_r_ready(axi_mux_tb_t *tb, u32 host_idx)
 {
     return !itf_fifo_empty(tb->dut.host_axi4_r_msts[host_idx]);
@@ -358,6 +417,7 @@ static bool tb_cond_host_r_ready_h1(axi_mux_tb_t *tb) { return tb_cond_host_r_re
 static bool tb_cond_host_r_ready_h2(axi_mux_tb_t *tb) { return tb_cond_host_r_ready(tb, 2); }
 static bool tb_cond_host_r_ready_h3(axi_mux_tb_t *tb) { return tb_cond_host_r_ready(tb, 3); }
 static bool tb_cond_host_b_ready_h0(axi_mux_tb_t *tb) { return tb_cond_host_b_ready(tb, 0); }
+static bool tb_cond_host_b_ready_h1(axi_mux_tb_t *tb) { return tb_cond_host_b_ready(tb, 1); }
 
 static bool tb_host_check_and_pop_r(axi_mux_tb_t *tb, u32 host_idx, u8 expected_id,
                                      u32 expected_data, u8 expected_resp)
@@ -377,6 +437,57 @@ static bool tb_host_check_and_pop_b(axi_mux_tb_t *tb, u32 host_idx, u8 expected_
     axi4_b_if_t b;
     itf_read(host_b, &b);
     return (b.id == expected_id) && (b.resp == expected_resp);
+}
+
+static bool tb_pop_gst_ar(axi_mux_tb_t *tb, u8 expected_id, u32 expected_addr)
+{
+    if (itf_fifo_empty(&tb->gst_axi4_ar_itf)) {
+        return false;
+    }
+    axi4_ar_if_t ar;
+    itf_read(&tb->gst_axi4_ar_itf, &ar);
+    return ar.id == expected_id && ar.addr == expected_addr;
+}
+
+static bool tb_pop_gst_aw(axi_mux_tb_t *tb, u8 expected_id, u32 expected_addr)
+{
+    if (itf_fifo_empty(&tb->gst_axi4_aw_itf)) {
+        return false;
+    }
+    axi4_aw_if_t aw;
+    itf_read(&tb->gst_axi4_aw_itf, &aw);
+    return aw.id == expected_id && aw.addr == expected_addr;
+}
+
+static bool tb_pop_gst_w(axi_mux_tb_t *tb, u32 expected_data)
+{
+    if (itf_fifo_empty(&tb->gst_axi4_w_itf)) {
+        return false;
+    }
+    axi4_w_if_t w;
+    itf_read(&tb->gst_axi4_w_itf, &w);
+    return w.data == expected_data && w.last;
+}
+
+static void tb_write_gst_r(axi_mux_tb_t *tb, u8 id, u32 data,
+                            axi4_r_resp_t resp, bool last)
+{
+    axi4_r_if_t r = {
+        .id = id,
+        .data = data,
+        .resp = resp,
+        .last = last
+    };
+    itf_write(&tb->gst_axi4_r_itf, &r);
+}
+
+static void tb_write_gst_b(axi_mux_tb_t *tb, u8 id, axi4_b_resp_t resp)
+{
+    axi4_b_if_t b = {
+        .id = id,
+        .resp = resp
+    };
+    itf_write(&tb->gst_axi4_b_itf, &b);
 }
 
 TEST_CASE(axi_mux_tb_t, read_h0)
@@ -577,6 +688,121 @@ TEST_CASE(axi_mux_tb_t, concurrent_rd_wr)
     TEST_END();
 }
 
+TEST_CASE(axi_mux_tb_t, read_same_id_order)
+{
+    TEST_BEGIN("Multi-Outstanding Read: Same ID Routed in Issue Order");
+
+    tb->mock_auto_rsp = false;
+
+    tb_host_write_ar(tb, 0, 0x60, 0x61000000);
+    tb_host_write_ar(tb, 1, 0x60, 0x61000004);
+
+    RUN_POLL_UNTIL(tb_cond_two_gst_ar, UT_TIMEOUT);
+    REQUIRE(tb_pop_gst_ar(tb, 0x60, 0x61000000), "host0 AR issued first");
+    REQUIRE(tb_pop_gst_ar(tb, 0x60, 0x61000004), "host1 same-ID AR issued second");
+
+    tb_write_gst_r(tb, 0x60, 0xaaaa0000, AXI4_R_RESP_OKAY, true);
+    RUN_POLL_UNTIL(tb_cond_host_r_ready_h0, UT_TIMEOUT);
+    REQUIRE(tb_host_check_and_pop_r(tb, 0, 0x60, 0xaaaa0000, 0),
+            "first same-ID R routes to host0");
+    REQUIRE(!tb_cond_host_r_ready(tb, 1), "host1 still waits for second same-ID R");
+
+    tb_write_gst_r(tb, 0x60, 0xbbbb0000, AXI4_R_RESP_OKAY, true);
+    RUN_POLL_UNTIL(tb_cond_host_r_ready_h1, UT_TIMEOUT);
+    REQUIRE(tb_host_check_and_pop_r(tb, 1, 0x60, 0xbbbb0000, 0),
+            "second same-ID R routes to host1");
+    TEST_END();
+}
+
+TEST_CASE(axi_mux_tb_t, read_different_id_reorder)
+{
+    TEST_BEGIN("Multi-Outstanding Read: Different IDs May Reorder");
+
+    tb->mock_auto_rsp = false;
+
+    tb_host_write_ar(tb, 0, 0x61, 0x62000000);
+    tb_host_write_ar(tb, 1, 0x62, 0x62000004);
+
+    RUN_POLL_UNTIL(tb_cond_two_gst_ar, UT_TIMEOUT);
+    REQUIRE(tb_pop_gst_ar(tb, 0x61, 0x62000000), "host0 AR issued");
+    REQUIRE(tb_pop_gst_ar(tb, 0x62, 0x62000004), "host1 AR issued");
+
+    tb_write_gst_r(tb, 0x62, 0x62626262, AXI4_R_RESP_OKAY, true);
+    RUN_POLL_UNTIL(tb_cond_host_r_ready_h1, UT_TIMEOUT);
+    REQUIRE(tb_host_check_and_pop_r(tb, 1, 0x62, 0x62626262, 0),
+            "younger different-ID R routes to host1 first");
+
+    tb_write_gst_r(tb, 0x61, 0x61616161, AXI4_R_RESP_OKAY, true);
+    RUN_POLL_UNTIL(tb_cond_host_r_ready_h0, UT_TIMEOUT);
+    REQUIRE(tb_host_check_and_pop_r(tb, 0, 0x61, 0x61616161, 0),
+            "older different-ID R routes to host0 later");
+    TEST_END();
+}
+
+TEST_CASE(axi_mux_tb_t, read_table_full_delayed_free)
+{
+    TEST_BEGIN("Read OST Full Uses Next-Cycle Free");
+
+    tb->mock_auto_rsp = false;
+
+    for (u32 i = 0; i < AXI_MUX_TB_OST_DEPTH + 1u; i++) {
+        tb_host_write_ar(tb, 0, 0x70, 0x70000000 + i * 4u);
+    }
+
+    RUN_POLL_UNTIL(tb_cond_rd_table_full, UT_TIMEOUT);
+    REQUIRE(tb_fifo_count(&tb->gst_axi4_ar_itf) == AXI_MUX_TB_OST_DEPTH,
+            "read table depth worth of ARs issued");
+    REQUIRE(tb_fifo_count(&tb->h0_axi4_ar_itf) == 1,
+            "one host AR remains back-pressured while table is full");
+
+    REQUIRE(tb_pop_gst_ar(tb, 0x70, 0x70000000), "oldest AR popped for response");
+    tb_write_gst_r(tb, 0x70, 0x70000000, AXI4_R_RESP_OKAY, true);
+    tb_clock(tb);
+    REQUIRE(tb_fifo_count(&tb->h0_axi4_ar_itf) == 0,
+            "held host AR is captured into mux ingress FIFO");
+    REQUIRE(fifo_count(&tb->dut.host_ar_fifos[0]) == 1,
+            "captured host AR waits in ingress until next ost clock");
+    REQUIRE(tb_fifo_count(&tb->gst_axi4_ar_itf) == AXI_MUX_TB_OST_DEPTH - 1u,
+            "same-cycle free does not issue captured AR to guest");
+
+    tb_clock(tb);
+    REQUIRE(tb_fifo_count(&tb->h0_axi4_ar_itf) == 0,
+            "host AR interface remains drained after slot frees");
+    REQUIRE(fifo_count(&tb->dut.host_ar_fifos[0]) == 0,
+            "captured host AR is issued after ost clock releases slot");
+    REQUIRE(tb_fifo_count(&tb->gst_axi4_ar_itf) == AXI_MUX_TB_OST_DEPTH,
+            "guest sees held AR after ost clock releases slot");
+    TEST_END();
+}
+
+TEST_CASE(axi_mux_tb_t, write_same_id_order)
+{
+    TEST_BEGIN("Multi-Outstanding Write: Same ID B Routed in Issue Order");
+
+    tb->mock_auto_rsp = false;
+
+    tb_host_write_aw_w(tb, 0, 0x80, 0x80000000, 0x11111111, 0x0f);
+    tb_host_write_aw_w(tb, 1, 0x80, 0x80000004, 0x22222222, 0x0f);
+
+    RUN_POLL_UNTIL(tb_cond_two_gst_aw_w, UT_TIMEOUT);
+    REQUIRE(tb_pop_gst_aw(tb, 0x80, 0x80000000), "host0 AW issued first");
+    REQUIRE(tb_pop_gst_aw(tb, 0x80, 0x80000004), "host1 same-ID AW issued second");
+    REQUIRE(tb_pop_gst_w(tb, 0x11111111), "host0 W issued first");
+    REQUIRE(tb_pop_gst_w(tb, 0x22222222), "host1 W issued second");
+
+    tb_write_gst_b(tb, 0x80, AXI4_B_RESP_OKAY);
+    RUN_POLL_UNTIL(tb_cond_host_b_ready_h0, UT_TIMEOUT);
+    REQUIRE(tb_host_check_and_pop_b(tb, 0, 0x80, 0),
+            "first same-ID B routes to host0");
+    REQUIRE(!tb_cond_host_b_ready(tb, 1), "host1 waits for second same-ID B");
+
+    tb_write_gst_b(tb, 0x80, AXI4_B_RESP_OKAY);
+    RUN_POLL_UNTIL(tb_cond_host_b_ready_h1, UT_TIMEOUT);
+    REQUIRE(tb_host_check_and_pop_b(tb, 1, 0x80, 0),
+            "second same-ID B routes to host1");
+    TEST_END();
+}
+
 #define STRESS_PER_HOST (STRESS_TOTAL / TB_HOST_NUM)
 
 TEST_CASE(axi_mux_tb_t, stress_1000_mixed)
@@ -691,6 +917,14 @@ int main()
     TEST_RUN(mixed_rw);
     tb_reset(&tb);
     TEST_RUN(concurrent_rd_wr);
+    tb_reset(&tb);
+    TEST_RUN(read_same_id_order);
+    tb_reset(&tb);
+    TEST_RUN(read_different_id_reorder);
+    tb_reset(&tb);
+    TEST_RUN(read_table_full_delayed_free);
+    tb_reset(&tb);
+    TEST_RUN(write_same_id_order);
     tb_reset(&tb);
     TEST_RUN(stress_1000_mixed);
 

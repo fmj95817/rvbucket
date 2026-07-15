@@ -74,6 +74,28 @@ static void sync_m_irq_from_s_irq(csr_t *csr)
         (csr->regs.sip.raw & CSR_S_IRQ_MASK);
 }
 
+static void csr_publish_core_swi_pend(csr_t *csr)
+{
+    core_swi_pend_if_t pend = {
+        .msip = (csr->regs.mip.reg.msip != 0u)
+    };
+    itf_write(csr->core_swi_pend_out, &pend);
+}
+
+static void csr_update_m_irq(csr_t *csr, const core_m_irq_if_t *irq)
+{
+    csr->regs.mip.reg.mtip = irq->mtimer ? 1u : 0u;
+    csr->regs.mip.reg.msip = irq->msw ? 1u : 0u;
+    sync_s_irq_from_m_irq(csr);
+}
+
+static void csr_update_ext_irq(csr_t *csr, const ext_irq_if_t *irq)
+{
+    csr->regs.mip.reg.meip = irq->irq ? 1u : 0u;
+    csr->regs.mip.reg.seip = irq->irq ? 1u : 0u;
+    sync_s_irq_from_m_irq(csr);
+}
+
 static void csr_sync_supervisor_aliases(csr_t *csr, u32 written_addr)
 {
     switch (written_addr) {
@@ -94,26 +116,6 @@ static void csr_sync_supervisor_aliases(csr_t *csr, u32 written_addr)
     default:
         break;
     }
-}
-
-static void m_irq_cb(void *args)
-{
-    DBG_CHECK(args != NULL);
-    csr_t *csr = args;
-
-    csr->regs.mip.reg.mtip = csr->core_m_irq_i->mtimer ? 1u : 0u;
-    csr->regs.mip.reg.msip = csr->core_m_irq_i->msw ? 1u : 0u;
-    sync_s_irq_from_m_irq(csr);
-    csr_publish_state(csr);
-}
-
-static void ext_irq_cb(void *args)
-{
-    csr_t *csr = args;
-    csr->regs.mip.reg.meip = csr->ext_irq_i->irq ? 1u : 0u;
-    csr->regs.mip.reg.seip = csr->ext_irq_i->irq ? 1u : 0u;
-    sync_s_irq_from_m_irq(csr);
-    csr_publish_state(csr);
 }
 
 static void csr_read_cb(void *args)
@@ -142,7 +144,7 @@ static void csr_write_cb(void *args)
     }
     itf_signal_write_notify(csr->csr_exu_write_rsp_out);
 
-    csr->core_swi_pend_o->msip = (csr->regs.mip.reg.msip != 0u);
+    csr_publish_core_swi_pend(csr);
     csr_publish_state(csr);
 }
 
@@ -180,14 +182,10 @@ void csr_construct(csr_t *csr, const char *parent, const char *name)
     dbg_vcd_add_sig("sie", DBG_SIG_TYPE_REG, 32, &csr->regs.sie.raw);
     dbg_vcd_add_sig("sip", DBG_SIG_TYPE_REG, 32, &csr->regs.sip.raw);
 
-    csr->core_timer_i = itf_signal_get_src_and_chk(csr->core_timer_in);
-    csr->core_m_irq_i = itf_signal_get_src_and_chk(csr->core_m_irq_in);
-    csr->core_swi_pend_o = itf_signal_get_src_and_chk(csr->core_swi_pend_out);
     csr->read_req_i = itf_signal_get_src_and_chk(csr->exu_csr_read_req_in);
     csr->read_rsp_o = itf_signal_get_src_and_chk(csr->csr_exu_read_rsp_out);
     csr->write_req_i = itf_signal_get_src_and_chk(csr->exu_csr_write_req_in);
     csr->write_rsp_o = itf_signal_get_src_and_chk(csr->csr_exu_write_rsp_out);
-    csr->ext_irq_i = itf_signal_get_src_and_chk(csr->ext_irq_in);
     csr->trap_write_req_i = itf_signal_get_src_and_chk(csr->trap_csr_write_req_in);
     csr->trap_write_rsp_o = itf_signal_get_src_and_chk(csr->csr_trap_write_rsp_out);
     csr->mmu_state_o = itf_signal_get_src_and_chk(csr->csr_mmu_state_out);
@@ -196,8 +194,6 @@ void csr_construct(csr_t *csr, const char *parent, const char *name)
 
     itf_signal_set_wcb(csr->exu_csr_read_req_in, &csr_read_cb, csr);
     itf_signal_set_wcb(csr->exu_csr_write_req_in, &csr_write_cb, csr);
-    itf_signal_set_wcb(csr->core_m_irq_in, &m_irq_cb, csr);
-    itf_signal_set_wcb(csr->ext_irq_in, &ext_irq_cb, csr);
     itf_signal_set_wcb(csr->trap_csr_write_req_in, &csr_trap_write_cb, csr);
 }
 
@@ -209,14 +205,24 @@ void csr_reset(csr_t *csr)
     csr->regs.stimecmph = 0xffffffffu;
     sync_sstatus_from_mstatus(csr);
     sync_s_irq_from_m_irq(csr);
-    csr->core_swi_pend_o->msip = (csr->regs.mip.reg.msip != 0u);
+    csr_publish_core_swi_pend(csr);
     csr_publish_state(csr);
 }
 
 static void csr_update_proc(csr_t *csr)
 {
-    csr->regs.time = (u32)(csr->core_timer_i->time);
-    csr->regs.timeh = (u32)(csr->core_timer_i->time >> 32u);
+    core_timer_if_t timer = {};
+    itf_read(csr->core_timer_in, &timer);
+    csr->regs.time = (u32)(timer.time);
+    csr->regs.timeh = (u32)(timer.time >> 32u);
+
+    core_m_irq_if_t m_irq = {};
+    itf_read(csr->core_m_irq_in, &m_irq);
+    csr_update_m_irq(csr, &m_irq);
+
+    ext_irq_if_t ext_irq = {};
+    itf_read(csr->ext_irq_in, &ext_irq);
+    csr_update_ext_irq(csr, &ext_irq);
 
     u64 time = ((u64)csr->regs.timeh << 32u) | csr->regs.time;
     u64 stimecmp = ((u64)csr->regs.stimecmph << 32u) | csr->regs.stimecmp;

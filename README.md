@@ -1,13 +1,13 @@
-# RVBucket: C-Model and RTL Implementation of a 32-bit RISC-V Architecture SoC
+# RVBucket: ASM and RTL Implementation of a 32-bit RISC-V Architecture SoC
 
 ## Overview
 
-This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV32G instruction set CPU and a simple MCU-class SoC, implemented using both C-Model and RTL approaches.
+This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV32G instruction set CPU and a simple MCU-class SoC, implemented using both ASM (Architecture Simulation Model) and RTL approaches.
 
 ## System Specifications
 
-- **CPU Core**: 2-stage pipelined RV32G (RV32IMACZicsr) CPU with MMU and TLB
-- **L1 Cache**: Configurable set-associative L1 I-Cache and L1 D-Cache with write-back support
+- **CPU Core**: 2-stage pipelined RV32G (RV32IMAZicsr) CPU; both ASM and RTL include Sv32 MMU with TLB
+- **L1 Cache**: Configurable set-associative L1 I-Cache and L1 D-Cache with write-back support in ASM; RTL cache optimization is in progress
 - **Boot ROM**: 2 KB
 - **Flash**: 32 MB
 - **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
@@ -24,14 +24,14 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 
 - **RV32G Instruction Set**: Supports RV32I + M + A + Zicsr + Zifencei.
 - **2-Stage Pipeline**: IF/EX pipeline with branch prediction (BHT).
-- **MMU with Sv32 Paging**: TLB support, page table walker, boots Linux kernel.
-- **L1 Cache**: Configurable set-associative L1 I-Cache and D-Cache with bypass support.
+- **MMU with Sv32 Paging**: ASM and RTL both support TLB and page table walker; RTL can run Linux smoke.
+- **L1 Cache**: Configurable set-associative L1 I-Cache and D-Cache with bypass support in ASM; RTL cache optimization is planned.
 - **Trap Handling**: Machine/Supervisor mode traps, interrupts, delegations.
 - **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, GTimer, ACLINT, PLIC.
-- **C-Model**: Cycle-accurate simulation with VCD waveform dumps and interface transaction dumps.
+- **ASM (Architecture Simulation Model)**: Cycle-accurate simulation with VCD waveform dumps and interface transaction traces.
 - **Dual UI**: Web UI Dashboard (xterm.js terminal + GPIO panel + reset) and Terminal UI (vim-style cmd mode).
 - **RTL**: SystemVerilog implementation with auto-generated interfaces (`itfgen.py`), supports VCS/Verilator/FPGA.
-- **Unit Test Framework**: Modular UT framework with scoreboard, colored output, and interface dump verification.
+- **Unit Test Framework**: Modular UT framework with scoreboard, colored output, and interface trace verification.
 - **Linux Support**: UART console, sysfs GPIO interface.
 - **Regression Suite**: `run.sh` automates full SW case + UT regression with single-case mode.
 
@@ -48,36 +48,40 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 
 | Command | Description |
 |---------|-------------|
-| `./build.sh hw model` | Build C-Model simulation |
+| `./build.sh hw model` | Build ASM simulation |
 | `./build.sh hw rtl vcs` | Build RTL simulation (VCS) |
+| `./build.sh hw rtl vcs debug` | Build RTL simulation (VCS debug + FSDB) |
 | `./build.sh hw rtl verilator` | Build RTL simulation (Verilator) |
 | `./build.sh hw fpga xilinx` | Generate Vivado FPGA project |
-| `./build.sh sw` | Build all bare-metal C test cases |
-| `./build.sh sw <name>` | Build a single C test case |
-| `./build.sh sw linux` | Build Linux kernel + OpenSBI |
-| `./build.sh sw linux clean` | Clean Linux kernel + OpenSBI build |
-| `./build.sh ut model` | Build all C-Model unit tests |
+| `./build.sh sw` | Build all simulation bare-metal C test cases under `build/sw/sim` |
+| `./build.sh sw sim <name>` | Build a single simulation C test case |
+| `./build.sh sw board` | Build all board/real-hardware bare-metal C test cases under `build/sw/board` |
+| `./build.sh sw board <name>` | Build a single board/real-hardware C test case |
+| `./build.sh sw sim opensbi` / `./build.sh sw board opensbi` | Build the standalone OpenSBI case; currently both profiles share one output |
+| `./build.sh sw sim linux` / `./build.sh sw board linux` | Build Linux kernel + OpenSBI; currently both profiles share one output |
+| `./build.sh sw sim linux clean` / `./build.sh sw board linux clean` | Clean Linux kernel + OpenSBI build |
+| `./build.sh ut model` | Build all ASM unit tests |
 | `./build.sh ut model <name>` | Build a single UT or UT subdirectory |
 
 *Note: For FPGA, add board description files under `fpga/xilinx/boards` and update `board` in `fpga/xilinx/proj.json`.*
 
 ### Running Simulations
 
-**C-Model:**
+**ASM:**
 ```bash
 cd build/hw/model
 
 # Terminal mode:
-./sim_top ../../sw/<case>/<case>.bin
+./sim_top ../../sw/sim/<case>/<case>.bin
 
 # Web UI dashboard (open http://localhost:5000):
-./sim_top --web-ui ../../sw/<case>/<case>.bin
+./sim_top --web-ui ../../sw/sim/<case>/<case>.bin
 
 # Linux with fast preload to DDR:
 ./sim_top --fast-load-linux --web-ui ../../sw/linux/linux.bin
 
 # Disable end-of-sim detection (interactive use):
-./sim_top --no-end-detect --web-ui ../../sw/<case>/<case>.bin
+./sim_top --no-end-detect --web-ui ../../sw/sim/<case>/<case>.bin
 ```
 
 **Web UI Dashboard:**
@@ -99,7 +103,7 @@ cd build/hw/model
 ./run.sh model                 # full SW + UT regression
 ```
 
-**C-Model Unit Tests (stand-alone):**
+**ASM Unit Tests (stand-alone):**
 ```bash
 ./build.sh ut model            # build all UTs
 ./run.sh model ut axi2bti      # run a single UT (cd to its build dir)
@@ -108,25 +112,25 @@ cd build/hw/model
 **RTL (VCS):**
 ```bash
 cd build/hw/vcs
-./sim_top +program=../../sw/<case>/<case>.hex
+./sim_top +program=../../sw/sim/<case>/<case>.hex
 ```
 
 **RTL (Verilator):**
 ```bash
 cd build/hw/verilator
-./obj_dir/Vsim_top +program=../../sw/<case>/<case>.hex
+./obj_dir/Vsim_top +program=../../sw/sim/<case>/<case>.hex
 ```
 
 ## Project Structure
 
 ```
 .
-├── base/                    Shared library (C-Model + RTL)
+├── base/                    Shared library (ASM + RTL)
 │   ├── model/base/          types, itf, fifo, arbiter
 │   ├── model/dbg/           debug: vcd, log, pcm, chk
 │   └── rtl/                 RTL base
 ├── design/
-│   ├── model/               C-Model source
+│   ├── model/               ASM source
 │   │   ├── bus/             fabric: bridge, mux, demux
 │   │   ├── core/            CPU & peripherals
 │   │   ├── itf/             interface definitions
@@ -135,9 +139,9 @@ cd build/hw/verilator
 │   │   └── spec/            ISA, CSR, SoC config
 │   └── rtl/                 RTL source (SystemVerilog)
 ├── sim/
-│   ├── model/               C simulation top & UI
+│   ├── model/               ASM simulation top & UI
 │   └── rtl/                 RTL simulation top
-├── ut/model/                Unit tests (mirrors design/model/)
+├── ut/model/                ASM unit tests (mirrors design/model/)
 ├── cases/                   Software test cases
 ├── sdk/                     Software SDK (CRT, drivers)
 ├── tools/                   Build tools, Web UI, itfgen
@@ -147,24 +151,25 @@ cd build/hw/verilator
 
 ## Development Status
 
-- [x] C-Model RV32G (I/M/A/Zicsr/Zifencei) instruction set
-- [x] C-Model MMU with Sv32 paging and TLB
-- [x] C-Model L1 I-Cache and D-Cache with bypass
-- [x] C-Model boots Linux kernel
-- [x] C-Model bus fabric with BTI/AXI4/APB protocol bridges, mux, and demux
-- [x] C-Model GPIO (24-bit bidirectional, output/input/interrupt modes)
-- [x] C-Model GTimer (general-purpose countdown timer)
-- [x] C-Model Web UI Dashboard (xterm.js, GPIO LEDs/buttons/switches, reset, theme toggle)
-- [x] C-Model Terminal UI (vim-style cmd mode, ESC-key reset)
-- [x] C-Model module-level unit test framework
-- [x] C-Model regression suite (run.sh)
+- [x] ASM RV32G (I/M/A/Zicsr/Zifencei) instruction set
+- [x] ASM MMU with Sv32 paging and TLB
+- [x] ASM L1 I-Cache and D-Cache with bypass
+- [x] ASM boots Linux kernel
+- [x] ASM bus fabric with BTI/AXI4/APB protocol bridges, mux, and demux
+- [x] ASM GPIO (24-bit bidirectional, output/input/interrupt modes)
+- [x] ASM GTimer (general-purpose countdown timer)
+- [x] ASM Web UI Dashboard (xterm.js, GPIO LEDs/buttons/switches, reset, theme toggle)
+- [x] ASM Terminal UI (vim-style cmd mode, ESC-key reset)
+- [x] ASM module-level unit test framework
+- [x] ASM regression suite (run.sh)
 - [x] Linux RVBucket GPIO driver (gpio-rvbucket, sysfs interface)
-- [ ] RTL RV32G instruction set
-- [ ] RTL MMU with paging
-- [ ] RTL L1 cache
-- [ ] RTL boots Linux kernel
-- [ ] FPGA boots Linux kernel
-- [ ] C-Model/RTL F/D instruction set extensions
+- [x] RTL RV32G instruction set
+- [x] RTL Sv32 MMU with direct page-table walk and TLB optimization
+- [x] RTL reaches Linux smoke stage
+- [x] RTL TLB optimization
+- [ ] RTL L1 cache optimization
+- [x] FPGA boots Linux kernel
+- [ ] ASM/RTL F/D instruction set extensions
 
 ## Contributions
 

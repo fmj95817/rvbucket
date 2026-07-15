@@ -4,9 +4,12 @@
 #include "base/types.h"
 #include "base/mod.h"
 #include "base/itf.h"
+#include "base/fifo.h"
+#include "base/ost.h"
 #include "itf/bti_if.h"
 #include "itf/axi4_if.h"
 #include "itf/l1_flush_if.h"
+#include "itf/l1_flush_ack_if.h"
 
 #define L1_BYPASS_RANGE_NUM 8
 #define L1_LINE_SIZE 64u
@@ -16,14 +19,15 @@ typedef struct l1_conf {
     bool ro;
     u32 size;
     u32 way_num;
+    u32 latency;
+    u32 stg_fifo_depth;
+    u32 ost_depth;
     u32 bypass_bases[L1_BYPASS_RANGE_NUM];
     u32 bypass_sizes[L1_BYPASS_RANGE_NUM];
 } l1_conf_t;
 
 typedef enum l1_state {
     L1_STATE_IDLE = 0,
-    L1_STATE_BYPASS_RD_WAIT,
-    L1_STATE_BYPASS_WR_WAIT,
     L1_STATE_WB_AW,
     L1_STATE_WB_W,
     L1_STATE_WB_B,
@@ -35,7 +39,32 @@ typedef enum l1_state {
     L1_STATE_CMO_L1_WB_B,
     L1_STATE_CMO_L2_AR,
     L1_STATE_CMO_L2_R,
+    L1_STATE_FLUSH_CHECK,
+    L1_STATE_FLUSH_WB_AW,
+    L1_STATE_FLUSH_WB_W,
+    L1_STATE_FLUSH_WB_B,
+    L1_STATE_FLUSH_ACK,
 } l1_state_t;
+
+typedef enum l1_ost_kind {
+    L1_OST_CACHED = 0,
+    L1_OST_BYPASS_RD,
+    L1_OST_BYPASS_WR,
+} l1_ost_kind_t;
+
+typedef struct l1_ost_ctx {
+    u32 trans_id;
+    l1_ost_kind_t kind;
+    bti_req_if_t req;
+    bool bypass_split;
+    u32 bypass_req_idx;
+    u32 bypass_rsp_idx;
+    bool rsp_vld;
+    bool rsp_delay_pend;
+    bool ok;
+    u32 data;
+    u32 delay;
+} l1_ost_ctx_t;
 
 typedef struct l1 {
     mod_t mod;
@@ -49,6 +78,7 @@ typedef struct l1 {
     itf_t *axi4_ar_mst;
     itf_t *axi4_r_slv;
     itf_t *flush_slv;
+    itf_t *flush_ack_mst;
 
     l1_conf_t conf;
     u32 set_num;
@@ -59,7 +89,11 @@ typedef struct l1 {
     bool *valids;
     bool *dirtys;
 
+    fifo_t req_fifo;
+    ostq_t ost;
+
     l1_state_t state;
+    u32 active_slot;
     bti_req_if_t req;
     u32 req_set;
     u32 req_way;
@@ -70,12 +104,16 @@ typedef struct l1 {
     u32 req_data;
     u32 wb_line_addr;
     u32 beat_idx;
+    u32 flush_line_idx;
     bool op_ok;
 
     u64 *perf_hit;
     u64 *perf_miss;
     u64 *perf_bypass;
     u64 *perf_writeback;
+    u64 *perf_stg_full;
+    u64 *perf_ost_full;
+    u64 *perf_miss_busy;
 } l1_t;
 
 extern void l1_construct(l1_t *l1, const char *parent, const char *name, const l1_conf_t *conf);

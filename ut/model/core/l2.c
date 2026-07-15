@@ -9,6 +9,8 @@
 #define TB_MEM_SIZE 4096u
 #define TB_FIFO_DEPTH 32u
 #define TB_TIMEOUT 20000u
+#define TB_L2_STG_FIFO_DEPTH 8u
+#define TB_L2_BYPASS_OST_DEPTH 16u
 
 typedef struct l2_tb {
     mod_t mod;
@@ -20,10 +22,12 @@ typedef struct l2_tb {
 
     l2_t dut;
     ram_t ram;
+    bool stall_ram;
     ut_sbd_t sbd;
 } l2_tb_t;
 
-static void tb_construct(l2_tb_t *tb, const char *name)
+static void tb_construct_with_conf(l2_tb_t *tb, const char *name,
+    const l2_conf_t *conf)
 {
     tb->cycle_val = 0;
     tb->mod.cycle = &tb->cycle_val;
@@ -51,17 +55,25 @@ static void tb_construct(l2_tb_t *tb, const char *name)
     tb->dut.mem_axi4_ar_mst = &tb->mem_axi4_ar_itf;
     tb->dut.mem_axi4_r_slv = &tb->mem_axi4_r_itf;
     tb->dut.mod.cycle = tb->mod.cycle;
-    l2_conf_t conf = {
-        .size = L2_LINE_SIZE,
-        .way_num = 1
-    };
-    l2_construct(&tb->dut, tb->mod.hier_name, "u_dut", &conf);
+    l2_construct(&tb->dut, tb->mod.hier_name, "u_dut", conf);
 
     AXI4_SLV_CONNECT(&tb->ram, , tb, mem_);
     tb->ram.mod.cycle = tb->mod.cycle;
     ram_construct(&tb->ram, tb->mod.hier_name, "u_ram", 1, RAM_MODE_AXI,
-        TB_MEM_SIZE, 0);
+        TB_MEM_SIZE, 0, 1);
     ut_sbd_init(&tb->sbd);
+}
+
+static void tb_construct(l2_tb_t *tb, const char *name)
+{
+    l2_conf_t conf = {
+        .size = L2_LINE_SIZE,
+        .way_num = 1,
+        .latency = 1,
+        .stg_fifo_depth = TB_L2_STG_FIFO_DEPTH,
+        .bypass_ost_depth = TB_L2_BYPASS_OST_DEPTH
+    };
+    tb_construct_with_conf(tb, name, &conf);
 }
 
 static void tb_reset(l2_tb_t *tb)
@@ -71,6 +83,7 @@ static void tb_reset(l2_tb_t *tb)
     AXI4_IF_RESET(tb, mem_);
     l2_reset(&tb->dut);
     ram_reset(&tb->ram);
+    tb->stall_ram = false;
     dbg_vcd_reset();
     for (u32 i = 0; i < TB_MEM_SIZE / sizeof(u32); i++) {
         ((u32 *)tb->ram.data)[i] = 0xa0000000u + i;
@@ -90,7 +103,9 @@ static void tb_free(l2_tb_t *tb)
 static void tb_clock(l2_tb_t *tb)
 {
     l2_clock(&tb->dut);
-    ram_clock(&tb->ram);
+    if (!tb->stall_ram) {
+        ram_clock(&tb->ram);
+    }
     AXI4_IF_DBG_CLOCK(tb, h0_);
     AXI4_IF_DBG_CLOCK(tb, h1_);
     AXI4_IF_DBG_CLOCK(tb, mem_);
@@ -343,6 +358,34 @@ TEST_CASE(l2_tb_t, cmo_rsvd_bits_do_not_match)
     TEST_END();
 }
 
+TEST_CASE(l2_tb_t, other_port_hit_under_miss)
+{
+    tb_reset(tb);
+    TEST_BEGIN("Other Port Hit Under Miss");
+
+    tb_send_read(tb, 1, 1, 0, 0, 0xf);
+    REQUIRE(tb_collect_read(tb, 1, 1, 0, 1), "host 1 line 0 filled");
+
+    tb->stall_ram = true;
+    tb_send_read(tb, 0, 2, L2_LINE_SIZE, 0, 0xf);
+    RUN_CYCLES(8);
+    REQUIRE(tb->dut.mem_state != L2_MEM_STATE_IDLE, "host 0 miss is active");
+    REQUIRE(!tb_read_rsp_ready(tb, 0), "host 0 miss is still waiting");
+
+    tb_send_read(tb, 1, 3, 0, 0, 0xf);
+    RUN_CYCLES(4);
+    REQUIRE(tb_read_rsp_ready(tb, 1),
+        "host 1 cached hit returns while host 0 miss waits");
+    REQUIRE(tb_collect_read(tb, 1, 3, 0, 1),
+        "host 1 hit data is correct");
+
+    tb->stall_ram = false;
+    REQUIRE(tb_collect_read(tb, 0, 2, L2_LINE_SIZE, 1),
+        "host 0 miss completes after memory resumes");
+
+    TEST_END();
+}
+
 int main(void)
 {
     l2_tb_t tb;
@@ -355,6 +398,22 @@ int main(void)
     TEST_RUN(cmo_rsvd_bits_do_not_match);
     ut_sbd_summary(&tb.sbd);
     int ret = ut_sbd_ret(&tb.sbd);
+    tb_free(&tb);
+    if (ret != 0) {
+        return ret;
+    }
+
+    l2_conf_t hit_under_miss_conf = {
+        .size = L2_LINE_SIZE * 2,
+        .way_num = 1,
+        .latency = 1,
+        .stg_fifo_depth = TB_L2_STG_FIFO_DEPTH,
+        .bypass_ost_depth = TB_L2_BYPASS_OST_DEPTH
+    };
+    tb_construct_with_conf(&tb, "l2_tb", &hit_under_miss_conf);
+    TEST_RUN(other_port_hit_under_miss);
+    ut_sbd_summary(&tb.sbd);
+    ret = ut_sbd_ret(&tb.sbd);
     tb_free(&tb);
     return ret;
 }

@@ -1,6 +1,7 @@
 #include "exu.h"
 #include "dbg/chk.h"
 #include "dbg/log.h"
+#include "dbg/pcm.h"
 #include "dbg/vcd.h"
 
 #define EXU_HEARTBEAT_PERIOD 50000000u
@@ -62,6 +63,62 @@ static inline void exu_dump(exu_t *exu, u32 pc)
     DBG_LOG(LOG_TRACE, "pc = %08x\n", pc);
 }
 
+static bool exu_ldst_issue_blocked(const exu_t *exu,
+    const ex_req_if_t *ex_req)
+{
+    u32 opcode = ex_req->inst.base.opcode;
+    return (opcode == OPCODE_LOAD || opcode == OPCODE_STORE) &&
+        itf_fifo_full(exu->ldst_req_mst);
+}
+
+void exu_start_fence_i(exu_t *exu)
+{
+    DBG_CHECK(exu->fence_i_stage == FENCE_I_STAGE_IDLE);
+    DBG_CHECK(!itf_fifo_full(exu->l1d_flush_mst));
+
+    l1_flush_if_t flush = {};
+    itf_write(exu->l1d_flush_mst, &flush);
+    exu->fence_i_stage = FENCE_I_STAGE_WAIT_D_ACK;
+}
+
+static bool exu_proc_fence_i_flush(exu_t *exu)
+{
+    switch (exu->fence_i_stage) {
+    case FENCE_I_STAGE_IDLE:
+        return false;
+    case FENCE_I_STAGE_WAIT_D_ACK:
+        if (itf_fifo_empty(exu->l1d_flush_ack_slv)) {
+            return true;
+        }
+        l1_flush_ack_if_t d_ack;
+        itf_read(exu->l1d_flush_ack_slv, &d_ack);
+        exu->fence_i_stage = FENCE_I_STAGE_SEND_I_FLUSH;
+        return true;
+    case FENCE_I_STAGE_SEND_I_FLUSH:
+        if (itf_fifo_full(exu->l1i_flush_mst)) {
+            return true;
+        }
+        l1_flush_if_t flush = {};
+        itf_write(exu->l1i_flush_mst, &flush);
+        exu->fence_i_stage = FENCE_I_STAGE_WAIT_I_ACK;
+        return true;
+    case FENCE_I_STAGE_WAIT_I_ACK:
+        if (itf_fifo_empty(exu->l1i_flush_ack_slv)) {
+            return true;
+        }
+        l1_flush_ack_if_t i_ack;
+        itf_read(exu->l1i_flush_ack_slv, &i_ack);
+        exu->fence_i_stage = FENCE_I_STAGE_DONE;
+        return true;
+    case FENCE_I_STAGE_DONE:
+        exu->fence_i_stage = FENCE_I_STAGE_IDLE;
+        return true;
+    default:
+        DBG_CHECK(0);
+        return true;
+    }
+}
+
 static void exu_proc_ex_req(exu_t *exu)
 {
     if (!itf_fifo_empty(exu->fl_req_slv)) {
@@ -83,11 +140,17 @@ static void exu_proc_ex_req(exu_t *exu)
         return;
     }
 
+    ex_req_if_t front;
+    itf_fifo_get_front(exu->ex_req_slv, &front);
     if (exu->ldst_req_pend) {
         return;
     }
 
     if (exu->amo_stage != AMO_STAGE_IDLE) {
+        return;
+    }
+
+    if (exu_ldst_issue_blocked(exu, &front)) {
         return;
     }
 
@@ -128,6 +191,7 @@ static void exu_proc_ex_req(exu_t *exu)
         exu->cur_pc = ex_req.pc;
         exu->irq_epc = ex_req.pc + 4;
         proc(exu, &ex_req);
+        (*exu->perf.exec_inst)++;
         print_split_line(true);
     } else {
         DBG_CHECK(0);
@@ -147,12 +211,18 @@ static void exu_proc_biu_rsp(exu_t *exu)
     ldst_rsp_if_t ldst_rsp;
     itf_read(exu->ldst_rsp_slv, &ldst_rsp);
     if (!ldst_rsp.ok) {
-        exu->ldst_req_pend = false;
-        exu->amo_stage = AMO_STAGE_IDLE;
+        if (exu->ldst_req_pend) {
+            exu->ldst_req_pend = false;
+            exu->ldst_opcode = 0;
+            exu->irq_defer = false;
+        } else {
+            exu->amo_stage = AMO_STAGE_IDLE;
+            exu->irq_defer = false;
+        }
         return;
     }
 
-    if (exu->cur_opcode == OPCODE_LOAD || exu->cur_opcode == OPCODE_STORE) {
+    if (exu->ldst_req_pend) {
         ldst_biu_rsp_proc(exu, &ldst_rsp);
     } else if (exu->cur_opcode == OPCODE_AMO) {
         amo_biu_rsp_proc(exu, &ldst_rsp);
@@ -168,7 +238,10 @@ static void exu_proc_biu_rsp(exu_t *exu)
 void exu_clock(exu_t *exu)
 {
     mod_clock(&exu->mod);
-    exu_proc_ex_req(exu);
+    bool fence_i_busy = exu_proc_fence_i_flush(exu);
+    if (!fence_i_busy) {
+        exu_proc_ex_req(exu);
+    }
     exu_proc_biu_rsp(exu);
     exu_publish_state(exu);
 }
@@ -184,6 +257,8 @@ void exu_construct(exu_t *exu, const char *parent, const char *name)
     dbg_vcd_add_sig("irq_defer", DBG_SIG_TYPE_REG, 1, &exu->irq_defer);
     dbg_vcd_add_sig("cur_opcode", DBG_SIG_TYPE_REG, 7, &exu->cur_opcode);
     dbg_vcd_add_sig("ldst_req_pend", DBG_SIG_TYPE_REG, 1, &exu->ldst_req_pend);
+    dbg_vcd_add_sig("ldst_opcode", DBG_SIG_TYPE_REG, 7, &exu->ldst_opcode);
+    dbg_vcd_add_sig("ldst_pc", DBG_SIG_TYPE_REG, 32, &exu->ldst_pc);
     dbg_vcd_add_sig("ld_rd", DBG_SIG_TYPE_REG, 5, &exu->ld_rd);
     dbg_vcd_add_sig("ld_funct3", DBG_SIG_TYPE_REG, 3, &exu->ld_funct3);
     dbg_vcd_add_sig("amo_stage", DBG_SIG_TYPE_REG, 2, &exu->amo_stage);
@@ -193,6 +268,7 @@ void exu_construct(exu_t *exu, const char *parent, const char *name)
     dbg_vcd_add_sig("amo_rsvd_addr", DBG_SIG_TYPE_REG, 32, &exu->amo_rsvd_addr);
     dbg_vcd_add_sig("wfi", DBG_SIG_TYPE_REG, 1, &exu->wfi);
     dbg_vcd_add_sig("wfi_resume_pc", DBG_SIG_TYPE_REG, 32, &exu->wfi_resume_pc);
+    dbg_vcd_add_sig("fence_i_stage", DBG_SIG_TYPE_REG, 3, &exu->fence_i_stage);
 
     dbg_vcd_add_sig("gpr_ra", DBG_SIG_TYPE_REG, 32, &exu->gpr[1]);
     dbg_vcd_add_sig("gpr_sp", DBG_SIG_TYPE_REG, 32, &exu->gpr[2]);
@@ -206,6 +282,9 @@ void exu_construct(exu_t *exu, const char *parent, const char *name)
     dbg_vcd_add_sig("gpr_t0", DBG_SIG_TYPE_REG, 32, &exu->gpr[5]);
     dbg_vcd_add_sig("gpr_t1", DBG_SIG_TYPE_REG, 32, &exu->gpr[6]);
     dbg_vcd_add_sig("gpr_t2", DBG_SIG_TYPE_REG, 32, &exu->gpr[7]);
+
+    exu->perf.exec_inst = dbg_pcm_reg_perf_cnt(exu->mod.hier_name,
+        "ex_req");
 
     exu->csr_read_req_o = itf_signal_get_src_and_chk(exu->exu_csr_read_req_out);
     exu->csr_read_rsp_i = itf_signal_get_src_and_chk(exu->csr_exu_read_rsp_in);
@@ -225,6 +304,8 @@ void exu_reset(exu_t *exu)
     }
     exu->cur_opcode = 0;
     exu->ldst_req_pend = false;
+    exu->ldst_opcode = 0;
+    exu->ldst_pc = 0;
     exu->ld_rd = 0;
     exu->ld_funct3 = 0;
     exu->amo_stage = AMO_STAGE_IDLE;
@@ -236,7 +317,9 @@ void exu_reset(exu_t *exu)
     exu->amo_rsvd_addr = 0;
     exu->wfi = false;
     exu->wfi_resume_pc = 0;
+    exu->fence_i_stage = FENCE_I_STAGE_IDLE;
     exu->irq_defer = false;
+    *exu->perf.exec_inst = 0;
     exu->priv = RV32G_PRIV_MACHINE;
     exu->cur_pc = 0;
     exu->irq_epc = 0;

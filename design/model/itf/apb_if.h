@@ -9,6 +9,11 @@
     APB_RSP_IF_CONSTRUCT(module, pfx##apb_rsp_itf, depth); \
 } while (0)
 
+#define APB_SIM_PROT_IF_CONSTRUCT(module, pfx, depth, sim_prot) do { \
+    APB_REQ_SIM_PROT_IF_CONSTRUCT(module, pfx##apb_req_itf, depth, sim_prot); \
+    APB_RSP_SIM_PROT_IF_CONSTRUCT(module, pfx##apb_rsp_itf, depth, sim_prot); \
+} while (0)
+
 #define APB_IF_RESET(obj, pfx) do { \
     itf_reset(&((obj)->pfx##apb_req_itf)); \
     itf_reset(&((obj)->pfx##apb_rsp_itf)); \

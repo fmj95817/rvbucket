@@ -70,18 +70,3 @@ void fifo_reset(fifo_t *f)
     f->rptr = 0;
     f->wptr = 0;
 }
-
-bool fifo_empty(fifo_t *f)
-{
-    return f->num == 0;
-}
-
-bool fifo_full(fifo_t *f)
-{
-    return f->num == f->depth;
-}
-
-u32 fifo_count(fifo_t *f)
-{
-    return f->num;
-}

@@ -5,7 +5,13 @@
 
 #define DDR_BASE            0x40000000u
 #define DDR_SIZE            (1u * GiB)
+#define DDR_LATENCY         50u
+#define UFS_DMA_POOL_BASE   0x4f000000u
+#define UFS_DMA_POOL_SIZE   (16u * MiB)
 #define FLASH_BASE          0x80000000
 #define FLASH_SIZE          (32u * MiB)
+
+#define SOC_BUS_STG_FIFO_DEPTH 4u
+#define SOC_BUS_OST_DEPTH 4u
 
 #endif

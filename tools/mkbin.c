@@ -78,17 +78,24 @@ int main(int argc, char *argv[])
     uint32_t initrd_load = 0;
     uint32_t dtb_load = 0;
 
-    if (argc >= 11 && strcmp(argv[1], "--linux") == 0) {
+    if (argc >= 10 && strcmp(argv[1], "--linux") == 0) {
         linux_image = true;
         itcm_path = argv[2];
         dtcm_path = argv[3];
         kernel_path = argv[4];
         initrd_path = argv[5];
-        dtb_path = argv[6];
-        bin_path = argv[7];
-        kernel_load = parse_u32(argv[8]);
-        initrd_load = parse_u32(argv[9]);
-        dtb_load = parse_u32(argv[10]);
+        if (argc >= 11) {
+            dtb_path = argv[6];
+            bin_path = argv[7];
+            kernel_load = parse_u32(argv[8]);
+            initrd_load = parse_u32(argv[9]);
+            dtb_load = parse_u32(argv[10]);
+        } else {
+            bin_path = argv[6];
+            kernel_load = parse_u32(argv[7]);
+            initrd_load = parse_u32(argv[8]);
+            dtb_load = parse_u32(argv[9]);
+        }
     } else {
         itcm_path = argv[1];
         dtcm_path = argv[2];
@@ -110,10 +117,12 @@ int main(int argc, char *argv[])
     if (linux_image) {
         kernel = read_bin(kernel_path, &kernel_size);
         initrd = read_bin(initrd_path, &initrd_size);
-        dtb = read_bin(dtb_path, &dtb_size);
+        if (dtb_path != NULL) {
+            dtb = read_bin(dtb_path, &dtb_size);
+        }
         assert(kernel != NULL);
         assert(initrd != NULL);
-        assert(dtb != NULL);
+        assert(dtb_path == NULL || dtb != NULL);
     }
 
     FILE *bin = fopen(bin_path, "wb");

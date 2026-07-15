@@ -30,13 +30,14 @@ CROSS_OBJDUMP="${CROSS_PREFIX}-objdump"
 BIN2X="./build/tools/bin2x"
 MKBIN="./build/tools/mkbin"
 GXPR="./tools/gxpr.py"
+GXQSPI="./tools/gxqspi.py"
 
 OPEN_SBI_DIR="./thirdparty/opensbi"
 LINUX_DIR="./thirdparty/linux"
 BUSYBOX_DIR="./thirdparty/busybox"
 LINUX_CROSS_PREFIX="riscv32-unknown-linux-gnu"
 LINUX_CC="${LINUX_CROSS_PREFIX}-gcc"
-LINUX_USER_CFLAGS=(-Wall -O2 -static)
+LINUX_USER_CFLAGS=(-Wall -Os -static -s -ffunction-sections -fdata-sections -Wl,--gc-sections)
 LINUX_BUILD_DIR="./build/sw/linux"
 LINUX_USER_BIN_DIR="${LINUX_BUILD_DIR}/bin"
 LINUX_KERNEL_LOAD="0x40000000"
@@ -109,17 +110,6 @@ function build_linux_kernel {
         return
     fi
 
-    local initrd="${BUSYBOX_DIR}/rootfs.cpio"
-    local initrd_size=0
-    if [[ "${UNAME}" == "Darwin" ]]; then
-        initrd_size=$(stat -f %z "${initrd}")
-    else
-        initrd_size=$(stat -c %s "${initrd}")
-    fi
-    local initrd_end=$(printf "0x%08x" $((${LINUX_INITRD_LOAD} + initrd_size)))
-    ${SED} -i "s/linux,initrd-end = <0x[0-9a-fA-F]*>;/linux,initrd-end = <${initrd_end}>;/" \
-        "${LINUX_DIR}/arch/riscv/boot/dts/rvbucket/rvbucket.dts"
-
     if [[ "${UNAME}" == "Darwin" ]]; then
         find "${LINUX_DIR}" -name 'Makefile' -o -name '*.sh' -o -name '*.pl' \
             | xargs grep -l '\<sed\>' 2>/dev/null \
@@ -134,7 +124,7 @@ function build_linux_kernel {
     ${MAKE} -j16 -C "${LINUX_DIR}" \
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
-        Image rvbucket/rvbucket.dtb
+        Image
 }
 
 function build_linux_rootfs {
@@ -166,7 +156,7 @@ function build_linux_rootfs {
         ARCH=riscv \
         CROSS_COMPILE="${LINUX_CROSS_PREFIX}-" \
         install
-    mkdir -p ${BUSYBOX_DIR}/rootfs/{bin,sbin,etc,proc,sys,usr/bin,usr/sbin}
+    mkdir -p ${BUSYBOX_DIR}/rootfs/{bin,sbin,etc,proc,sys,dev,mnt,tmp,usr/bin,usr/sbin}
     cp -a "${BUSYBOX_DIR}/_install"/* "${BUSYBOX_DIR}/rootfs/"
     build_user_tests
     cp -a "${LINUX_USER_BIN_DIR}"/* "${BUSYBOX_DIR}/rootfs/bin/"
@@ -174,6 +164,7 @@ function build_linux_rootfs {
     echo "#!/bin/sh" > "${BUSYBOX_DIR}/rootfs/init"
     echo "mount -t proc none /proc" >> "${BUSYBOX_DIR}/rootfs/init"
     echo "mount -t sysfs none /sys" >> "${BUSYBOX_DIR}/rootfs/init"
+    echo "mount -t devtmpfs devtmpfs /dev 2>/dev/null || true" >> "${BUSYBOX_DIR}/rootfs/init"
     echo 'echo -e "\nWelcome to RISC-V 32-bit Linux!\n"' >> "${BUSYBOX_DIR}/rootfs/init"
     echo "exec /bin/sh" >> "${BUSYBOX_DIR}/rootfs/init"
     chmod +x "${BUSYBOX_DIR}/rootfs/init"
@@ -228,7 +219,7 @@ function build_linux_case {
     fi
 
     if [ -n "${clean}" ]; then
-        echo "usage: $0 sw linux [clean]"
+        echo "usage: $0 sw <sim|board> linux [clean]"
         exit 1
     fi
 
@@ -240,12 +231,12 @@ function build_linux_case {
     local fw_elf="${fw_dir}/fw_jump.elf"
     local kernel="${LINUX_DIR}/arch/riscv/boot/Image"
     local initrd="${BUSYBOX_DIR}/rootfs.cpio"
-    local dtb="${LINUX_DIR}/arch/riscv/boot/dts/rvbucket/rvbucket.dtb"
     local empty_dtcm="${output_dir}/${case_name}.dtcm"
     local bin="${output_dir}/${case_name}.bin"
     local hex="${output_dir}/${case_name}.hex"
 
     mkdir -p "${output_dir}"
+    rm -f "${output_dir}/${case_name}.dtb" "${output_dir}/${case_name}.dts"
 
     build_linux_rootfs
     build_linux_kernel
@@ -253,30 +244,37 @@ function build_linux_case {
 
     cp "${fw_elf}" "${output_dir}/${case_name}.elf"
     cp "${fw_bin}" "${output_dir}/${case_name}.itcm"
-    cp "${dtb}" "${output_dir}/${case_name}.dtb"
     : > "${empty_dtcm}"
 
     ${MKBIN} --linux "${fw_bin}" "${empty_dtcm}" \
-        "${kernel}" "${initrd}" "${dtb}" "${bin}" \
+        "${kernel}" "${initrd}" "${bin}" \
         "${LINUX_KERNEL_LOAD}" "${LINUX_INITRD_LOAD}" "${LINUX_DTB_LOAD}"
     ${BIN2X} "${bin}" hex > "${hex}"
 }
 
 function build_sw_case {
     local case_name="${1}"
+    local profile="${2:-sim}"
+    local target="${3}"
+
+    if [ "${profile}" != "sim" ] && [ "${profile}" != "board" ]; then
+        echo "build_sw_case: invalid sw profile: ${profile}"
+        exit 1
+    fi
+
     if [ "${case_name}" = "opensbi" ]; then
         build_opensbi_case
         return
     fi
     if [ "${case_name}" = "linux" ]; then
-        build_linux_case "${2}"
+        build_linux_case "${target}"
         return
     fi
 
     echo "  compiling sw/${case_name} ..."
 
     local case_dir="${BARE_CASES_DIR}/${case_name}"
-    local output_dir="build/sw/${case_name}"
+    local output_dir="build/sw/${profile}/${case_name}"
 
     mkdir -p "${output_dir}"
 
@@ -290,6 +288,10 @@ function build_sw_case {
 
     local src_dirs=("${case_dir}")
     local ld_flags=()
+    local cc_flags=("${CROSS_CFLAGS[@]}")
+    if [ "${profile}" = "sim" ]; then
+        cc_flags+=(-DRVB_SIM)
+    fi
     if [ -z "${lds}" ]; then
         src_dirs+=(${CRT_DIR} ${DRIVERS_DIR})
         ld_flags+=(-T "${CRT_DIR}/soc.lds")
@@ -301,7 +303,7 @@ function build_sw_case {
     local objs=()
     for src in ${srcs[@]}; do
         local obj="${output_dir}/$(basename ${src}).o"
-        ${CROSS_CC} ${CROSS_CFLAGS[@]} -c -o "${obj}" "${src}"
+        ${CROSS_CC} ${cc_flags[@]} -c -o "${obj}" "${src}"
         objs+=("${obj}")
     done
 
@@ -323,11 +325,19 @@ function build_sw_case {
     if [ "${case_name}" = "boot" ]; then
         local bootrom="${output_dir}/${case_name}.bootrom"
         ${CROSS_OBJCOPY} -S "${elf}" -O binary "${bootrom}"
-        if [ "${2}" = "model" ]; then
+        if [ "${target}" = "model" ]; then
             ${BIN2X} "${bootrom}" c_array > design/model/core/boot.c
-        elif [ "${2}" = "rtl" ]; then
-            ${BIN2X} "${bootrom}" sv_rom_header > design/rtl/core/boot.svh
-            ${BIN2X} "${bootrom}" sv_rom_src > design/rtl/core/boot.sv
+        elif [ "${target}" = "rtl" ]; then
+            mkdir -p sim/rtl
+            ${BIN2X} "${bootrom}" sv_rom_header > sim/rtl/boot.svh
+            ${BIN2X} "${bootrom}" sv_rom_src > sim/rtl/boot.sv
+        elif [ "${target}" = "fpga" ]; then
+            mkdir -p fpga/xilinx/rtl
+            ${BIN2X} "${bootrom}" sv_rom_header > fpga/xilinx/rtl/boot.svh
+            ${BIN2X} "${bootrom}" sv_rom_src > fpga/xilinx/rtl/boot.sv
+        elif [ "${target}" = "asic" ]; then
+            mkdir -p sim/rtl
+            ${BIN2X} "${bootrom}" sv_rom_header > sim/rtl/boot.svh
         fi
     fi
 }
@@ -382,6 +392,7 @@ function build_ut {
         ${HOST_CC} \
             -Wall \
             -O3 \
+            -pthread \
             -I./base/model \
             -I./design/model \
             -I./ut/model \
@@ -396,32 +407,42 @@ function build_ut {
 
 function build_rtl {
     local simulator="${1}"
+    local mode="${2}"
     local wd="$(pwd)"
 
     local common_args=(
+        +incdir+${wd} \
+        +incdir+${wd}/sim/rtl \
         +incdir+${wd}/base/rtl \
         +incdir+${wd}/design/rtl \
         +incdir+${wd}/design/rtl/core \
     )
     local rtl_sim_src=(
-        $(find ${wd}/base/rtl -name *.sv) \
-        $(find ${wd}/design/rtl -name *.sv) \
-        $(find ${wd}/sim/rtl/model -name *.sv) \
-        $(find ${wd}/sim/rtl/${simulator} -name *.sv) \
+        $(find ${wd}/base/rtl -name '*.sv') \
+        $(find ${wd}/design/rtl -name '*.sv') \
+        ${wd}/sim/rtl/boot.sv \
+        $(find ${wd}/sim/rtl/model -name '*.sv') \
+        $(find ${wd}/sim/rtl/${simulator} -name '*.sv') \
     )
+    local rtl_common_c_src=($(find ${wd}/sim/rtl/common -name '*.c'))
 
     mkdir -p "build/hw/${simulator}"
     cd "build/hw/${simulator}";
     if [ "${simulator}" = "vcs" ]; then
+        local vcs_debug_args=()
+        if [ "${mode}" = "debug" ]; then
+            vcs_debug_args=(-debug_access+r -kdb +define+FSDB)
+        fi
         vcs \
             -full64 \
             -sverilog +v2k \
-            -debug_access+r -kdb \
             -timescale=1ns/1ps \
             -o sim_top \
             -top sim_top \
+            ${vcs_debug_args[@]} \
             ${common_args[@]} \
-            ${rtl_sim_src[@]};
+            ${rtl_sim_src[@]} \
+            ${rtl_common_c_src[@]};
     elif [ "${simulator}" = "verilator" ]; then
         verilator \
             --sc --exe --build \
@@ -430,29 +451,100 @@ function build_rtl {
             -CFLAGS '-std=gnu++17' \
             ${common_args[@]} \
             ${rtl_sim_src[@]} \
-            $(find ${wd}/sim/rtl/verilator -name *.cc);
+            ${rtl_common_c_src[@]} \
+            ${wd}/sim/rtl/verilator/sim_top.cc;
     fi
     cd ../../..
 }
 
 function build_fpga {
     local vendor="${1}"
+    local wd="$(pwd)"
     if [ "${vendor}" = "xilinx" ]; then
-        local conf_path="./fpga/xilinx/proj.json"
-        local out_dir="build/hw/vivado"
+        local flow="${2:-ip}"
+        local conf_path="${3:-./fpga/xilinx/proj.json}"
+        local out_dir="build/hw/fpga/xilinx"
+        if [ "${flow}" = "qspi" ] || [ "${flow}" = "qspi-program" ]; then
+            local image="${4:-build/sw/linux/linux.bin}"
+            mkdir -p "${out_dir}/logs"
+            local program_args=()
+            if [ "${flow}" = "qspi-program" ]; then
+                program_args+=(--program)
+            fi
+            ${GXQSPI} --conf "${conf_path}" --image "${image}" \
+                --out-dir "${out_dir}" "${program_args[@]}"
+            return
+        fi
         rm -rf "${out_dir}"
-        mkdir -p "${out_dir}"
-        ${GXPR} "${conf_path}" "${out_dir}"
+        mkdir -p "${out_dir}/logs"
+        ${GXPR} "${conf_path}" "${out_dir}" --flow "${flow}"
+        if [ -f /etc/profile.d/edaenv.sh ]; then
+            source /etc/profile.d/edaenv.sh
+        fi
         cd "${out_dir}";
-        vivado -mode batch -source mkprj.tcl;
-        cd ../../..
+        vivado -mode batch -source mkprj.tcl | tee "logs/${flow}.log";
+        local vivado_rc=${PIPESTATUS[0]}
+        cd "${wd}"
+        return ${vivado_rc}
+    else
+        echo "usage: $0 hw fpga xilinx [project|ip|syn|impl|bit|qspi|qspi-program] [conf_json] [image]"
+        exit 1
+    fi
+}
+
+function build_asic {
+    local flow="${1}"
+    local conf="${2:-soc_cmos28lp}"
+    local wd="$(pwd)"
+
+    if [ "${flow}" = "syn" ]; then
+        local conf_json=""
+        if [ -f "${conf}" ]; then
+            conf_json="${conf}"
+        else
+            conf_json="asic/conf/${conf}.json"
+        fi
+        if [ ! -f "${conf_json}" ]; then
+            echo "build_asic: ASIC config not found: ${conf_json}"
+            exit 1
+        fi
+        local conf_name="$(basename "${conf_json}" .json)"
+
+        if [ -f /etc/profile.d/edaenv.sh ]; then
+            source /etc/profile.d/edaenv.sh
+        fi
+        mkdir -p build/hw/asic/syn/logs
+        python3 tools/asic_config.py \
+            --root "${wd}" \
+            --rtl-file "${wd}/build/hw/asic/syn/${conf_name}.rtl.f" \
+            "${conf_json}" > "build/hw/asic/syn/${conf_name}.config.tcl"
+        echo "build_asic: using ASIC config ${conf_json}"
+        cd build/hw/asic/syn
+        RVBUCKET_ROOT="${wd}" \
+        RVBUCKET_ASIC_CONFIG_TCL="${wd}/build/hw/asic/syn/${conf_name}.config.tcl" \
+            dc_shell \
+            -f "${wd}/asic/syn/synth.tcl" \
+            | tee "logs/${conf_name}.log"
+        cd "${wd}"
+    else
+        echo "usage: $0 hw asic syn [conf_name|conf_json]"
+        exit 1
     fi
 }
 
 function build_sw {
-    if [ -n "${1}" ]; then
-        if [ "${1}" != "boot" ]; then
-            build_sw_case "${1}" "${2}"
+    local profile="${1:-sim}"
+    local case_name="${2}"
+    local case_arg="${3}"
+
+    if [ "${profile}" != "sim" ] && [ "${profile}" != "board" ]; then
+        echo "usage: $0 sw [sim|board] [case_name] [case_arg]"
+        exit 1
+    fi
+
+    if [ -n "${case_name}" ]; then
+        if [ "${case_name}" != "boot" ]; then
+            build_sw_case "${case_name}" "${profile}" "${case_arg}"
         fi
         return
     fi
@@ -464,7 +556,7 @@ function build_sw {
     for case_dir in ${cases[@]}; do
         local case_name="$(basename ${case_dir})"
         if [ "${case_name}" != "boot" ]; then
-            build_sw_case "${case_name}"
+            build_sw_case "${case_name}" "${profile}"
             count=$((count + 1))
         fi
     done
@@ -472,25 +564,30 @@ function build_sw {
 }
 
 function build_hw {
-    if [ "${1}" = "model" ]; then
-        build_sw_case boot "${1}"
-        build_model
-    elif [ "${1}" = "rtl" ]; then
-        if [ "${SKIP_BOOT_BUILD}" != "1" ]; then
-            build_sw_case boot "${1}"
-        fi
-        build_rtl "${2}"
-    elif [ "${1}" = "fpga" ]; then
-        build_fpga "${2}"
+    local target="${1}"
+    local boot_profile="sim"
+    if [ "${target}" = "fpga" ] || [ "${target}" = "asic" ]; then
+        boot_profile="board"
+    fi
+
+    build_sw_case boot "${boot_profile}" "${target}"
+    if [ "${target}" = "model" ]; then
+        build_model "${@:2}"
+    elif [ "${target}" = "rtl" ]; then
+        build_rtl "${@:2}"
+    elif [ "${target}" = "fpga" ]; then
+        build_fpga "${@:2}"
+    elif [ "${target}" = "asic" ]; then
+        build_asic "${@:2}"
     fi
 }
 
 build_tools
 
 if [ "${1}" = "hw" ]; then
-    build_hw "${2}" "${3}"
+    build_hw "${@:2}"
 elif [ "${1}" = "sw" ]; then
-    build_sw "${2}" "${3}"
+    build_sw "${@:2}"
 elif [ "${1}" = "ut" ]; then
-    build_ut "${2}" "${3}"
+    build_ut "${@:2}"
 fi

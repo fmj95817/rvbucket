@@ -179,11 +179,17 @@ _start:
     li t2, 0x31300000
     sw x0, 0(t2)          /* threshold = 0 */
 
+#ifdef RVB_SIM
     li a0, 9
+#else
+    li a0, 867
+#endif
     call uart_init
 
     call main
     mv t0, a0
 
+#ifdef RVB_SIM
     li a0, 0x10
     call uart_write
+#endif

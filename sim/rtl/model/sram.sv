@@ -7,10 +7,6 @@ module sram #(
 );
     logic [DW-1:0] mem[0:2**AW-1];
 
-    initial begin
-        for (int i = 0; i < 2**AW; i++) mem[i] = '0;
-    end
-
     always @(posedge clk) begin
         if (sram_rw_slv.cs & sram_rw_slv.wen)
             mem[sram_rw_slv.addr] <= sram_rw_slv.wdata;
@@ -31,13 +27,8 @@ module dp_sram #(
     sram_rw_if_t.slv sram_r_slv,
     sram_rw_if_t.slv sram_w_slv
 );
-    assign sram_w_slv.rdata = {DW{1'b0}};
-
     logic [DW-1:0] mem[0:2**AW-1];
 
-    initial begin
-        for (int i = 0; i < 2**AW; i++) mem[i] = '0;
-    end
     always @(posedge clk) begin
         if (sram_w_slv.cs & sram_w_slv.wen)
             mem[sram_w_slv.addr] <= sram_w_slv.wdata;
@@ -46,6 +37,9 @@ module dp_sram #(
     always @(posedge clk) begin
         if (sram_r_slv.cs & ~sram_r_slv.wen) begin
             sram_r_slv.rdata <= mem[sram_r_slv.addr];
+        end
+        if (sram_w_slv.cs & ~sram_w_slv.wen) begin
+            sram_w_slv.rdata <= mem[sram_w_slv.addr];
         end
     end
 

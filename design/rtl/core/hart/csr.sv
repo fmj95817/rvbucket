@@ -10,10 +10,10 @@ module csr(
     ext_irq_if_t.slv                ext_irq_slv,
     trap_csr_write_req_if_t.slv     trap_csr_write_req_slv,
     csr_trap_write_rsp_if_t.mst     csr_trap_write_rsp_mst,
-    csr_trap_state_if_t.mst         csr_trap_state_mst
+    csr_trap_state_if_t.mst         csr_trap_state_mst,
+    csr_mmu_state_if_t.mst          csr_mmu_state_mst,
+    csr_lsu_state_if_t.mst          csr_lsu_state_mst
 );
-    logic [31:0] csr_sstatus;
-    logic [31:0] csr_sie;
     logic [31:0] csr_stvec;
     logic [31:0] csr_scounteren;
     logic [31:0] csr_senvcfg;
@@ -21,7 +21,6 @@ module csr(
     logic [31:0] csr_sepc;
     logic [31:0] csr_scause;
     logic [31:0] csr_stval;
-    logic [31:0] csr_sip;
     logic [31:0] csr_stimecmp;
     logic [31:0] csr_stimecmph;
     logic [31:0] csr_satp;
@@ -257,10 +256,17 @@ module csr(
     logic [31:0] csr_mhartid;
     logic [31:0] csr_mtopi;
 
+    assign csr_instret = 32'h00000000;
+    assign csr_cycleh = 32'h00000000;
+    assign csr_scountovf = 32'h00000000;
+    assign csr_mvendorid = 32'h00000000;
+    assign csr_marchid = 32'h00000000;
+    assign csr_mimpid = 32'h00000000;
+    assign csr_mhartid = 32'h00000000;
+    assign csr_mtopi = 32'h00000000;
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            csr_sstatus <= 32'h00000000;
-            csr_sie <= 32'h00000000;
             csr_stvec <= 32'h00000000;
             csr_scounteren <= 32'h00000000;
             csr_senvcfg <= 32'h00000000;
@@ -268,9 +274,8 @@ module csr(
             csr_sepc <= 32'h00000000;
             csr_scause <= 32'h00000000;
             csr_stval <= 32'h00000000;
-            csr_sip <= 32'h00000000;
-            csr_stimecmp <= 32'h00000000;
-            csr_stimecmph <= 32'h00000000;
+            csr_stimecmp <= 32'hffffffff;
+            csr_stimecmph <= 32'hffffffff;
             csr_satp <= 32'h00000000;
             csr_mstatus <= 32'h00000000;
             csr_misa <= 32'h40141101;
@@ -494,26 +499,20 @@ module csr(
             csr_mhpmcounter31h <= 32'h00000000;
             csr_cycle <= 32'h00000000;
             csr_time <= 32'h00000000;
-            csr_instret <= 32'h00000000;
-            csr_cycleh <= 32'h00000000;
             csr_timeh <= 32'h00000000;
-            csr_scountovf <= 32'h00000000;
-            csr_mvendorid <= 32'h00000000;
-            csr_marchid <= 32'h00000000;
-            csr_mimpid <= 32'h00000000;
-            csr_mhartid <= 32'h00000000;
-            csr_mtopi <= 32'h00000000;
         end else begin
             csr_cycle <= csr_cycle + 1'b1;
             csr_time <= core_timer_slv.pkt.mtime[31:0];
             csr_timeh <= core_timer_slv.pkt.mtime[63:32];
             csr_mip[7] <= core_m_irq_slv.pkt.mtimer;
             csr_mip[3] <= core_m_irq_slv.pkt.msw;
+            csr_mip[5] <= core_timer_slv.pkt.mtime >= {csr_stimecmph, csr_stimecmp};
             csr_mip[11] <= ext_irq_slv.pkt.irq;
+            csr_mip[9] <= ext_irq_slv.pkt.irq;
             if (trap_csr_write_req_slv.vld && csr_trap_write_rsp_mst.pkt.ok) begin
                 case (trap_csr_write_req_slv.pkt.addr)
-                    12'h100: csr_sstatus <= trap_csr_write_req_slv.pkt.val;
-                    12'h104: csr_sie <= trap_csr_write_req_slv.pkt.val;
+                    12'h100: csr_mstatus <= (csr_mstatus & ~32'h800de762) | (trap_csr_write_req_slv.pkt.val & 32'h800de762);
+                    12'h104: csr_mie <= (csr_mie & ~32'h00002222) | (trap_csr_write_req_slv.pkt.val & 32'h00002222);
                     12'h105: csr_stvec <= trap_csr_write_req_slv.pkt.val;
                     12'h106: csr_scounteren <= trap_csr_write_req_slv.pkt.val;
                     12'h10a: csr_senvcfg <= trap_csr_write_req_slv.pkt.val;
@@ -521,7 +520,7 @@ module csr(
                     12'h141: csr_sepc <= trap_csr_write_req_slv.pkt.val;
                     12'h142: csr_scause <= trap_csr_write_req_slv.pkt.val;
                     12'h143: csr_stval <= trap_csr_write_req_slv.pkt.val;
-                    12'h144: csr_sip <= trap_csr_write_req_slv.pkt.val;
+                    12'h144: csr_mip <= (csr_mip & ~32'h00002222) | (trap_csr_write_req_slv.pkt.val & 32'h00002222);
                     12'h14d: csr_stimecmp <= trap_csr_write_req_slv.pkt.val;
                     12'h15d: csr_stimecmph <= trap_csr_write_req_slv.pkt.val;
                     12'h180: csr_satp <= trap_csr_write_req_slv.pkt.val;
@@ -749,8 +748,8 @@ module csr(
                 endcase
             end else if (exu_csr_write_req_slv.vld && csr_exu_write_rsp_mst.pkt.ok) begin
                 case (exu_csr_write_req_slv.pkt.addr)
-                    12'h100: csr_sstatus <= exu_csr_write_req_slv.pkt.val;
-                    12'h104: csr_sie <= exu_csr_write_req_slv.pkt.val;
+                    12'h100: csr_mstatus <= (csr_mstatus & ~32'h800de762) | (exu_csr_write_req_slv.pkt.val & 32'h800de762);
+                    12'h104: csr_mie <= (csr_mie & ~32'h00002222) | (exu_csr_write_req_slv.pkt.val & 32'h00002222);
                     12'h105: csr_stvec <= exu_csr_write_req_slv.pkt.val;
                     12'h106: csr_scounteren <= exu_csr_write_req_slv.pkt.val;
                     12'h10a: csr_senvcfg <= exu_csr_write_req_slv.pkt.val;
@@ -758,7 +757,7 @@ module csr(
                     12'h141: csr_sepc <= exu_csr_write_req_slv.pkt.val;
                     12'h142: csr_scause <= exu_csr_write_req_slv.pkt.val;
                     12'h143: csr_stval <= exu_csr_write_req_slv.pkt.val;
-                    12'h144: csr_sip <= exu_csr_write_req_slv.pkt.val;
+                    12'h144: csr_mip <= (csr_mip & ~32'h00002222) | (exu_csr_write_req_slv.pkt.val & 32'h00002222);
                     12'h14d: csr_stimecmp <= exu_csr_write_req_slv.pkt.val;
                     12'h15d: csr_stimecmph <= exu_csr_write_req_slv.pkt.val;
                     12'h180: csr_satp <= exu_csr_write_req_slv.pkt.val;
@@ -994,11 +993,11 @@ module csr(
         case (exu_csr_read_req_slv.pkt.addr)
             12'h100: begin
                 csr_exu_read_rsp_mst.pkt.ok = exu_csr_read_req_slv.pkt.priv >= 2'd1;
-                csr_exu_read_rsp_mst.pkt.val = csr_sstatus;
+                csr_exu_read_rsp_mst.pkt.val = (csr_mstatus & 32'h800de762);
             end
             12'h104: begin
                 csr_exu_read_rsp_mst.pkt.ok = exu_csr_read_req_slv.pkt.priv >= 2'd1;
-                csr_exu_read_rsp_mst.pkt.val = csr_sie;
+                csr_exu_read_rsp_mst.pkt.val = (csr_mie & 32'h00002222);
             end
             12'h105: begin
                 csr_exu_read_rsp_mst.pkt.ok = exu_csr_read_req_slv.pkt.priv >= 2'd1;
@@ -1030,7 +1029,7 @@ module csr(
             end
             12'h144: begin
                 csr_exu_read_rsp_mst.pkt.ok = exu_csr_read_req_slv.pkt.priv >= 2'd1;
-                csr_exu_read_rsp_mst.pkt.val = csr_sip;
+                csr_exu_read_rsp_mst.pkt.val = (csr_mip & 32'h00002222);
             end
             12'h14d: begin
                 csr_exu_read_rsp_mst.pkt.ok = exu_csr_read_req_slv.pkt.priv >= 2'd1;
@@ -2222,9 +2221,12 @@ module csr(
     assign csr_trap_state_mst.pkt.mepc = csr_mepc;
     assign csr_trap_state_mst.pkt.medeleg = csr_medeleg;
     assign csr_trap_state_mst.pkt.mideleg = csr_mideleg;
-    assign csr_trap_state_mst.pkt.sstatus = csr_sstatus;
-    assign csr_trap_state_mst.pkt.sip = csr_sip;
-    assign csr_trap_state_mst.pkt.sie = csr_sie;
+    assign csr_trap_state_mst.pkt.sstatus = (csr_mstatus & 32'h800de762);
+    assign csr_trap_state_mst.pkt.sip = (csr_mip & 32'h00002222);
+    assign csr_trap_state_mst.pkt.sie = (csr_mie & 32'h00002222);
     assign csr_trap_state_mst.pkt.stvec = csr_stvec;
     assign csr_trap_state_mst.pkt.sepc = csr_sepc;
+    assign csr_mmu_state_mst.pkt.satp = csr_satp;
+    assign csr_mmu_state_mst.pkt.mstatus = csr_mstatus;
+    assign csr_lsu_state_mst.pkt.satp = csr_satp;
 endmodule

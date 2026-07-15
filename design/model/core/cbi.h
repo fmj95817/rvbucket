@@ -31,6 +31,8 @@ typedef struct cbi_conf {
     u32 aclint_size;
     u32 plic_base;
     u32 plic_size;
+    u32 bus_stg_fifo_depth;
+    u32 bus_ost_depth;
 } cbi_conf_t;
 
 typedef struct cbi {

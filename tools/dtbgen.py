@@ -36,9 +36,9 @@ def render_dts(args):
 """
         ufs_node = """
 
-\t\tufshc0: ufs@30003000 {
+\t\tufshc0: ufs@30004000 {
 \t\t\tcompatible = "rvbucket,ufshc";
-\t\t\treg = <0x30003000 0x2000>;
+\t\t\treg = <0x30004000 0x2000>;
 \t\t\tinterrupts = <4>;
 \t\t\tlanes-per-direction = <1>;
 \t\t\tdma-noncoherent;

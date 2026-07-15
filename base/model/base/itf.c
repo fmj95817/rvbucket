@@ -7,9 +7,9 @@
 #include "dbg/env.h"
 #include "dbg/vcd.h"
 
-#define ITF_DUMP_DIR "itf_dump"
-#define ITF_DUMP_ENV "ITF_DUMP"
-#define ITF_DUMP_LIST "itf_dump_list.txt"
+#define ITF_TRACE_DIR "itf_trace"
+#define ITF_TRACE_ENV "ITF_TRACE"
+#define ITF_TRACE_LIST "itf_trace_list.txt"
 #define ITF_VCD_ENV "ITF_VCD"
 #define ITF_VCD_LIST "itf_vcd_list.txt"
 
@@ -18,8 +18,22 @@ typedef struct itf_name_list {
     char **names;
 } itf_name_list_t;
 
-static itf_name_list_t g_itf_dump_list;
+static itf_name_list_t g_itf_trace_list;
 static itf_name_list_t g_itf_vcd_list;
+
+static inline void itf_lock(itf_t *itf)
+{
+    if (itf->sim_prot) {
+        smp_opt_lock_acquire(&itf->lock);
+    }
+}
+
+static inline void itf_unlock(itf_t *itf)
+{
+    if (itf->sim_prot) {
+        smp_opt_lock_release(&itf->lock);
+    }
+}
 
 static void itf_name_list_load(itf_name_list_t *list, const char *path)
 {
@@ -51,10 +65,10 @@ static void itf_name_list_load(itf_name_list_t *list, const char *path)
         list->names = names;
 
         size_t name_size = strlen(start) + 1u;
-        char *dump_name = malloc(name_size);
-        DBG_CHECK(dump_name != NULL);
-        memcpy(dump_name, start, name_size);
-        list->names[list->name_num++] = dump_name;
+        char *trace_name = malloc(name_size);
+        DBG_CHECK(trace_name != NULL);
+        memcpy(trace_name, start, name_size);
+        list->names[list->name_num++] = trace_name;
     }
     fclose(fp);
 }
@@ -83,13 +97,13 @@ static void itf_name_list_free(itf_name_list_t *list)
 
 __attribute__((constructor)) static void itf_name_lists_init(void)
 {
-    itf_name_list_load(&g_itf_dump_list, ITF_DUMP_LIST);
+    itf_name_list_load(&g_itf_trace_list, ITF_TRACE_LIST);
     itf_name_list_load(&g_itf_vcd_list, ITF_VCD_LIST);
 }
 
 __attribute__((destructor)) static void itf_name_lists_free(void)
 {
-    itf_name_list_free(&g_itf_dump_list);
+    itf_name_list_free(&g_itf_trace_list);
     itf_name_list_free(&g_itf_vcd_list);
 }
 
@@ -105,8 +119,10 @@ static void signal_itf_construct(itf_t *itf, const char *name, const itf_conf_t 
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
     DBG_CHECK(name != NULL);
     DBG_CHECK(conf != NULL);
+    DBG_CHECK(!conf->sim_prot || !conf->ext_sig_src);
 
     itf->ctx.signal.ext_sig_src = conf->ext_sig_src;
+    smp_opt_snapshot_seq_init(&itf->ctx.signal.snapshot_seq);
     if (conf->ext_sig_src) {
         itf->ctx.signal.shared_pkt_data = NULL;
     } else {
@@ -121,14 +137,14 @@ static void signal_itf_construct(itf_t *itf, const char *name, const itf_conf_t 
     itf->ctx.signal.sig_wr_cb_args = NULL;
     itf->ctx.signal.write_vld = false;
 
-    if (itf->dump_enable) {
-        char dump_path[1024];
-        int ret = snprintf(dump_path, sizeof(dump_path), ITF_DUMP_DIR"/%s.%s_drv.txt",
+    if (itf->trace_enable) {
+        char trace_path[1024];
+        int ret = snprintf(trace_path, sizeof(trace_path), ITF_TRACE_DIR"/%s.%s_drv.txt",
             itf->hier_name, name);
-        DBG_CHECK(ret >= 0 && (u32)ret < sizeof(dump_path));
-        itf->ctx.signal.dump_fp = fopen(dump_path, "w");
+        DBG_CHECK(ret >= 0 && (u32)ret < sizeof(trace_path));
+        itf->ctx.signal.trace_fp = fopen(trace_path, "w");
     } else {
-        itf->ctx.signal.dump_fp = NULL;
+        itf->ctx.signal.trace_fp = NULL;
     }
 
     if (itf->vcd_enable && !conf->ext_sig_src) {
@@ -154,20 +170,20 @@ static void fifo_itf_construct(itf_t *itf, const char *name, const itf_conf_t *c
     itf->ctx.fifo.rptr = 0;
     itf->ctx.fifo.wptr = 0;
 
-    if (itf->dump_enable) {
+    if (itf->trace_enable) {
         char slv_path[1024];
         char mst_path[1024];
-        int slv_ret = snprintf(slv_path, sizeof(slv_path), ITF_DUMP_DIR"/%s.%s_slv.txt",
+        int slv_ret = snprintf(slv_path, sizeof(slv_path), ITF_TRACE_DIR"/%s.%s_slv.txt",
             itf->hier_name, name);
-        int mst_ret = snprintf(mst_path, sizeof(mst_path), ITF_DUMP_DIR"/%s.%s_mst.txt",
+        int mst_ret = snprintf(mst_path, sizeof(mst_path), ITF_TRACE_DIR"/%s.%s_mst.txt",
             itf->hier_name, name);
         DBG_CHECK(slv_ret >= 0 && (u32)slv_ret < sizeof(slv_path));
         DBG_CHECK(mst_ret >= 0 && (u32)mst_ret < sizeof(mst_path));
-        itf->ctx.fifo.dump_slv_fp = fopen(slv_path, "w");
-        itf->ctx.fifo.dump_mst_fp = fopen(mst_path, "w");
+        itf->ctx.fifo.trace_slv_fp = fopen(slv_path, "w");
+        itf->ctx.fifo.trace_mst_fp = fopen(mst_path, "w");
     } else {
-        itf->ctx.fifo.dump_slv_fp = NULL;
-        itf->ctx.fifo.dump_mst_fp = NULL;
+        itf->ctx.fifo.trace_slv_fp = NULL;
+        itf->ctx.fifo.trace_mst_fp = NULL;
     }
 
     if (itf->vcd_enable) {
@@ -220,22 +236,24 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
     itf->name = name;
     itf->mode = conf->mode;
     itf->pkt_size = conf->pkt_size;
+    itf->sim_prot = conf->sim_prot;
+    smp_opt_lock_init(&itf->lock);
     DBG_CHECK(itf->mode <= ITF_MODE_MAX);
 
-    bool dump_list_enable = itf_name_list_match(&g_itf_dump_list,
+    bool trace_list_enable = itf_name_list_match(&g_itf_trace_list,
         conf->hier_name, name);
-    itf->dump_enable = dump_list_enable ||
-        (dbg_get_bool_env(ITF_DUMP_ENV) && (!conf->force_disable_dump));
+    itf->trace_enable = trace_list_enable ||
+        (dbg_get_bool_env(ITF_TRACE_ENV) && (!conf->force_disable_trace));
     bool vcd_list_enable = itf_name_list_match(&g_itf_vcd_list,
         conf->hier_name, name);
     itf->vcd_enable = vcd_list_enable || dbg_get_bool_env(ITF_VCD_ENV);
     itf->pkt2str = conf->pkt2str;
     itf->reg_vcd = conf->reg_vcd;
 
-    if (itf->dump_enable) {
+    if (itf->trace_enable) {
         struct stat s;
-        if (stat(ITF_DUMP_DIR, &s) || !S_ISDIR(s.st_mode)) {
-            mkdir(ITF_DUMP_DIR, 0755);
+        if (stat(ITF_TRACE_DIR, &s) || !S_ISDIR(s.st_mode)) {
+            mkdir(ITF_TRACE_DIR, 0755);
         }
     }
 
@@ -251,6 +269,7 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
 
 void itf_reset(itf_t *itf)
 {
+    itf_lock(itf);
     if (itf->mode == ITF_MODE_SIGNAL) {
         itf->ctx.signal.write_vld = false;
     } else if (itf->mode == ITF_MODE_FIFO) {
@@ -263,6 +282,7 @@ void itf_reset(itf_t *itf)
         itf->ctx.fifo.read_vld = false;
         itf->ctx.fifo.write_vld = false;
     }
+    itf_unlock(itf);
 }
 
 static void signal_itf_free(itf_t *itf)
@@ -280,9 +300,9 @@ static void signal_itf_free(itf_t *itf)
         itf->ctx.signal.old_pkt_data = NULL;
     }
 
-    if (itf->ctx.signal.dump_fp) {
-        fclose(itf->ctx.signal.dump_fp);
-        itf->ctx.signal.dump_fp = NULL;
+    if (itf->ctx.signal.trace_fp) {
+        fclose(itf->ctx.signal.trace_fp);
+        itf->ctx.signal.trace_fp = NULL;
     }
 }
 
@@ -310,14 +330,14 @@ static void fifo_itf_free(itf_t *itf)
         itf->ctx.fifo.pkts_pend_mask = NULL;
     }
 
-    if (itf->ctx.fifo.dump_slv_fp) {
-        fclose(itf->ctx.fifo.dump_slv_fp);
-        itf->ctx.fifo.dump_slv_fp = NULL;
+    if (itf->ctx.fifo.trace_slv_fp) {
+        fclose(itf->ctx.fifo.trace_slv_fp);
+        itf->ctx.fifo.trace_slv_fp = NULL;
     }
 
-    if (itf->ctx.fifo.dump_mst_fp) {
-        fclose(itf->ctx.fifo.dump_mst_fp);
-        itf->ctx.fifo.dump_mst_fp = NULL;
+    if (itf->ctx.fifo.trace_mst_fp) {
+        fclose(itf->ctx.fifo.trace_mst_fp);
+        itf->ctx.fifo.trace_mst_fp = NULL;
     }
 }
 
@@ -353,6 +373,18 @@ static void signal_itf_write(itf_t *itf, const void *pkt)
     signal_itf_call_wcb(itf);
 }
 
+static void signal_itf_write_sim_prot(itf_t *itf, const void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(itf->sim_prot);
+
+    u32 seq = smp_opt_snapshot_seq_write_begin(&itf->ctx.signal.snapshot_seq);
+    memcpy(itf->ctx.signal.shared_pkt_data, pkt, itf->pkt_size);
+    smp_opt_snapshot_seq_write_end(&itf->ctx.signal.snapshot_seq, seq);
+
+    signal_itf_call_wcb(itf);
+}
+
 static void fifo_itf_write(itf_t *itf, const void *pkt)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
@@ -369,18 +401,23 @@ static void fifo_itf_write(itf_t *itf, const void *pkt)
     itf->ctx.fifo.pkt_num++;
     itf->ctx.fifo.wptr = (itf->ctx.fifo.wptr + 1) % itf->ctx.fifo.fifo_depth;
 
-    if (itf->dump_enable) {
-        if (itf->ctx.fifo.dump_mst_fp) {
+    if (itf->trace_enable) {
+        if (itf->ctx.fifo.trace_mst_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->ctx.fifo.dump_mst_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.fifo.dump_mst_fp);
+            fprintf(itf->ctx.fifo.trace_mst_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.trace_mst_fp);
         }
     }
 }
 
 void itf_write(itf_t *itf, const void *pkt)
 {
+    if (itf->sim_prot && itf->mode == ITF_MODE_SIGNAL) {
+        signal_itf_write_sim_prot(itf, pkt);
+        return;
+    }
+
     typedef void (*itf_write_t)(itf_t *, const void *);
     itf_write_t write_list[ITF_MODE_NUM] = {
         [ITF_MODE_SIGNAL] = &signal_itf_write,
@@ -388,13 +425,29 @@ void itf_write(itf_t *itf, const void *pkt)
     };
     itf_write_t write_func = write_list[itf->mode];
     DBG_CHECK(write_func != NULL);
+    itf_lock(itf);
     write_func(itf, pkt);
+    itf_unlock(itf);
 }
 
 static void signal_itf_read(itf_t *itf, void *pkt)
 {
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
     memcpy(pkt, itf->ctx.signal.shared_pkt_data, itf->pkt_size);
+}
+
+static void signal_itf_read_sim_prot(itf_t *itf, void *pkt)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(itf->sim_prot);
+
+    for (;;) {
+        u32 seq0 = smp_opt_snapshot_seq_read_begin(&itf->ctx.signal.snapshot_seq);
+        memcpy(pkt, itf->ctx.signal.shared_pkt_data, itf->pkt_size);
+        if (!smp_opt_snapshot_seq_read_retry(&itf->ctx.signal.snapshot_seq, seq0)) {
+            return;
+        }
+    }
 }
 
 static void fifo_itf_read(itf_t *itf, void *pkt)
@@ -413,18 +466,23 @@ static void fifo_itf_read(itf_t *itf, void *pkt)
     itf->ctx.fifo.pkt_num--;
     itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
 
-    if (itf->dump_enable) {
-        if (itf->ctx.fifo.dump_slv_fp) {
+    if (itf->trace_enable) {
+        if (itf->ctx.fifo.trace_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
-            fprintf(itf->ctx.fifo.dump_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.fifo.dump_slv_fp);
+            fprintf(itf->ctx.fifo.trace_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.trace_slv_fp);
         }
     }
 }
 
 void itf_read(itf_t *itf, void *pkt)
 {
+    if (itf->sim_prot && itf->mode == ITF_MODE_SIGNAL) {
+        signal_itf_read_sim_prot(itf, pkt);
+        return;
+    }
+
     typedef void (*itf_read_t)(itf_t *, void *);
     itf_read_t read_list[ITF_MODE_NUM] = {
         [ITF_MODE_SIGNAL] = &signal_itf_read,
@@ -432,21 +490,23 @@ void itf_read(itf_t *itf, void *pkt)
     };
     itf_read_t read_func = read_list[itf->mode];
     DBG_CHECK(read_func != NULL);
+    itf_lock(itf);
     read_func(itf, pkt);
+    itf_unlock(itf);
 }
 
 static void signal_itf_dbg_clock(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
 
-    if (itf->dump_enable && itf->ctx.signal.dump_fp != NULL) {
+    if (itf->trace_enable && itf->ctx.signal.trace_fp != NULL) {
         void *old = itf->ctx.signal.old_pkt_data;
         void *cur = itf->ctx.signal.shared_pkt_data;
         if (memcmp(cur, old, itf->pkt_size) != 0) {
             char pkt_str[1024];
             itf->pkt2str(cur, pkt_str);
-            fprintf(itf->ctx.signal.dump_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.signal.dump_fp);
+            fprintf(itf->ctx.signal.trace_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.signal.trace_fp);
             memcpy(old, cur, itf->pkt_size);
         }
     }
@@ -477,7 +537,7 @@ static void fifo_itf_dbg_clock(itf_t *itf)
     }
 }
 
-void itf_dbg_clock(itf_t *itf)
+void itf_dbg_clock_inner(itf_t *itf)
 {
     typedef void (*itf_dbg_clock_t)(itf_t *);
     itf_dbg_clock_t dbg_clock_list[ITF_MODE_NUM] = {
@@ -486,13 +546,16 @@ void itf_dbg_clock(itf_t *itf)
     };
     itf_dbg_clock_t dbg_clock_func = dbg_clock_list[itf->mode];
     DBG_CHECK(dbg_clock_func != NULL);
+    itf_lock(itf);
     dbg_clock_func(itf);
+    itf_unlock(itf);
 }
 
 void *itf_signal_get_src_and_chk(itf_t *itf)
 {
-    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
     DBG_CHECK(itf != NULL);
+    DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(!itf->sim_prot);
     DBG_CHECK(itf->ctx.signal.shared_pkt_data != NULL);
     return itf->ctx.signal.shared_pkt_data;
 }
@@ -502,6 +565,7 @@ void itf_signal_set_src(itf_t *itf, void *src)
     DBG_CHECK(src != NULL);
     DBG_CHECK(itf->name != NULL);
     DBG_CHECK(itf->mode == ITF_MODE_SIGNAL);
+    DBG_CHECK(!itf->sim_prot);
     DBG_CHECK(itf->ctx.signal.ext_sig_src);
     DBG_CHECK(itf->ctx.signal.shared_pkt_data == NULL);
 
@@ -513,6 +577,7 @@ void itf_signal_set_src(itf_t *itf, void *src)
 
 void itf_signal_write_notify(itf_t *itf)
 {
+    DBG_CHECK(!itf->sim_prot);
     signal_itf_call_wcb(itf);
 }
 
@@ -525,11 +590,13 @@ void itf_signal_set_wcb(itf_t *itf, sig_wr_cb_t cb, void *args)
 void itf_fifo_get_front(itf_t *itf, void *pkt)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    itf_lock(itf);
     DBG_CHECK(itf->ctx.fifo.pkt_num > 0);
     memcpy(pkt, get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), itf->pkt_size);
+    itf_unlock(itf);
 }
 
-void itf_fifo_pop_front(itf_t *itf)
+static void itf_fifo_pop_front_unlocked(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
     DBG_CHECK(itf->ctx.fifo.pkt_num > 0);
@@ -541,12 +608,12 @@ void itf_fifo_pop_front(itf_t *itf)
         itf->ctx.fifo.read_cycle = *itf->cycle;
     }
 
-    if (itf->dump_enable) {
-        if (itf->ctx.fifo.dump_slv_fp) {
+    if (itf->trace_enable) {
+        if (itf->ctx.fifo.trace_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), pkt_str);
-            fprintf(itf->ctx.fifo.dump_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.fifo.dump_slv_fp);
+            fprintf(itf->ctx.fifo.trace_slv_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+            fflush(itf->ctx.fifo.trace_slv_fp);
         }
     }
 
@@ -554,23 +621,41 @@ void itf_fifo_pop_front(itf_t *itf)
     itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
 }
 
+void itf_fifo_pop_front(itf_t *itf)
+{
+    DBG_CHECK(itf->mode == ITF_MODE_FIFO);
+    itf_lock(itf);
+    itf_fifo_pop_front_unlocked(itf);
+    itf_unlock(itf);
+}
+
 void itf_fifo_pop_all(itf_t *itf)
 {
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
 
+    itf_lock(itf);
     while (itf->ctx.fifo.pkt_num > 0) {
-        itf_fifo_pop_front(itf);
+        itf_fifo_pop_front_unlocked(itf);
     }
+    itf_unlock(itf);
 }
 
 bool itf_fifo_empty(itf_t *itf)
 {
+    DBG_CHECK(itf != NULL);
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
-    return itf->ctx.fifo.pkt_num == 0;
+    itf_lock(itf);
+    bool empty = itf->ctx.fifo.pkt_num == 0;
+    itf_unlock(itf);
+    return empty;
 }
 
 bool itf_fifo_full(itf_t *itf)
 {
+    DBG_CHECK(itf != NULL);
     DBG_CHECK(itf->mode == ITF_MODE_FIFO);
-    return itf->ctx.fifo.pkt_num == itf->ctx.fifo.fifo_depth;
+    itf_lock(itf);
+    bool full = itf->ctx.fifo.pkt_num == itf->ctx.fifo.fifo_depth;
+    itf_unlock(itf);
+    return full;
 }

@@ -3,7 +3,9 @@
 
 #include "base/def.h"
 
-#define IFU_BHT_SIZE 64u
+#define BPU_COND_BHT_SIZE 512u
+#define BPU_JALR_BTB_SIZE 64u
+#define BPU_RAS_SIZE 16u
 #define MMU_ITLB_SIZE 64u
 #define MMU_DTLB_SIZE 32u
 #define FCH_TRANS_ID 0u
@@ -12,5 +14,27 @@
 #define L1I_WAY_NUM 2u
 #define L1D_SIZE (16u * KiB)
 #define L1D_WAY_NUM 2u
+#define HART_L1_LATENCY 1u
+
+#define HART_IFU_CTRLQ_DEPTH 8u
+#define HART_IFU_FCH_OST_DEPTH 8u
+
+#define HART_HBI_STG_FIFO_DEPTH 4u
+#define HART_HBI_I_OST_DEPTH 8u
+#define HART_HBI_D_OST_DEPTH 4u
+
+#define HART_LSU_STG_FIFO_DEPTH 2u
+#define HART_LSU_OST_DEPTH 2u
+
+#define HART_MMU_I_STG_FIFO_DEPTH 8u
+#define HART_MMU_D_STG_FIFO_DEPTH 4u
+#define HART_MMU_OST_DEPTH 8u
+
+#define HART_L1I_STG_FIFO_DEPTH 8u
+#define HART_L1D_STG_FIFO_DEPTH 4u
+#define HART_L1_OST_DEPTH 8u
+
+#define HART_L1D_BTI_MUX_STG_FIFO_DEPTH 4u
+#define HART_L1D_BTI_MUX_OST_DEPTH 8u
 
 #endif

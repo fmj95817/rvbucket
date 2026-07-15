@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "types.h"
+#include "base/smp_opt.h"
 #include "dbg/vcd.h"
 
 typedef void (*pkt2str_t)(const void *, char *);
@@ -23,20 +24,22 @@ typedef struct itf_conf {
     u32 pkt_size;
     pkt2str_t pkt2str;
     pkt_reg_vcd_t reg_vcd;
-    bool force_disable_dump;
+    bool force_disable_trace;
     bool ext_sig_src;
+    bool sim_prot;
     u32 fifo_depth;
 } itf_conf_t;
 
 typedef struct signal_itf_ctx {
     bool ext_sig_src;
+    smp_opt_snapshot_seq_t snapshot_seq;
     void *shared_pkt_data;
     void *old_pkt_data;
     sig_wr_cb_t sig_wr_cb;
     void *sig_wr_cb_args;
     bool write_vld;
     u64 write_cycle;
-    FILE *dump_fp;
+    FILE *trace_fp;
 } signal_itf_ctx_t;
 
 typedef struct fifo_itf_ctx {
@@ -46,8 +49,8 @@ typedef struct fifo_itf_ctx {
     u32 rptr;
     u32 wptr;
 
-    FILE *dump_slv_fp;
-    FILE *dump_mst_fp;
+    FILE *trace_slv_fp;
+    FILE *trace_mst_fp;
 
     bool *pkts_pend_mask;
     bool read_vld;
@@ -64,8 +67,10 @@ typedef struct itf {
     const char *name;
     itf_mode_t mode;
     u32 pkt_size;
+    bool sim_prot;
+    smp_opt_lock_t lock;
 
-    bool dump_enable;
+    bool trace_enable;
     pkt2str_t pkt2str;
     bool vcd_enable;
     pkt_reg_vcd_t reg_vcd;
@@ -81,7 +86,13 @@ extern void itf_reset(itf_t *itf);
 extern void itf_free(itf_t *itf);
 extern void itf_write(itf_t *itf, const void *pkt);
 extern void itf_read(itf_t *itf, void *pkt);
-extern void itf_dbg_clock(itf_t *itf);
+extern void itf_dbg_clock_inner(itf_t *itf);
+static inline void itf_dbg_clock(itf_t *itf)
+{
+    if (itf->trace_enable || itf->vcd_enable) {
+        itf_dbg_clock_inner(itf);
+    }
+}
 
 extern void *itf_signal_get_src_and_chk(itf_t *itf);
 extern void itf_signal_set_src(itf_t *itf, void *src);
