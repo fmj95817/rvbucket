@@ -91,9 +91,10 @@ static sim_program_t sim_gen_linux_dtb(const sim_linux_conf_t *conf,
 
     char cmd[512];
     int n = snprintf(cmd, sizeof(cmd),
-        "python3 %s --initrd-load 0x%08x --initrd-size %u --out-dtb %s%s",
+        "python3 %s --target model --initrd-load 0x%08x --initrd-size %u"
+        " --out-dtb %s%s",
         dtbgen, initrd_load, initrd_size, dtb_path,
-        conf->ufshc_en ? " --ufs" : "");
+        conf->ufshc_en ? " --enable ufshc" : "");
     DBG_CHECK(n > 0 && (size_t)n < sizeof(cmd));
     DBG_CHECK(system(cmd) == 0);
 

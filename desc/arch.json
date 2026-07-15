@@ -1,0 +1,76 @@
+{
+    "schema_version": 1,
+    "system": {
+        "vendor": "rvbucket",
+        "name": "rvbucket",
+        "model": "RVBucket",
+        "address_bits": 32
+    },
+    "boot": {
+        "args": "root=/dev/ram rw console=ttyRVB0 earlycon=sbi loglevel=8",
+        "console": "uart0",
+        "console_options": "115200n8"
+    },
+    "cpu": {
+        "hart_count": 1,
+        "timebase_frequency": 10000,
+        "isa": "rv32ima_zicsr_zifencei_zicbom",
+        "extensions": [
+            "i",
+            "m",
+            "a",
+            "zicsr",
+            "zifencei",
+            "zicbom"
+        ],
+        "mmu": "sv32",
+        "cbom_block_size": 64
+    },
+    "memory": [
+        {
+            "name": "ddr",
+            "base": "0x40000000",
+            "size": "0x10000000"
+        }
+    ],
+    "interrupt_controller": {
+        "kind": "plic",
+        "base": "0x31100000",
+        "size": "0x00400000",
+        "source_count": 32,
+        "supervisor_irq": 9
+    },
+    "devices": [
+        {
+            "name": "uart0",
+            "kind": "uart",
+            "base": "0x30000000",
+            "size": "0x10",
+            "irq": 1,
+            "baud_rate": 115200
+        },
+        {
+            "name": "gpio0",
+            "kind": "gpio",
+            "base": "0x30001000",
+            "size": "0x10",
+            "irq": 2,
+            "width": 24
+        },
+        {
+            "name": "ufshc0",
+            "kind": "ufshc",
+            "base": "0x30004000",
+            "size": "0x2000",
+            "irq": 4,
+            "feature": "ufshc",
+            "model_only": true,
+            "lanes_per_direction": 1,
+            "dma_coherent": false,
+            "dma_pool": {
+                "base": "0x4f000000",
+                "size": "0x01000000"
+            }
+        }
+    ]
+}
