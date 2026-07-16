@@ -6,10 +6,6 @@ dev=/dev/mmcblk0p2
 mnt=/mnt/sdspi-root
 mounted=0
 
-for retry in 1 2 3 4 5; do
-    [ -b "${dev}" ] && break
-    sleep 1
-done
 [ -b "${dev}" ] || { echo "sdspi_ext4: missing ${dev}"; exit 1; }
 
 if awk '$1 == "/dev/mmcblk0p2" && $2 == "/" && $3 == "ext4" {

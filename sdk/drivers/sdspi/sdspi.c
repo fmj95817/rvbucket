@@ -1,11 +1,11 @@
 #include "sdspi.h"
 
 #include <stddef.h>
+#include "drivers/cache/cache.h"
 
 #define MMIO_WRITE32(addr, val) (*(volatile uint32_t *)(addr) = (val))
 #define MMIO_READ32(addr)       (*(volatile uint32_t *)(addr))
 
-#define SDSPI_CACHE_BLOCK_SIZE 64u
 #define SDSPI_CMD0  0u
 #define SDSPI_CMD8  8u
 #define SDSPI_CMD17 17u
@@ -19,39 +19,9 @@
 #define SDSPI_INIT_CLOCK_DIV 250u
 #define SDSPI_DATA_CLOCK_DIV 4u
 
-static inline void sdspi_cbo_clean(const void *addr)
-{
-    __asm__ volatile (".insn i 0x0f, 0x2, x0, %0, 1"
-        : : "r" (addr) : "memory");
-}
-
-static inline void sdspi_cbo_inval(const void *addr)
-{
-    __asm__ volatile (".insn i 0x0f, 0x2, x0, %0, 0"
-        : : "r" (addr) : "memory");
-}
-
-static void sdspi_cache_clean(const void *buffer, uint32_t size)
-{
-    uintptr_t start = (uintptr_t)buffer & ~(SDSPI_CACHE_BLOCK_SIZE - 1u);
-    uintptr_t end = ((uintptr_t)buffer + size + SDSPI_CACHE_BLOCK_SIZE - 1u) &
-        ~(SDSPI_CACHE_BLOCK_SIZE - 1u);
-    for (uintptr_t addr = start; addr < end; addr += SDSPI_CACHE_BLOCK_SIZE) {
-        sdspi_cbo_clean((const void *)addr);
-    }
-    __asm__ volatile ("fence rw, rw" : : : "memory");
-}
-
 void sdspi_dma_sync_for_cpu(void *buffer, uint32_t size)
 {
-    __asm__ volatile ("fence rw, rw" : : : "memory");
-    uintptr_t start = (uintptr_t)buffer & ~(SDSPI_CACHE_BLOCK_SIZE - 1u);
-    uintptr_t end = ((uintptr_t)buffer + size + SDSPI_CACHE_BLOCK_SIZE - 1u) &
-        ~(SDSPI_CACHE_BLOCK_SIZE - 1u);
-    for (uintptr_t addr = start; addr < end; addr += SDSPI_CACHE_BLOCK_SIZE) {
-        sdspi_cbo_inval((const void *)addr);
-    }
-    __asm__ volatile ("fence rw, rw" : : : "memory");
+    cache_invalidate_range(buffer, size);
 }
 
 void sdspi_irq(sdspi_dev_t *dev)
@@ -177,7 +147,7 @@ int sdspi_read_blocks(sdspi_dev_t *dev, uint32_t lba, uint32_t count,
     void *buffer)
 {
     uint32_t size = count * SDSPI_SECTOR_SIZE;
-    sdspi_cache_clean(buffer, size);
+    cache_clean_range(buffer, size);
     int ret = sdspi_read_blocks_raw(dev, lba, count, buffer);
     sdspi_dma_sync_for_cpu(buffer, size);
     return ret;
@@ -187,7 +157,7 @@ int sdspi_write_blocks(sdspi_dev_t *dev, uint32_t lba, uint32_t count,
     const void *buffer)
 {
     uint32_t size = count * SDSPI_SECTOR_SIZE;
-    sdspi_cache_clean(buffer, size);
+    cache_clean_range(buffer, size);
     return sdspi_transfer(dev, count == 1 ? SDSPI_CMD24 : SDSPI_CMD25,
         lba, count, buffer, true);
 }

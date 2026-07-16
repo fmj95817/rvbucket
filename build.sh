@@ -16,12 +16,13 @@ fi
 SDK_DIR="./sdk"
 CRT_DIR="${SDK_DIR}/crt"
 DRIVERS_DIR="${SDK_DIR}/drivers"
+DESC_INCLUDE_DIR="./desc/include"
 BARE_CASES_DIR="./cases/bare"
 USER_CASES_DIR="./cases/user"
 
 CROSS_PREFIX="riscv32-unknown-elf"
 CROSS_CC="${CROSS_PREFIX}-gcc"
-CROSS_CFLAGS=(-Wall -O2 -fPIC -march=rv32ima_zicsr -I${SDK_DIR})
+CROSS_CFLAGS=(-Wall -O2 -fPIC -march=rv32ima_zicsr -I${SDK_DIR} -I${DESC_INCLUDE_DIR})
 CROSS_LDFLAGS=(-nostartfiles)
 CROSS_LD="${CROSS_PREFIX}-gcc"
 CROSS_OBJCOPY="${CROSS_PREFIX}-objcopy"
@@ -48,7 +49,7 @@ LINUX_DTB_LOAD="0x44f00000"
 function build_tools {
     mkdir -p build/tools
     ${HOST_CC} -Wall -O3 -o ${BIN2X} tools/bin2x.c -lm
-    ${HOST_CC} -Wall -O3 -o ${MKBIN} tools/mkbin.c -lm
+    ${HOST_CC} -Wall -O3 -I${DESC_INCLUDE_DIR} -o ${MKBIN} tools/mkbin.c -lm
 }
 
 function build_opensbi_case {
@@ -305,7 +306,13 @@ function build_sw_case {
     else
         ld_flags+=(-T "${lds}")
         if [ "${case_name}" = "boot" ]; then
-            extra_srcs+=("${DRIVERS_DIR}/sdspi/sdspi.c")
+            extra_srcs+=(
+                "${DRIVERS_DIR}/cache/cache.c"
+                "${DRIVERS_DIR}/gpio/gpio.c"
+                "${DRIVERS_DIR}/pcm/pcm.c"
+                "${DRIVERS_DIR}/sdspi/sdspi.c"
+                "${DRIVERS_DIR}/uart/uart.c"
+            )
             cc_flags+=(-ffunction-sections -fdata-sections)
             ld_flags+=(-Wl,--gc-sections)
         fi
@@ -356,6 +363,7 @@ function build_model {
         -I./base/model \
         -I./design/model \
         -I./sim/model/vip \
+        -I./desc/include \
         -o build/hw/model/sim_top \
         $(find base/model -name *.c) \
         $(find design/model -name *.c) \

@@ -20,10 +20,9 @@
 #include "dbg/vcd.h"
 #include "spec/soc.h"
 #include "ui_def.h"
+#include "boot_image.h"
 
 #define SIM_END_CHAR 0x10
-#define BIN_TYPE_LINUX 1u
-#define LINUX_BIN_HEADER_SIZE 40u
 #define UART_IN_POLL_INTERVAL 500u
 #define GPIO_IN_POLL_INTERVAL 500u
 #define BOOT_PROG_GPIO_PIN 20u
@@ -38,19 +37,6 @@ typedef struct program {
     u32 size;
     u8 *code;
 } program_t;
-
-typedef struct program_header {
-    u32 type;
-    u32 firmware_size;
-    u32 reserved;
-    u32 kernel_size;
-    u32 initrd_size;
-    u32 dtb_size;
-    u32 kernel_load;
-    u32 initrd_load;
-    u32 dtb_load;
-    u32 padding;
-} program_header_t;
 
 typedef struct sim_top_conf {
     const char *prog_path;
@@ -130,19 +116,14 @@ static program_t read_program(const char *path)
     return program;
 }
 
-static inline u32 align4(u32 val)
-{
-    return (val + 3u) & ~3u;
-}
-
 static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
 {
-    if (program->size < LINUX_BIN_HEADER_SIZE) {
+    if (program->size < RVB_BIN_HEADER_SIZE) {
         return;
     }
 
-    program_header_t *header = (program_header_t *)program->code;
-    if (header->type != BIN_TYPE_LINUX) {
+    rvb_bin_header_t *header = (rvb_bin_header_t *)program->code;
+    if (header->type != RVB_BIN_TYPE_LINUX) {
         return;
     }
 
@@ -154,17 +135,17 @@ static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
     u32 initrd_load = header->initrd_load;
     u32 dtb_load = header->dtb_load;
 
-    u32 off = LINUX_BIN_HEADER_SIZE + align4(firmware_size);
+    u32 off = RVB_BIN_HEADER_SIZE + rvb_bin_align4(firmware_size);
     DBG_CHECK(off <= program->size);
-    DBG_CHECK(off + align4(kernel_size) <= program->size);
+    DBG_CHECK(off + rvb_bin_align4(kernel_size) <= program->size);
     ram_load(&sim_top->ddr, program->code + off, kernel_load - DDR_BASE, kernel_size);
 
-    off += align4(kernel_size);
-    DBG_CHECK(off + align4(initrd_size) <= program->size);
+    off += rvb_bin_align4(kernel_size);
+    DBG_CHECK(off + rvb_bin_align4(initrd_size) <= program->size);
     ram_load(&sim_top->ddr, program->code + off, initrd_load - DDR_BASE, initrd_size);
 
-    off += align4(initrd_size);
-    DBG_CHECK(off + align4(dtb_size) <= program->size);
+    off += rvb_bin_align4(initrd_size);
+    DBG_CHECK(off + rvb_bin_align4(dtb_size) <= program->size);
     ram_load(&sim_top->ddr, program->code + off, dtb_load - DDR_BASE, dtb_size);
 
     header->kernel_size = 0;

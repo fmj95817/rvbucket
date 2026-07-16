@@ -6,18 +6,11 @@ mount -t sysfs none /sys 2>/dev/null || true
 
 if awk '$2 == "/" && $3 == "rootfs" { found = 1 } END { exit !found }' \
     /proc/mounts; then
-    for retry in 1 2 3 4 5; do
-        [ -b /dev/mmcblk0p2 ] && break
-        sleep 1
-    done
-    if [ -b /dev/mmcblk0p2 ]; then
-        mkdir -p /newroot
-        if mount -t ext4 /dev/mmcblk0p2 /newroot; then
-            mount --move /dev /newroot/dev
-            mount --move /proc /newroot/proc
-            mount --move /sys /newroot/sys
-            exec switch_root /newroot /init
-        fi
+    SWITCH_SDROOT_SOURCE_ONLY=1
+    . /bin/switch_sdroot.sh
+    unset SWITCH_SDROOT_SOURCE_ONLY
+    if ! switch_sdcard_rootfs; then
+        echo "sdcard rootfs unavailable; drop into initramfs shell"
     fi
 fi
 
