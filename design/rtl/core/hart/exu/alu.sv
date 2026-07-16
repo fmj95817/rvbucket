@@ -38,13 +38,6 @@ module exu_alu_handler(
     logic [`RV_XLEN-1:0] alu_src2;
     logic [ALU_OP_SIZE-1:0] alu_op;
 
-    logic simple_valid;
-    logic [ALU_OP_SIZE-1:0] simple_op;
-    logic [`RV_GPR_AW-1:0] simple_wa;
-    logic [`RV_XLEN-1:0] simple_src1;
-    logic [`RV_XLEN-1:0] simple_src2;
-    logic [`RV_XLEN-1:0] simple_dst;
-
     m_state_t m_state;
     logic [ALU_OP_SIZE-1:0] m_op;
     logic [`RV_GPR_AW-1:0] m_wa;
@@ -118,6 +111,7 @@ module exu_alu_handler(
 
     wire inst_m = inst.base.opcode == OPCODE_ALU &&
         inst.r.funct7 == ALU_FUNCT7_M;
+    wire simple_fire = sel && !inst_m && m_state == M_STATE_IDLE;
     wire m_start = sel && inst_m && m_state == M_STATE_IDLE && !m_done;
     wire m_mul_start = m_start && inst.r.funct3 <= 3'b011;
     wire m_div_start = m_start && inst.r.funct3 >= 3'b100;
@@ -162,11 +156,6 @@ module exu_alu_handler(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            simple_valid <= 1'b0;
-            simple_op <= {ALU_OP_SIZE{1'b0}};
-            simple_wa <= {`RV_GPR_AW{1'b0}};
-            simple_src1 <= {`RV_XLEN{1'b0}};
-            simple_src2 <= {`RV_XLEN{1'b0}};
             m_state <= M_STATE_IDLE;
             m_op <= {ALU_OP_SIZE{1'b0}};
             m_wa <= {`RV_GPR_AW{1'b0}};
@@ -186,17 +175,6 @@ module exu_alu_handler(
             div_neg_quotient <= 1'b0;
             div_neg_remainder <= 1'b0;
         end else begin
-            if (simple_valid) begin
-                simple_valid <= 1'b0;
-            end else if (sel && !inst_m && (m_state == M_STATE_IDLE)) begin
-                simple_valid <= 1'b1;
-                simple_op <= alu_op;
-                simple_wa <= (inst.base.opcode == OPCODE_ALUI) ?
-                    inst.i.rd : inst.r.rd;
-                simple_src1 <= alu_src1;
-                simple_src2 <= alu_src2;
-            end
-
             if (m_done && sel)
                 m_done <= 1'b0;
 
@@ -291,10 +269,6 @@ module exu_alu_handler(
         end
     end
 
-    always_comb begin
-        simple_dst = alu_calc(simple_op, simple_src1, simple_src2, m_result);
-    end
-
     logic [`RV_XLEN-1:0] i_imm;
     i_imm_decode u_i_imm_decode(
         .inst  (inst),
@@ -313,12 +287,7 @@ module exu_alu_handler(
 
         done = 1'b0;
 
-        if (simple_valid) begin
-            done = 1'b1;
-            gpr_mst.wen = 1'b1;
-            gpr_mst.wa = simple_wa;
-            gpr_mst.wd = simple_dst;
-        end else if (m_done) begin
+        if (m_done) begin
             done = 1'b1;
             gpr_mst.wen = 1'b1;
             gpr_mst.wa = m_wa;
@@ -370,6 +339,14 @@ module exu_alu_handler(
                     default: alu_op = ALU_OP_ADD;
                 endcase
             end
+        end
+
+        if (simple_fire) begin
+            done = 1'b1;
+            gpr_mst.wen = 1'b1;
+            gpr_mst.wa = (inst.base.opcode == OPCODE_ALUI) ?
+                inst.i.rd : inst.r.rd;
+            gpr_mst.wd = alu_calc(alu_op, alu_src1, alu_src2, m_result);
         end
     end
 endmodule

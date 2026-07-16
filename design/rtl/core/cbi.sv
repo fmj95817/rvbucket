@@ -44,13 +44,17 @@ module cbi(
     axi4_aw_if_t i_aw[I_GST_NUM]();
     axi4_w_if_t i_w[I_GST_NUM]();
     axi4_b_if_t i_b[I_GST_NUM]();
+    axi4_b_if_t i_b_gst[I_GST_NUM]();
     axi4_ar_if_t i_ar[I_GST_NUM]();
     axi4_r_if_t i_r[I_GST_NUM]();
+    axi4_r_if_t i_r_gst[I_GST_NUM]();
     axi4_aw_if_t d_aw[D_GST_NUM]();
     axi4_w_if_t d_w[D_GST_NUM]();
     axi4_b_if_t d_b[D_GST_NUM]();
+    axi4_b_if_t d_b_gst[D_GST_NUM]();
     axi4_ar_if_t d_ar[D_GST_NUM]();
     axi4_r_if_t d_r[D_GST_NUM]();
+    axi4_r_if_t d_r_gst[D_GST_NUM]();
 
     bti_req_if_t boot_i_req();
     bti_rsp_if_t boot_i_rsp();
@@ -64,6 +68,29 @@ module cbi(
     bti_rsp_if_t dtcm_rsp();
     apb_req_if_t cfg_req();
     apb_rsp_if_t cfg_rsp();
+
+    for (genvar i = 0; i < I_GST_NUM; i++) begin : gen_i_rsp_slice
+        axi_rsp_reg_slice u_rsp_slice(
+            .clk             (clk),
+            .rst_n           (rst_n),
+            .host_axi4_b_mst (i_b[i]),
+            .host_axi4_r_mst (i_r[i]),
+            .gst_axi4_b_slv  (i_b_gst[i]),
+            .gst_axi4_r_slv  (i_r_gst[i])
+        );
+    end
+
+    for (genvar i = 0; i < D_GST_NUM; i++) begin : gen_d_rsp_slice
+        axi_rsp_reg_slice u_rsp_slice(
+            .clk             (clk),
+            .rst_n           (rst_n),
+            .host_axi4_b_mst (d_b[i]),
+            .host_axi4_r_mst (d_r[i]),
+            .gst_axi4_b_slv  (d_b_gst[i]),
+            .gst_axi4_r_slv  (d_r_gst[i])
+        );
+    end
+
     axi_demux #(
         .GST_NUM    (I_GST_NUM),
         .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
@@ -117,26 +144,32 @@ module cbi(
         .perf_mst           (perf_d_axi_demux_mst)
     );
 
-    axi2bti u_boot_i_axi2bti(
+    axi2bti #(
+        .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`CORE_BUS_OST_DEPTH)
+    ) u_boot_i_axi2bti(
         .clk          (clk),
         .rst_n        (rst_n),
         .axi4_aw_slv  (i_aw[0]),
         .axi4_w_slv   (i_w[0]),
-        .axi4_b_mst   (i_b[0]),
+        .axi4_b_mst   (i_b_gst[0]),
         .axi4_ar_slv  (i_ar[0]),
-        .axi4_r_mst   (i_r[0]),
+        .axi4_r_mst   (i_r_gst[0]),
         .bti_req_mst  (boot_i_req),
         .bti_rsp_slv  (boot_i_rsp)
     );
 
-    axi2bti u_itcm_i_axi2bti(
+    axi2bti #(
+        .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`CORE_BUS_OST_DEPTH)
+    ) u_itcm_i_axi2bti(
         .clk          (clk),
         .rst_n        (rst_n),
         .axi4_aw_slv  (i_aw[1]),
         .axi4_w_slv   (i_w[1]),
-        .axi4_b_mst   (i_b[1]),
+        .axi4_b_mst   (i_b_gst[1]),
         .axi4_ar_slv  (i_ar[1]),
-        .axi4_r_mst   (i_r[1]),
+        .axi4_r_mst   (i_r_gst[1]),
         .bti_req_mst  (itcm_i_req),
         .bti_rsp_slv  (itcm_i_rsp)
     );
@@ -146,9 +179,9 @@ module cbi(
         .rst_n            (rst_n),
         .host_axi4_aw_slv (i_aw[2]),
         .host_axi4_w_slv  (i_w[2]),
-        .host_axi4_b_mst  (i_b[2]),
+        .host_axi4_b_mst  (i_b_gst[2]),
         .host_axi4_ar_slv (i_ar[2]),
-        .host_axi4_r_mst  (i_r[2]),
+        .host_axi4_r_mst  (i_r_gst[2]),
         .gst_axi4_aw_mst  (mm_i_axi4_aw_mst),
         .gst_axi4_w_mst   (mm_i_axi4_w_mst),
         .gst_axi4_b_slv   (mm_i_axi4_b_slv),
@@ -156,38 +189,47 @@ module cbi(
         .gst_axi4_r_slv   (mm_i_axi4_r_slv)
     );
 
-    axi2bti u_boot_d_axi2bti(
+    axi2bti #(
+        .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`CORE_BUS_OST_DEPTH)
+    ) u_boot_d_axi2bti(
         .clk          (clk),
         .rst_n        (rst_n),
         .axi4_aw_slv  (d_aw[0]),
         .axi4_w_slv   (d_w[0]),
-        .axi4_b_mst   (d_b[0]),
+        .axi4_b_mst   (d_b_gst[0]),
         .axi4_ar_slv  (d_ar[0]),
-        .axi4_r_mst   (d_r[0]),
+        .axi4_r_mst   (d_r_gst[0]),
         .bti_req_mst  (boot_d_req),
         .bti_rsp_slv  (boot_d_rsp)
     );
 
-    axi2bti u_itcm_d_axi2bti(
+    axi2bti #(
+        .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`CORE_BUS_OST_DEPTH)
+    ) u_itcm_d_axi2bti(
         .clk          (clk),
         .rst_n        (rst_n),
         .axi4_aw_slv  (d_aw[1]),
         .axi4_w_slv   (d_w[1]),
-        .axi4_b_mst   (d_b[1]),
+        .axi4_b_mst   (d_b_gst[1]),
         .axi4_ar_slv  (d_ar[1]),
-        .axi4_r_mst   (d_r[1]),
+        .axi4_r_mst   (d_r_gst[1]),
         .bti_req_mst  (itcm_d_req),
         .bti_rsp_slv  (itcm_d_rsp)
     );
 
-    axi2bti u_dtcm_axi2bti(
+    axi2bti #(
+        .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`CORE_BUS_OST_DEPTH)
+    ) u_dtcm_axi2bti(
         .clk          (clk),
         .rst_n        (rst_n),
         .axi4_aw_slv  (d_aw[2]),
         .axi4_w_slv   (d_w[2]),
-        .axi4_b_mst   (d_b[2]),
+        .axi4_b_mst   (d_b_gst[2]),
         .axi4_ar_slv  (d_ar[2]),
-        .axi4_r_mst   (d_r[2]),
+        .axi4_r_mst   (d_r_gst[2]),
         .bti_req_mst  (dtcm_req),
         .bti_rsp_slv  (dtcm_rsp)
     );
@@ -197,9 +239,9 @@ module cbi(
         .rst_n            (rst_n),
         .host_axi4_aw_slv (d_aw[3]),
         .host_axi4_w_slv  (d_w[3]),
-        .host_axi4_b_mst  (d_b[3]),
+        .host_axi4_b_mst  (d_b_gst[3]),
         .host_axi4_ar_slv (d_ar[3]),
-        .host_axi4_r_mst  (d_r[3]),
+        .host_axi4_r_mst  (d_r_gst[3]),
         .gst_axi4_aw_mst  (mm_d_axi4_aw_mst),
         .gst_axi4_w_mst   (mm_d_axi4_w_mst),
         .gst_axi4_b_slv   (mm_d_axi4_b_slv),
@@ -212,9 +254,9 @@ module cbi(
         .rst_n        (rst_n),
         .axi4_aw_slv  (d_aw[4]),
         .axi4_w_slv   (d_w[4]),
-        .axi4_b_mst   (d_b[4]),
+        .axi4_b_mst   (d_b_gst[4]),
         .axi4_ar_slv  (d_ar[4]),
-        .axi4_r_mst   (d_r[4]),
+        .axi4_r_mst   (d_r_gst[4]),
         .apb_req_mst  (cfg_req),
         .apb_rsp_slv  (cfg_rsp)
     );
@@ -231,6 +273,8 @@ module cbi(
     );
 
     bti_link u_itcm_i_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
         .host_bti_req_slv (itcm_i_req),
         .host_bti_rsp_mst (itcm_i_rsp),
         .gst_bti_req_mst  (itcm_i_bti_req_mst),
@@ -238,6 +282,8 @@ module cbi(
     );
 
     bti_link u_itcm_d_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
         .host_bti_req_slv (itcm_d_req),
         .host_bti_rsp_mst (itcm_d_rsp),
         .gst_bti_req_mst  (itcm_d_bti_req_mst),
@@ -245,6 +291,8 @@ module cbi(
     );
 
     bti_link u_dtcm_link(
+        .clk              (clk),
+        .rst_n            (rst_n),
         .host_bti_req_slv (dtcm_req),
         .host_bti_rsp_mst (dtcm_rsp),
         .gst_bti_req_mst  (dtcm_bti_req_mst),

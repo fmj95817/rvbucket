@@ -436,6 +436,8 @@ def gen_rtl_itf(itf_name, desc):
         if trace_when is not None:
             suffix0, suffix1 = _rtl_trace_suffixes(desc, itf_type, ctrl_sigs)
             macro = "RVB_ITF_TRACE_WHEN_UPDATE" if trace_has_state else "RVB_ITF_TRACE_WHEN"
+            if not has_pkt:
+                macro += "_NOPKT"
             f.write("\n")
             f.write("    `{}(\"{}\", \"{}\", {})\n".format(
                 macro, suffix0, suffix1, trace_when))

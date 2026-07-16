@@ -287,7 +287,7 @@ module boot_rom(
     assign mem[279] = 32'h0e074063;
     assign mem[280] = 32'h300037b7;
     assign mem[281] = 32'h00100713;
-    assign mem[282] = 32'h00e7a023;
+    assign mem[282] = 32'h4ae7a023;
     assign mem[283] = 32'h100007b7;
     assign mem[284] = 32'h00078067;
     assign mem[285] = 32'h800004b7;
@@ -326,11 +326,11 @@ module boot_rom(
     assign mem[318] = 32'h00e6a023;
     assign mem[319] = 32'h0007c703;
     assign mem[320] = 32'hfe071ae3;
-    assign mem[321] = 32'h30003737;
+    assign mem[321] = 32'h300037b7;
     assign mem[322] = 32'h00100693;
-    assign mem[323] = 32'h800007b7;
-    assign mem[324] = 32'h00d72023;
-    assign mem[325] = 32'h0207a703;
+    assign mem[323] = 32'h4ad7a023;
+    assign mem[324] = 32'h80000737;
+    assign mem[325] = 32'h02072703;
     assign mem[326] = 32'h100007b7;
     assign mem[327] = 32'h00000513;
     assign mem[328] = 32'h00070593;

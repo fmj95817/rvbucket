@@ -25,7 +25,6 @@ module exu(
     logic [1:0] priv;
     logic wfi;
     logic [31:0] irq_epc;
-    logic irq_defer;
 
     tri [`RV_OPC_SIZE-1:0] opcode = ex_req_slv.pkt.inst.base.opcode;
     logic [31:0] ex_req_next_pc;
@@ -40,16 +39,13 @@ module exu(
             priv <= 2'b11;
             wfi <= 1'b0;
             irq_epc <= 0;
-            irq_defer <= 1'b0;
         end else if (trap_exu_ctrl_slv.vld) begin
             priv <= trap_exu_ctrl_slv.pkt.priv;
             wfi <= trap_exu_ctrl_slv.pkt.wfi;
             irq_epc <= trap_exu_ctrl_slv.pkt.irq_epc;
-            irq_defer <= 1'b0;
         end else begin
             if (ex_req_fire)
                 irq_epc <= ex_req_next_pc;
-            irq_defer <= !wfi && !ex_req_slv.rdy;
             if (sys_hsk && ex_req_slv.pkt.inst.i.funct3 == 3'b000 &&
                 ex_req_slv.pkt.inst.i.imm_11_0 == 12'h105)
                 wfi <= 1'b1;
@@ -58,8 +54,8 @@ module exu(
 
     assign exu_state_mst.pkt.priv = priv;
     assign exu_state_mst.pkt.pc = ex_req_slv.pkt.pc;
-    assign exu_state_mst.pkt.irq_epc = irq_epc;
-    assign exu_state_mst.pkt.irq_defer = irq_defer;
+    assign exu_state_mst.pkt.irq_epc = ex_req_fire ? ex_req_next_pc : irq_epc;
+    assign exu_state_mst.pkt.irq_defer = !wfi && !ex_req_slv.rdy;
     assign exu_state_mst.pkt.wfi = wfi;
     assign exu_state_mst.pkt.wfi_resume_pc = irq_epc;
     localparam INST_HANDLER_NUM = 5;
@@ -70,7 +66,7 @@ module exu(
     localparam SYS_CHN_IDX = 4;
 
     logic need_fl;
-    assign flush_active = fl_req_slv.vld || need_fl;
+    assign flush_active = fl_req_slv.vld || need_fl || tlb_flush_mst.vld;
     always_ff @(posedge clk or negedge rst_n) begin
         if (~rst_n)
             need_fl <= 1'b0;
@@ -240,43 +236,5 @@ module exu(
     assign perf_mst.pkt.branch_busy = branch_sel && !branch_done;
     assign perf_mst.pkt.ldst_busy = ldst_sel && !ldst_done;
     assign perf_mst.pkt.sys_busy = sys_sel && !sys_done;
-
-`ifndef SYNTHESIS
-    logic rtl_progress_en;
-    longint unsigned rtl_progress_cycle;
-
-    initial begin
-        rtl_progress_en = $test$plusargs("rtl_progress");
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            rtl_progress_cycle <= 0;
-        end else if (rtl_progress_en) begin
-            rtl_progress_cycle <= rtl_progress_cycle + 1;
-            if (ex_req_hsk && ex_req_slv.pkt.pc >= 32'h10000180 &&
-                ex_req_slv.pkt.pc <= 32'h10000260) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d exec pc=%08x inst=%08x opcode=%02x priv=%0d fire=%0b drop=%0b sys=%0b csr_addr=%03x csr_rd_ok=%0b csr_wr=%0b/%0b expt=%0b type=%0d cause=%0d flush=%0b wfi=%0b",
-                    rtl_progress_cycle,
-                    ex_req_slv.pkt.pc,
-                    ex_req_slv.pkt.inst.raw,
-                    opcode,
-                    priv,
-                    ex_req_fire,
-                    flush_active,
-                    sys_sel,
-                    exu_csr_read_req_mst.pkt.addr,
-                    csr_exu_read_rsp_slv.pkt.ok,
-                    exu_csr_write_req_mst.vld,
-                    csr_exu_write_rsp_slv.pkt.ok,
-                    ex_expt_mst.vld,
-                    ex_expt_mst.pkt.expt_type,
-                    ex_expt_mst.pkt.cause,
-                    flush_active,
-                    wfi);
-            end
-        end
-    end
-`endif
 
 endmodule

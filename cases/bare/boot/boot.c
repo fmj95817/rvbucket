@@ -1,5 +1,7 @@
 #include <stdint.h>
 
+#include "drivers/pcm/pcm_map.h"
+
 #define FLASH_BASE   ((const uint32_t *)0x80000000)
 #define ITCM_BASE    ((volatile uint32_t *)0x10000000)
 #define DTCM_BASE    ((volatile uint32_t *)0x20000000)
@@ -9,7 +11,8 @@
 #define GPIO_MODE_LO (*(volatile uint32_t *)0x30001004u)
 #define GPIO_MODE_HI (*(volatile uint32_t *)0x30001008u)
 
-#define PCM_CLEAR    (*(volatile uint32_t *)0x30003000u)
+#define PCM_BASE     0x30003000u
+#define PCM_CLEAR    (*(volatile uint32_t *)(PCM_BASE + PCM_REG_CLEAR))
 
 #define PROG_CHUNK_SHIFT 14u
 #define PROG_CHUNK_BYTES (1u << PROG_CHUNK_SHIFT)

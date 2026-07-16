@@ -6,9 +6,11 @@ module aclint(
     core_timer_if_t.mst   core_timer_mst,
     core_m_irq_if_t.mst   core_m_irq_mst
 );
+    localparam MTIMER_TICK_CYCLES = 10000;
+
     logic [63:0] mtime;
     logic [63:0] mtimecmp;
-    logic [11:0] tick_count;
+    logic [$clog2(MTIMER_TICK_CYCLES)-1:0] tick_count;
     logic pending;
     logic [31:0] rsp_data;
     logic rsp_err;
@@ -63,7 +65,7 @@ module aclint(
             rsp_err <= 1'b0;
         end else begin
             tick_count <= tick_count + 1'b1;
-            if (tick_count == 12'hfff) begin
+            if (tick_count == MTIMER_TICK_CYCLES - 1) begin
                 tick_count <= 0;
                 mtime <= mtime + 1'b1;
             end

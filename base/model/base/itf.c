@@ -1,5 +1,6 @@
 #include "itf.h"
 #include <ctype.h>
+#include <dlfcn.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "base/def.h"
@@ -10,6 +11,7 @@
 #define ITF_TRACE_DIR "itf_trace"
 #define ITF_TRACE_ENV "ITF_TRACE"
 #define ITF_TRACE_LIST "itf_trace_list.txt"
+#define ITF_TRACE_FILTER_ENV "ITF_TRACE_FILTER"
 #define ITF_VCD_ENV "ITF_VCD"
 #define ITF_VCD_LIST "itf_vcd_list.txt"
 
@@ -20,6 +22,82 @@ typedef struct itf_name_list {
 
 static itf_name_list_t g_itf_trace_list;
 static itf_name_list_t g_itf_vcd_list;
+static void *g_itf_trace_filter_so;
+static bool g_itf_trace_filter_so_inited;
+
+static void itf_trace_filter_symbol(char *dst, size_t dst_size,
+    const char *hier_name, const char *name)
+{
+    char instance_name[1024];
+    int ret = snprintf(instance_name, sizeof(instance_name), "%s.%s",
+        hier_name, name);
+    DBG_CHECK(ret >= 0 && (size_t)ret < sizeof(instance_name));
+
+    size_t out = 0;
+    for (size_t i = 0; instance_name[i] != '\0'; i++) {
+        unsigned char ch = (unsigned char)instance_name[i];
+        if (ch == '[') {
+            if (out != 0 && dst[out - 1] != '_') {
+                DBG_CHECK(out + 1 < dst_size);
+                dst[out++] = '_';
+            }
+            while (isdigit((unsigned char)instance_name[i + 1])) {
+                DBG_CHECK(out + 1 < dst_size);
+                dst[out++] = instance_name[++i];
+            }
+            if (instance_name[i + 1] == ']') {
+                i++;
+            }
+        } else if (isalnum(ch) || ch == '_') {
+            DBG_CHECK(out + 1 < dst_size);
+            dst[out++] = (char)ch;
+        } else if (out != 0 && dst[out - 1] != '_') {
+            DBG_CHECK(out + 1 < dst_size);
+            dst[out++] = '_';
+        }
+    }
+    ret = snprintf(&dst[out], dst_size - out, "_filter");
+    DBG_CHECK(ret >= 0 && (size_t)ret < dst_size - out);
+}
+
+static itf_trace_filter_t itf_trace_filter_resolve(const char *hier_name,
+    const char *name)
+{
+    if (!g_itf_trace_filter_so_inited) {
+        const char *path = getenv(ITF_TRACE_FILTER_ENV);
+        g_itf_trace_filter_so_inited = true;
+        if (path != NULL && path[0] != '\0') {
+            g_itf_trace_filter_so = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+            if (g_itf_trace_filter_so == NULL) {
+                fprintf(stderr, "failed to load interface trace filter %s: %s\n",
+                    path, dlerror());
+                abort();
+            }
+        }
+    }
+
+    if (g_itf_trace_filter_so == NULL) {
+        return NULL;
+    }
+
+    char instance_filter_name[1024];
+    itf_trace_filter_symbol(instance_filter_name,
+        sizeof(instance_filter_name), hier_name, name);
+    dlerror();
+    void *sym = dlsym(g_itf_trace_filter_so, instance_filter_name);
+    if (dlerror() != NULL) {
+        return NULL;
+    }
+    return (itf_trace_filter_t)sym;
+}
+
+static bool itf_trace_filter_match(itf_t *itf, const void *pkt)
+{
+    if (itf->trace_filter == NULL) {
+        return true;
+    }
+    return itf->trace_filter(pkt);
+}
 
 static inline void itf_lock(itf_t *itf)
 {
@@ -105,6 +183,9 @@ __attribute__((destructor)) static void itf_name_lists_free(void)
 {
     itf_name_list_free(&g_itf_trace_list);
     itf_name_list_free(&g_itf_vcd_list);
+    if (g_itf_trace_filter_so != NULL) {
+        dlclose(g_itf_trace_filter_so);
+    }
 }
 
 static inline void signal_itf_add_vcd(itf_t *itf)
@@ -244,6 +325,11 @@ void itf_construct(itf_t *itf, const char *name, const itf_conf_t *conf)
         conf->hier_name, name);
     itf->trace_enable = trace_list_enable ||
         (dbg_get_bool_env(ITF_TRACE_ENV) && (!conf->force_disable_trace));
+    itf->trace_filter = NULL;
+    if (itf->trace_enable) {
+        itf->trace_filter = itf_trace_filter_resolve(conf->hier_name,
+            name);
+    }
     bool vcd_list_enable = itf_name_list_match(&g_itf_vcd_list,
         conf->hier_name, name);
     itf->vcd_enable = vcd_list_enable || dbg_get_bool_env(ITF_VCD_ENV);
@@ -401,7 +487,7 @@ static void fifo_itf_write(itf_t *itf, const void *pkt)
     itf->ctx.fifo.pkt_num++;
     itf->ctx.fifo.wptr = (itf->ctx.fifo.wptr + 1) % itf->ctx.fifo.fifo_depth;
 
-    if (itf->trace_enable) {
+    if (itf->trace_enable && itf_trace_filter_match(itf, pkt)) {
         if (itf->ctx.fifo.trace_mst_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
@@ -466,7 +552,7 @@ static void fifo_itf_read(itf_t *itf, void *pkt)
     itf->ctx.fifo.pkt_num--;
     itf->ctx.fifo.rptr = (itf->ctx.fifo.rptr + 1) % itf->ctx.fifo.fifo_depth;
 
-    if (itf->trace_enable) {
+    if (itf->trace_enable && itf_trace_filter_match(itf, pkt)) {
         if (itf->ctx.fifo.trace_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(pkt, pkt_str);
@@ -503,10 +589,12 @@ static void signal_itf_dbg_clock(itf_t *itf)
         void *old = itf->ctx.signal.old_pkt_data;
         void *cur = itf->ctx.signal.shared_pkt_data;
         if (memcmp(cur, old, itf->pkt_size) != 0) {
-            char pkt_str[1024];
-            itf->pkt2str(cur, pkt_str);
-            fprintf(itf->ctx.signal.trace_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
-            fflush(itf->ctx.signal.trace_fp);
+            if (itf_trace_filter_match(itf, cur)) {
+                char pkt_str[1024];
+                itf->pkt2str(cur, pkt_str);
+                fprintf(itf->ctx.signal.trace_fp, "%"U64_HEX_LZ_FMT" %s", *itf->cycle, pkt_str);
+                fflush(itf->ctx.signal.trace_fp);
+            }
             memcpy(old, cur, itf->pkt_size);
         }
     }
@@ -608,7 +696,9 @@ static void itf_fifo_pop_front_unlocked(itf_t *itf)
         itf->ctx.fifo.read_cycle = *itf->cycle;
     }
 
-    if (itf->trace_enable) {
+    if (itf->trace_enable &&
+        itf_trace_filter_match(itf, get_fifo_pkt_addr(itf,
+            itf->ctx.fifo.rptr))) {
         if (itf->ctx.fifo.trace_slv_fp) {
             char pkt_str[1024];
             itf->pkt2str(get_fifo_pkt_addr(itf, itf->ctx.fifo.rptr), pkt_str);

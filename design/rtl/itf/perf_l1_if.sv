@@ -7,7 +7,9 @@ interface perf_l1_if_t;
         logic miss;
         logic bypass;
         logic writeback;
-        logic busy;
+        logic stg_full;
+        logic ost_full;
+        logic miss_busy;
     } pkt;
 
 `ifdef RVB_ITF_TRACE_ENABLED
@@ -35,12 +37,14 @@ interface perf_l1_if_t;
 
     function automatic string __itf_trace_pkt_str;
         __itf_trace_pkt_str = $sformatf(
-            "%01x %01x %01x %01x %01x",
+            "%01x %01x %01x %01x %01x %01x %01x",
             pkt.hit,
             pkt.miss,
             pkt.bypass,
             pkt.writeback,
-            pkt.busy
+            pkt.stg_full,
+            pkt.ost_full,
+            pkt.miss_busy
         );
     endfunction
 `endif

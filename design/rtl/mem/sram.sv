@@ -30,11 +30,12 @@ module bti_to_sram #(
 );
     localparam SRAM_WORD_AW = SRAM_AW - 2;
 
-    reg_slice #(
+    vld_reg_slice #(
         .DW(16)
     ) u_reg_slice(
         .clk      (clk),
         .rst_n    (rst_n),
+        .clear    (1'b0),
         .src_vld  (bti_req_slv.vld),
         .src_rdy  (bti_req_slv.rdy),
         .src_data (bti_req_slv.pkt.trans_id),

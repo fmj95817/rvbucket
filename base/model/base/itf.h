@@ -7,6 +7,7 @@
 #include "dbg/vcd.h"
 
 typedef void (*pkt2str_t)(const void *, char *);
+typedef bool (*itf_trace_filter_t)(const void *);
 typedef void (*pkt_reg_vcd_t)(const void *, dbg_sig_type_t);
 typedef void (*sig_wr_cb_t)(void *);
 
@@ -72,6 +73,7 @@ typedef struct itf {
 
     bool trace_enable;
     pkt2str_t pkt2str;
+    itf_trace_filter_t trace_filter;
     bool vcd_enable;
     pkt_reg_vcd_t reg_vcd;
 

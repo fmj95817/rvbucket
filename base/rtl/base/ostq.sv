@@ -59,36 +59,25 @@ module ostq #(
 
     for (genvar i = 0; i < DEPTH; i++) begin
         assign slot_ctx_flat[i * DW +: DW] = ctx_mem[i];
+    end
 
-        (* keep = "true", dont_touch = "true" *)
-        logic alloc_hit;
-        (* keep = "true", dont_touch = "true" *)
-        logic slot_wr_hit;
-        (* keep = "true", dont_touch = "true" *)
-        logic free_hit;
-
-        assign alloc_hit = alloc_hsk && alloc_slot_idx == PTR_W'(i);
-        assign slot_wr_hit = slot_wr_vld && vld_mem[i] &&
-            slot_wr_idx == PTR_W'(i);
-        assign free_hit = free_hsk && head_slot_idx == PTR_W'(i);
-
-        always_ff @(posedge clk or negedge rst_n) begin
-            if (!rst_n) begin
-                vld_mem[i] <= 1'b0;
-            end else begin
-                if (alloc_hit)
-                    vld_mem[i] <= 1'b1;
-                if (free_hit)
-                    vld_mem[i] <= 1'b0;
-            end
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            vld_mem <= '0;
+        end else begin
+            if (alloc_hsk)
+                vld_mem[alloc_slot_idx] <= 1'b1;
+            if (free_hsk)
+                vld_mem[head_slot_idx] <= 1'b0;
         end
+    end
 
-        always_ff @(posedge clk) begin
-            if (alloc_hit)
-                ctx_mem[i] <= alloc_ctx;
-            else if (slot_wr_hit)
-                ctx_mem[i] <= slot_wr_ctx;
-        end
+    always_ff @(posedge clk) begin
+        if (alloc_hsk)
+            ctx_mem[alloc_slot_idx] <= alloc_ctx;
+        if (slot_wr_vld && vld_mem[slot_wr_idx] &&
+            !(alloc_hsk && alloc_slot_idx == slot_wr_idx))
+            ctx_mem[slot_wr_idx] <= slot_wr_ctx;
     end
 
     always_ff @(posedge clk or negedge rst_n) begin

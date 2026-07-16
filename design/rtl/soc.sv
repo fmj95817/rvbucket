@@ -182,6 +182,8 @@ module soc(
         peri_req.psel && peri_req.penable && !peri_rsp.pready;
 
     pcm_perf u_pcm_perf(
+        .clk                                           (clk),
+        .rst_n                                         (rst_n),
         .inc_en                                        (pcm_inc_en),
         .perf_u_soc_slv                                (perf_soc_if),
         .perf_u_soc_u_mm_axi_demux_slv                 (perf_mm_axi_demux_if),

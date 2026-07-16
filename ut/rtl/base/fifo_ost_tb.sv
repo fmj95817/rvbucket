@@ -12,6 +12,14 @@ module fifo_ost_tb;
     logic fifo_empty;
     logic fifo_full;
 
+    logic ft_wr_vld;
+    logic ft_wr_rdy;
+    logic [7:0] ft_wr_data;
+    logic ft_rd_vld;
+    logic ft_rd_rdy;
+    logic [7:0] ft_rd_data;
+    logic ft_empty;
+
     logic ostq_alloc_vld;
     logic ostq_alloc_rdy;
     logic [7:0] ostq_alloc_ctx;
@@ -42,6 +50,19 @@ module fifo_ost_tb;
     logic ostk_empty;
     logic ostk_full;
 
+    logic slice_src_vld;
+    logic slice_src_rdy;
+    logic [7:0] slice_src_data;
+    logic slice_clear;
+    logic slice_dst_vld;
+    logic slice_dst_rdy;
+    logic [7:0] slice_dst_data;
+
+    logic [3:0] oldest_candidate_vld;
+    logic [15:0] oldest_older_flat;
+    logic oldest_select_vld;
+    logic [1:0] oldest_select_slot;
+
     fifo #(
         .DW(8),
         .DEPTH(4)
@@ -57,6 +78,24 @@ module fifo_ost_tb;
         .rd_data(fifo_rd_data),
         .empty(fifo_empty),
         .full(fifo_full)
+    );
+
+    fifo #(
+        .DW           (8),
+        .DEPTH        (4),
+        .FALL_THROUGH (1'b1)
+    ) u_ft_fifo (
+        .clk     (clk),
+        .rst_n   (rst_n),
+        .clear   (1'b0),
+        .wr_vld  (ft_wr_vld),
+        .wr_rdy  (ft_wr_rdy),
+        .wr_data (ft_wr_data),
+        .rd_vld  (ft_rd_vld),
+        .rd_rdy  (ft_rd_rdy),
+        .rd_data (ft_rd_data),
+        .empty   (ft_empty),
+        .full    ()
     );
 
     ostq #(
@@ -106,9 +145,32 @@ module fifo_ost_tb;
         .slot_vld(),
         .slot_key_flat(),
         .slot_ctx_flat(),
-        .slot_seq_flat(),
+        .slot_older_flat(),
         .empty(ostk_empty),
         .full(ostk_full)
+    );
+
+    bidir_reg_slice #(
+        .DW (8)
+    ) u_bidir_reg_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (slice_clear),
+        .src_vld  (slice_src_vld),
+        .src_rdy  (slice_src_rdy),
+        .src_data (slice_src_data),
+        .dst_vld  (slice_dst_vld),
+        .dst_rdy  (slice_dst_rdy),
+        .dst_data (slice_dst_data)
+    );
+
+    oldest_select #(
+        .DEPTH (4)
+    ) u_oldest_select(
+        .candidate_vld (oldest_candidate_vld),
+        .older_flat    (oldest_older_flat),
+        .select_vld    (oldest_select_vld),
+        .select_slot   (oldest_select_slot)
     );
 
     initial begin
@@ -139,6 +201,9 @@ module fifo_ost_tb;
             fifo_wr_vld = 1'b0;
             fifo_wr_data = '0;
             fifo_rd_rdy = 1'b0;
+            ft_wr_vld = 1'b0;
+            ft_wr_data = '0;
+            ft_rd_rdy = 1'b0;
             ostq_alloc_vld = 1'b0;
             ostq_alloc_ctx = '0;
             ostq_free_head = 1'b0;
@@ -151,6 +216,12 @@ module fifo_ost_tb;
             ostk_lookup_key = '0;
             ostk_free_vld = 1'b0;
             ostk_free_slot = '0;
+            slice_src_vld = 1'b0;
+            slice_src_data = '0;
+            slice_clear = 1'b0;
+            slice_dst_rdy = 1'b0;
+            oldest_candidate_vld = '0;
+            oldest_older_flat = '0;
             repeat (3) tick();
             rst_n = 1'b1;
             tick();
@@ -239,6 +310,35 @@ module fifo_ost_tb;
         fifo_pop(8'h55);
         check(fifo_empty, "fifo empty after pops");
 
+        ft_wr_vld = 1'b1;
+        ft_wr_data = 8'h61;
+        ft_rd_rdy = 1'b1;
+        #1;
+        check(ft_wr_rdy && ft_rd_vld && ft_rd_data == 8'h61,
+            "fall-through fifo direct transfer");
+        tick();
+        ft_wr_vld = 1'b0;
+        ft_rd_rdy = 1'b0;
+        #1;
+        check(ft_empty, "fall-through fifo direct transfer stays empty");
+
+        ft_wr_vld = 1'b1;
+        ft_wr_data = 8'h62;
+        #1;
+        check(ft_rd_vld && ft_rd_data == 8'h62,
+            "fall-through fifo exposes stalled input");
+        tick();
+        ft_wr_vld = 1'b0;
+        ft_wr_data = '0;
+        #1;
+        check(!ft_empty && ft_rd_vld && ft_rd_data == 8'h62,
+            "fall-through fifo stores stalled input");
+        ft_rd_rdy = 1'b1;
+        tick();
+        ft_rd_rdy = 1'b0;
+        #1;
+        check(ft_empty, "fall-through fifo drains stored input");
+
         ostq_alloc(8'ha1);
         ostq_alloc(8'ha2);
         check(ostq_slot_vld[0] && ostq_slot_ctx_flat[0 +: 8] == 8'ha1,
@@ -278,6 +378,117 @@ module fifo_ost_tb;
         ostk_free_vld = 1'b0;
         tick();
         check(ostk_empty, "ostk empty after frees");
+
+        reset_all();
+        ostk_alloc(2'd1, 8'hb1);
+        ostk_alloc(2'd2, 8'hc1);
+        ostk_alloc(2'd1, 8'hb2);
+        ostk_alloc(2'd3, 8'hd1);
+        ostk_lookup_key = 2'd2;
+        #1;
+        ostk_free_slot = ostk_lookup_slot;
+        ostk_free_vld = 1'b1;
+        tick();
+        ostk_free_vld = 1'b0;
+        ostk_alloc(2'd1, 8'hb3);
+        ostk_lookup_key = 2'd1;
+        #1;
+        check(ostk_lookup_vld && ostk_lookup_ctx == 8'hb1,
+            "ostk keeps oldest key entry across slot reuse");
+        ostk_free_slot = ostk_lookup_slot;
+        ostk_free_vld = 1'b1;
+        tick();
+        ostk_free_vld = 1'b0;
+        #1;
+        check(ostk_lookup_vld && ostk_lookup_ctx == 8'hb2,
+            "ostk returns second key entry before reused slot");
+        ostk_free_slot = ostk_lookup_slot;
+        ostk_free_vld = 1'b1;
+        tick();
+        ostk_free_vld = 1'b0;
+        #1;
+        check(ostk_lookup_vld && ostk_lookup_ctx == 8'hb3,
+            "ostk returns reused slot as newest key entry");
+
+        slice_src_vld = 1'b1;
+        slice_src_data = 8'h71;
+        slice_dst_rdy = 1'b1;
+        #1;
+        check(slice_src_rdy && !slice_dst_vld,
+            "reg slice captures input before presenting output");
+        tick();
+        slice_src_vld = 1'b0;
+        #1;
+        check(slice_dst_vld && slice_dst_data == 8'h71,
+            "reg slice presents registered output");
+        tick();
+        slice_dst_rdy = 1'b0;
+        #1;
+        check(!slice_dst_vld, "reg slice drains direct transfer");
+
+        slice_src_vld = 1'b1;
+        slice_src_data = 8'h72;
+        #1;
+        check(slice_src_rdy && !slice_dst_vld,
+            "reg slice accepts first stalled item");
+        tick();
+        slice_src_data = 8'h73;
+        #1;
+        check(slice_src_rdy && slice_dst_vld && slice_dst_data == 8'h72,
+            "reg slice accepts second stalled item");
+        tick();
+        slice_src_data = 8'h74;
+        #1;
+        check(slice_src_rdy && slice_dst_vld && slice_dst_data == 8'h72,
+            "reg slice accepts skid item");
+        tick();
+        slice_src_vld = 1'b0;
+        #1;
+        check(!slice_src_rdy && slice_dst_vld && slice_dst_data == 8'h72,
+            "reg slice backpressures when full");
+        slice_dst_rdy = 1'b1;
+        tick();
+        #1;
+        check(slice_dst_vld && slice_dst_data == 8'h73,
+            "reg slice exposes second item after pop");
+        tick();
+        #1;
+        check(slice_dst_vld && slice_dst_data == 8'h74,
+            "reg slice exposes skid item after pop");
+        tick();
+        slice_dst_rdy = 1'b0;
+        #1;
+        check(!slice_dst_vld, "reg slice empty after drain");
+
+        slice_src_vld = 1'b1;
+        slice_src_data = 8'h75;
+        tick();
+        slice_src_data = 8'h76;
+        tick();
+        slice_src_vld = 1'b0;
+        #1;
+        check(slice_dst_vld, "reg slice has data before clear");
+        slice_clear = 1'b1;
+        tick();
+        slice_clear = 1'b0;
+        #1;
+        check(!slice_dst_vld && slice_src_rdy,
+            "reg slice clear drops all buffered data");
+
+        oldest_older_flat = '0;
+        oldest_older_flat[1 * 4 + 0] = 1'b1;
+        oldest_older_flat[1 * 4 + 2] = 1'b1;
+        oldest_older_flat[1 * 4 + 3] = 1'b1;
+        oldest_older_flat[2 * 4 + 0] = 1'b1;
+        oldest_older_flat[2 * 4 + 3] = 1'b1;
+        oldest_older_flat[3 * 4 + 0] = 1'b1;
+        oldest_candidate_vld = 4'b1101;
+        #1;
+        check(oldest_select_vld && oldest_select_slot == 2'd2,
+            "oldest select chooses oldest candidate");
+        oldest_candidate_vld = '0;
+        #1;
+        check(!oldest_select_vld, "oldest select handles no candidate");
 
         $display("PASS: fifo_ost_tb");
         $finish;

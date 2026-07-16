@@ -22,6 +22,7 @@ typedef struct l1_tb {
     itf_t axi_ar;
     itf_t axi_r;
     itf_t flush;
+    itf_t flush_ack;
 
     l1_t dut;
     u32 mem[TB_MEM_WORDS];
@@ -71,6 +72,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     AXI4_AR_IF_CONSTRUCT(tb, axi_ar, 2);
     AXI4_R_IF_CONSTRUCT(tb, axi_r, 16);
     L1_FLUSH_IF_CONSTRUCT(tb, flush, 1);
+    L1_FLUSH_ACK_IF_CONSTRUCT(tb, flush_ack, 1);
 
     tb->dut.mod.cycle = tb->mod.cycle;
     tb->dut.bti_req_slv = &tb->bti_req;
@@ -81,6 +83,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     tb->dut.axi4_ar_mst = &tb->axi_ar;
     tb->dut.axi4_r_slv = &tb->axi_r;
     tb->dut.flush_slv = &tb->flush;
+    tb->dut.flush_ack_mst = &tb->flush_ack;
     tb->dut.mod.cycle = tb->mod.cycle;
     l1_construct(&tb->dut, tb->mod.hier_name, "u_dut", conf);
 
@@ -113,6 +116,7 @@ static void tb_free(l1_tb_t *tb)
     itf_free(&tb->axi_ar);
     itf_free(&tb->axi_r);
     itf_free(&tb->flush);
+    itf_free(&tb->flush_ack);
 }
 
 static void tb_mock_axi(l1_tb_t *tb)
@@ -199,6 +203,7 @@ static void tb_clock(l1_tb_t *tb)
     itf_dbg_clock(&tb->axi_ar);
     itf_dbg_clock(&tb->axi_r);
     itf_dbg_clock(&tb->flush);
+    itf_dbg_clock(&tb->flush_ack);
     (*tb->cycle)++;
     dbg_vcd_clock();
 }

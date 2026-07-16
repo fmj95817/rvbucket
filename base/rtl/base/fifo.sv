@@ -1,6 +1,7 @@
 module fifo #(
     parameter int DW = 1,
     parameter int DEPTH = 2,
+    parameter bit FALL_THROUGH = 1'b0,
     localparam int PTR_W = $clog2(DEPTH)
 )(
     input logic              clk,
@@ -27,6 +28,7 @@ module fifo #(
     wire ptr_lsb_same = rptr[PTR_W-1:0] == wptr[PTR_W-1:0];
     wire wr_hsk;
     wire rd_hsk;
+    wire pass_hsk;
 
 `ifndef SYNTHESIS
     initial begin
@@ -39,24 +41,18 @@ module fifo #(
 
     assign empty = rptr == wptr;
     assign full = ptr_msb_diff & ptr_lsb_same;
-    assign rd_vld = !empty;
+    assign rd_vld = !empty || (FALL_THROUGH && wr_vld);
     assign wr_rdy = !full;
     assign wr_hsk = wr_vld & wr_rdy;
     assign rd_hsk = rd_vld & rd_rdy;
+    assign pass_hsk = FALL_THROUGH && empty && wr_hsk && rd_hsk;
     assign widx = wptr[PTR_W-1:0];
-    assign rd_data = rd_vld ? mem[rptr[PTR_W-1:0]] : {DW{1'b0}};
+    assign rd_data = !empty ? mem[rptr[PTR_W-1:0]] :
+        (FALL_THROUGH ? wr_data : {DW{1'b0}});
 
-    for (genvar i = 0; i < DEPTH; i++) begin : gen_mem
-        for (genvar b = 0; b < DW; b++) begin : gen_bit
-            (* keep = "true", dont_touch = "true" *) logic wr_en;
-
-            assign wr_en = wr_hsk && widx == PTR_W'(i);
-
-            always_ff @(posedge clk) begin
-                if (wr_en)
-                    mem[i][b] <= wr_data[b];
-            end
-        end
+    always_ff @(posedge clk) begin
+        if (wr_hsk && !pass_hsk)
+            mem[widx] <= wr_data;
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -67,9 +63,9 @@ module fifo #(
             rptr <= '0;
             wptr <= '0;
         end else begin
-            if (wr_hsk)
+            if (wr_hsk && !pass_hsk)
                 wptr <= wptr + 1'b1;
-            if (rd_hsk)
+            if (rd_hsk && !pass_hsk)
                 rptr <= rptr + 1'b1;
         end
     end

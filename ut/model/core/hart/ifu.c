@@ -860,7 +860,17 @@ TEST_CASE(ifu_tb_t, frontend_flush_squashes_prefetch)
     tb_clock(tb);
     itf_fifo_pop_all(&tb->tlb_flush_itf);
 
-    fch_rsp_if_t stale_fault = {
+    REQUIRE(tb->dut.fch.discard_vld,
+        "flush records a pending fetch discard boundary");
+    REQUIRE(tb->dut.fch.discard_end_ptr == tb->dut.fch.req_ptr,
+        "discard boundary snapshots the request tail");
+    const u32 ptr_num = tb->dut.fch_ost_depth * 2u;
+    const u32 discard_num = (tb->dut.fch.discard_end_ptr + ptr_num -
+        tb->dut.fch.rsp_ptr) % ptr_num;
+    REQUIRE(discard_num == 2,
+        "discard boundary covers exactly two pre-flush fetches");
+
+    fch_rsp_if_t discarded_fault = {
         .ir = 0,
         .ok = false,
         .expt = true,
@@ -868,10 +878,10 @@ TEST_CASE(ifu_tb_t, frontend_flush_squashes_prefetch)
         .priv = 1,
         .tval = 0x80000000
     };
-    itf_write(&tb->fch_rsp_itf, &stale_fault);
+    itf_write(&tb->fch_rsp_itf, &discarded_fault);
     tb_clock(tb);
     REQUIRE(itf_fifo_empty(&tb->fch_expt_itf),
-        "stale fetch fault is dropped after frontend flush");
+        "pre-flush fetch fault is dropped after frontend flush");
 
     RUN_POLL_UNTIL(tb_cond_fch_req_ready, UT_TIMEOUT);
     {
@@ -880,11 +890,27 @@ TEST_CASE(ifu_tb_t, frontend_flush_squashes_prefetch)
         REQUIRE(req.pc == 0x80000100, "fetch restarts at exu irq_epc");
     }
 
-    fch_rsp_if_t stale_ok = { .ir = 0x00000013, .ok = true };
-    itf_write(&tb->fch_rsp_itf, &stale_ok);
+    bool found_new_entry = false;
+    for (u32 i = 0; i < tb->dut.fch_ost.depth; i++) {
+        if (!ostq_slot_valid(&tb->dut.fch_ost, i)) {
+            continue;
+        }
+
+        ifu_fch_ost_ctx_t ctx;
+        ostq_read_slot(&tb->dut.fch_ost, i, &ctx);
+        if (ctx.pc == 0x80000100) {
+            found_new_entry = true;
+        }
+    }
+    REQUIRE(found_new_entry, "post-flush fetch owns a new OST entry");
+
+    fch_rsp_if_t discarded_ok = { .ir = 0x00000013, .ok = true };
+    itf_write(&tb->fch_rsp_itf, &discarded_ok);
     tb_clock(tb);
     REQUIRE(itf_fifo_empty(&tb->ex_req_itf),
-        "stale normal fetch response is dropped after frontend flush");
+        "pre-flush normal fetch response is dropped after frontend flush");
+    REQUIRE(!tb->dut.fch.discard_vld,
+        "discard mode ends when the response head reaches the boundary");
 
     fch_rsp_if_t new_rsp = { .ir = 0x00000013, .ok = true };
     itf_write(&tb->fch_rsp_itf, &new_rsp);

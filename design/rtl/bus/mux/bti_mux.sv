@@ -126,7 +126,7 @@ module bti_mux2 #(
         .slot_vld    (),
         .slot_key_flat(),
         .slot_ctx_flat(),
-        .slot_seq_flat(),
+        .slot_older_flat(),
         .empty       (ost_empty),
         .full        (ost_full)
     );

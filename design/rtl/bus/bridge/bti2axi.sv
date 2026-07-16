@@ -129,7 +129,7 @@ module bti2axi #(
         .slot_vld    (),
         .slot_key_flat(),
         .slot_ctx_flat(),
-        .slot_seq_flat(),
+        .slot_older_flat(),
         .empty       (rd_ost_empty),
         .full        (rd_ost_full)
     );
@@ -158,7 +158,7 @@ module bti2axi #(
         .slot_vld    (),
         .slot_key_flat(),
         .slot_ctx_flat(),
-        .slot_seq_flat(),
+        .slot_older_flat(),
         .empty       (wr_ost_empty),
         .full        (wr_ost_full)
     );

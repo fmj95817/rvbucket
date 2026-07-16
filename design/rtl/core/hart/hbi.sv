@@ -145,8 +145,9 @@ module hbi #(
     endfunction
 
     fifo #(
-        .DW    (FCH_REQ_DW),
-        .DEPTH (STG_FIFO_DEPTH)
+        .DW           (FCH_REQ_DW),
+        .DEPTH        (STG_FIFO_DEPTH),
+        .FALL_THROUGH (1'b1)
     ) u_fch_req_fifo(
         .clk     (clk),
         .rst_n   (rst_n),
@@ -162,8 +163,9 @@ module hbi #(
     );
 
     fifo #(
-        .DW    (LDST_REQ_DW),
-        .DEPTH (STG_FIFO_DEPTH)
+        .DW           (LDST_REQ_DW),
+        .DEPTH        (STG_FIFO_DEPTH),
+        .FALL_THROUGH (1'b1)
     ) u_ldst_req_fifo(
         .clk     (clk),
         .rst_n   (rst_n),

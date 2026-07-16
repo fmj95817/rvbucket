@@ -10,8 +10,7 @@ module axi_demux #(
     parameter int STG_FIFO_DEPTH = 4,
     parameter int OST_DEPTH = 8,
     localparam int GST_IDX_W = GST_NUM <= 1 ? 1 : $clog2(GST_NUM),
-    localparam int OST_SLOT_W = $clog2(OST_DEPTH),
-    localparam int ISSUE_W = OST_SLOT_W + 1
+    localparam int OST_SLOT_W = $clog2(OST_DEPTH)
 )(
     input logic       clk,
     input logic       rst_n,
@@ -118,9 +117,12 @@ module axi_demux #(
 
     logic rd_ost_alloc_rdy;
     logic [OST_SLOT_W-1:0] rd_ost_alloc_slot;
-    logic rd_rsp_lookup_vld;
-    logic [OST_SLOT_W-1:0] rd_rsp_lookup_slot;
-    rd_ctx_t rd_rsp_lookup_ctx;
+    logic [OST_DEPTH-1:0] rd_ost_slot_vld;
+    logic [OST_DEPTH*8-1:0] rd_ost_key_flat;
+    logic [OST_DEPTH*RD_CTX_DW-1:0] rd_ost_ctx_flat;
+    logic [OST_DEPTH*OST_DEPTH-1:0] rd_ost_older_flat;
+    rd_ctx_t rd_slot_ctx[OST_DEPTH];
+    logic [7:0] rd_slot_key[OST_DEPTH];
 
     logic wr_data_ost_alloc_rdy;
     logic [OST_SLOT_W-1:0] wr_data_ost_alloc_slot;
@@ -133,53 +135,35 @@ module axi_demux #(
     logic wr_rsp_slot_wr_vld;
     logic [OST_SLOT_W-1:0] wr_rsp_slot_wr_idx;
     wr_rsp_ctx_t wr_rsp_slot_wr_ctx;
-    logic wr_rsp_lookup_vld;
-    logic [OST_SLOT_W-1:0] wr_rsp_lookup_slot;
-    wr_rsp_ctx_t wr_rsp_lookup_ctx;
     logic [OST_DEPTH-1:0] wr_rsp_ost_slot_vld;
     logic [OST_DEPTH*8-1:0] wr_rsp_ost_key_flat;
     logic [OST_DEPTH*WR_RSP_CTX_DW-1:0] wr_rsp_ost_ctx_flat;
-    logic [OST_DEPTH*ISSUE_W-1:0] wr_rsp_ost_seq_flat;
+    logic [OST_DEPTH*OST_DEPTH-1:0] wr_rsp_ost_older_flat;
     wr_rsp_ctx_t wr_rsp_slot_ctx[OST_DEPTH];
     logic [7:0] wr_rsp_slot_key[OST_DEPTH];
-    logic [ISSUE_W-1:0] wr_rsp_slot_seq[OST_DEPTH];
 
     logic [GST_IDX_W-1:0] rd_rsp_rr_idx;
     logic [GST_IDX_W-1:0] wr_rsp_rr_idx;
+    logic [GST_NUM-1:0] rd_rsp_match_vld;
+    logic [OST_SLOT_W-1:0] rd_rsp_match_slot[GST_NUM];
+    logic [OST_DEPTH-1:0] rd_rsp_match_candidate[GST_NUM];
     logic rd_rsp_sel_vld;
     logic [GST_IDX_W-1:0] rd_rsp_sel_idx;
     logic [OST_SLOT_W-1:0] rd_rsp_sel_slot;
-    logic rd_rsp_sel_match;
+    logic [GST_NUM-1:0] wr_rsp_match_vld;
+    logic [OST_SLOT_W-1:0] wr_rsp_match_slot[GST_NUM];
+    logic [OST_DEPTH-1:0] wr_rsp_match_candidate[GST_NUM];
     logic wr_rsp_sel_vld;
     logic [GST_IDX_W-1:0] wr_rsp_sel_idx;
     logic [OST_SLOT_W-1:0] wr_rsp_sel_slot;
-    logic wr_rsp_sel_match;
-    logic r_sel_vld_q;
-    logic [GST_IDX_W-1:0] r_sel_idx_q;
-    logic [7:0] r_sel_id_q;
-    logic r_grant_vld_q;
-    logic [GST_IDX_W-1:0] r_grant_idx_q;
-    logic [OST_SLOT_W-1:0] r_grant_slot_q;
-    logic r_raw_vld_q;
-    logic [7:0] r_raw_id_q;
-    logic [31:0] r_raw_data_q;
-    axi4_r_resp_t r_raw_resp_q;
-    logic r_raw_last_q;
-    logic [OST_SLOT_W-1:0] r_raw_slot_q;
-    logic b_raw_vld_q;
-    logic [GST_IDX_W-1:0] b_raw_idx_q;
-    logic [7:0] b_raw_id_q;
-    axi4_b_resp_t b_raw_resp_q;
-    logic b_out_vld_q;
-    logic [7:0] b_out_id_q;
-    axi4_b_resp_t b_out_resp_q;
-    logic [OST_SLOT_W-1:0] b_out_slot_q;
-    logic rd_free_vld_q;
-    logic [OST_SLOT_W-1:0] rd_free_slot_q;
-    logic wr_free_vld_q;
-    logic [OST_SLOT_W-1:0] wr_free_slot_q;
+    logic rd_free_vld;
+    logic [OST_SLOT_W-1:0] rd_free_slot;
+    logic wr_free_vld;
+    logic [OST_SLOT_W-1:0] wr_free_slot;
     logic decerr_b_sel_vld;
     logic [OST_SLOT_W-1:0] decerr_b_sel_slot;
+    logic [OST_DEPTH-1:0] decerr_b_candidate_vld;
+    logic [OST_DEPTH-1:0] decerr_b_older_same_key[OST_DEPTH];
     logic ar_decerr_sel;
     logic b_sel_decerr;
 
@@ -187,9 +171,6 @@ module axi_demux #(
     wire aw_hsk = aw_fifo_rd_vld && aw_fifo_rd_rdy;
     wire w_hsk = w_fifo_rd_vld && w_fifo_rd_rdy;
     wire rd_rsp_hsk = host_axi4_r_mst.vld && host_axi4_r_mst.rdy;
-    wire r_grant_hsk = r_grant_vld_q &&
-        gst_r_vld[r_grant_idx_q] && !r_raw_vld_q;
-    wire r_raw_hsk = rd_rsp_hsk && !ar_decerr_sel && r_raw_vld_q;
     wire wr_rsp_hsk = host_axi4_b_mst.vld && host_axi4_b_mst.rdy;
 
     function automatic logic addr_in_range(
@@ -201,17 +182,14 @@ module axi_demux #(
             ({1'b0, addr} - {1'b0, base}) < {1'b0, size};
     endfunction
 
-    function automatic logic [OST_SLOT_W-1:0] slot_idx(input int unsigned idx);
-        slot_idx = idx[OST_SLOT_W-1:0];
-    endfunction
-
     function automatic logic [GST_IDX_W-1:0] gst_idx(input int unsigned idx);
         gst_idx = idx[GST_IDX_W-1:0];
     endfunction
 
     fifo #(
-        .DW    (AR_DW),
-        .DEPTH (STG_FIFO_DEPTH)
+        .DW           (AR_DW),
+        .DEPTH        (STG_FIFO_DEPTH),
+        .FALL_THROUGH (1'b1)
     ) u_ar_fifo(
         .clk     (clk),
         .rst_n   (rst_n),
@@ -227,8 +205,9 @@ module axi_demux #(
     );
 
     fifo #(
-        .DW    (AW_DW),
-        .DEPTH (STG_FIFO_DEPTH)
+        .DW           (AW_DW),
+        .DEPTH        (STG_FIFO_DEPTH),
+        .FALL_THROUGH (1'b1)
     ) u_aw_fifo(
         .clk     (clk),
         .rst_n   (rst_n),
@@ -244,8 +223,9 @@ module axi_demux #(
     );
 
     fifo #(
-        .DW    (W_DW),
-        .DEPTH (STG_FIFO_DEPTH)
+        .DW           (W_DW),
+        .DEPTH        (STG_FIFO_DEPTH),
+        .FALL_THROUGH (1'b1)
     ) u_w_fifo(
         .clk     (clk),
         .rst_n   (rst_n),
@@ -267,8 +247,7 @@ module axi_demux #(
     ostk #(
         .KEY_W (8),
         .DW    (RD_CTX_DW),
-        .DEPTH (OST_DEPTH),
-        .ISSUE_W(ISSUE_W)
+        .DEPTH (OST_DEPTH)
     ) u_rd_ost(
         .clk          (clk),
         .rst_n        (rst_n),
@@ -277,19 +256,19 @@ module axi_demux #(
         .alloc_key    (ar_pkt.id),
         .alloc_ctx    (rd_ctx_t'{gst_idx:ar_gst_idx}),
         .alloc_slot   (rd_ost_alloc_slot),
-        .lookup_key   (r_sel_id_q),
-        .lookup_vld   (rd_rsp_lookup_vld),
-        .lookup_slot  (rd_rsp_lookup_slot),
-        .lookup_ctx   (rd_rsp_lookup_ctx),
-        .free_vld     (rd_free_vld_q),
-        .free_slot    (rd_free_slot_q),
+        .lookup_key   ('0),
+        .lookup_vld   (),
+        .lookup_slot  (),
+        .lookup_ctx   (),
+        .free_vld     (rd_free_vld),
+        .free_slot    (rd_free_slot),
         .slot_wr_vld  (1'b0),
         .slot_wr_idx  ('0),
         .slot_wr_ctx  ('0),
-        .slot_vld     (),
-        .slot_key_flat(),
-        .slot_ctx_flat(),
-        .slot_seq_flat(),
+        .slot_vld     (rd_ost_slot_vld),
+        .slot_key_flat(rd_ost_key_flat),
+        .slot_ctx_flat(rd_ost_ctx_flat),
+        .slot_older_flat(rd_ost_older_flat),
         .empty        (),
         .full         ()
     );
@@ -321,8 +300,7 @@ module axi_demux #(
     ostk #(
         .KEY_W (8),
         .DW    (WR_RSP_CTX_DW),
-        .DEPTH (OST_DEPTH),
-        .ISSUE_W(ISSUE_W)
+        .DEPTH (OST_DEPTH)
     ) u_wr_rsp_ost(
         .clk          (clk),
         .rst_n        (rst_n),
@@ -332,30 +310,79 @@ module axi_demux #(
         .alloc_ctx    (wr_rsp_ctx_t'{gst_idx:aw_gst_idx,
             decerr:!aw_hit, decerr_valid:1'b0}),
         .alloc_slot   (wr_rsp_ost_alloc_slot),
-        .lookup_key   (b_raw_id_q),
-        .lookup_vld   (wr_rsp_lookup_vld),
-        .lookup_slot  (wr_rsp_lookup_slot),
-        .lookup_ctx   (wr_rsp_lookup_ctx),
-        .free_vld     (wr_free_vld_q),
-        .free_slot    (wr_free_slot_q),
+        .lookup_key   ('0),
+        .lookup_vld   (),
+        .lookup_slot  (),
+        .lookup_ctx   (),
+        .free_vld     (wr_free_vld),
+        .free_slot    (wr_free_slot),
         .slot_wr_vld  (wr_rsp_slot_wr_vld),
         .slot_wr_idx  (wr_rsp_slot_wr_idx),
         .slot_wr_ctx  (wr_rsp_slot_wr_ctx),
         .slot_vld     (wr_rsp_ost_slot_vld),
         .slot_key_flat(wr_rsp_ost_key_flat),
         .slot_ctx_flat(wr_rsp_ost_ctx_flat),
-        .slot_seq_flat(wr_rsp_ost_seq_flat),
+        .slot_older_flat(wr_rsp_ost_older_flat),
         .empty        (),
         .full         ()
     );
 
     for (genvar i = 0; i < OST_DEPTH; i++) begin : gen_slot_view
+        assign rd_slot_key[i] = rd_ost_key_flat[i * 8 +: 8];
+        assign rd_slot_ctx[i] =
+            rd_ost_ctx_flat[i * RD_CTX_DW +: RD_CTX_DW];
         assign wr_rsp_slot_key[i] = wr_rsp_ost_key_flat[i * 8 +: 8];
         assign wr_rsp_slot_ctx[i] =
             wr_rsp_ost_ctx_flat[i * WR_RSP_CTX_DW +: WR_RSP_CTX_DW];
-        assign wr_rsp_slot_seq[i] =
-            wr_rsp_ost_seq_flat[i * ISSUE_W +: ISSUE_W];
+        for (genvar j = 0; j < OST_DEPTH; j++) begin : gen_decerr_older
+            assign decerr_b_older_same_key[i][j] =
+                wr_rsp_ost_slot_vld[j] &&
+                wr_rsp_slot_key[j] == wr_rsp_slot_key[i] &&
+                wr_rsp_ost_older_flat[j * OST_DEPTH + i];
+        end
+
+        assign decerr_b_candidate_vld[i] = wr_rsp_ost_slot_vld[i] &&
+            wr_rsp_slot_ctx[i].decerr &&
+            wr_rsp_slot_ctx[i].decerr_valid &&
+            !(|decerr_b_older_same_key[i]);
     end
+
+    for (genvar i = 0; i < GST_NUM; i++) begin : gen_rsp_match
+        for (genvar s = 0; s < OST_DEPTH; s++) begin : gen_candidate
+            assign rd_rsp_match_candidate[i][s] = rd_ost_slot_vld[s] &&
+                rd_slot_key[s] == gst_r_id[i];
+            assign wr_rsp_match_candidate[i][s] =
+                wr_rsp_ost_slot_vld[s] &&
+                wr_rsp_slot_key[s] == gst_b_id[i];
+        end
+
+        oldest_select #(
+            .DEPTH (OST_DEPTH)
+        ) u_rd_rsp_match(
+            .candidate_vld (rd_rsp_match_candidate[i]),
+            .older_flat    (rd_ost_older_flat),
+            .select_vld    (rd_rsp_match_vld[i]),
+            .select_slot   (rd_rsp_match_slot[i])
+        );
+
+        oldest_select #(
+            .DEPTH (OST_DEPTH)
+        ) u_wr_rsp_match(
+            .candidate_vld (wr_rsp_match_candidate[i]),
+            .older_flat    (wr_rsp_ost_older_flat),
+            .select_vld    (wr_rsp_match_vld[i]),
+            .select_slot   (wr_rsp_match_slot[i])
+        );
+    end
+
+    oldest_select #(
+        .DEPTH (OST_DEPTH)
+    ) u_decerr_b_select(
+        .candidate_vld (decerr_b_candidate_vld),
+        .older_flat    (wr_rsp_ost_older_flat),
+        .select_vld    (decerr_b_sel_vld),
+        .select_slot   (decerr_b_sel_slot)
+    );
 
     always_comb begin
         ar_hit = 1'b0;
@@ -382,38 +409,16 @@ module axi_demux #(
     always_comb begin
         rd_rsp_sel_vld = 1'b0;
         rd_rsp_sel_idx = '0;
+        rd_rsp_sel_slot = '0;
         for (int unsigned off = 0; off < GST_NUM; off++) begin
             int unsigned gi;
             gi = (int'(rd_rsp_rr_idx) + off) % GST_NUM;
-            if (!rd_rsp_sel_vld && gst_r_vld[gi]) begin
+            if (!rd_rsp_sel_vld && gst_r_vld[gi] &&
+                rd_rsp_match_vld[gi] &&
+                rd_slot_ctx[rd_rsp_match_slot[gi]].gst_idx == gst_idx(gi)) begin
                 rd_rsp_sel_vld = 1'b1;
                 rd_rsp_sel_idx = gst_idx(gi);
-            end
-        end
-    end
-
-    assign rd_rsp_sel_match = r_sel_vld_q && rd_rsp_lookup_vld &&
-        rd_rsp_lookup_ctx.gst_idx == r_sel_idx_q;
-    assign rd_rsp_sel_slot = rd_rsp_lookup_slot;
-
-    always_comb begin
-        decerr_b_sel_vld = 1'b0;
-        decerr_b_sel_slot = '0;
-        for (int unsigned s = 0; s < OST_DEPTH; s++) begin
-            logic same_key_older;
-            same_key_older = 1'b0;
-            for (int unsigned j = 0; j < OST_DEPTH; j++) begin
-                if (wr_rsp_ost_slot_vld[j] &&
-                    wr_rsp_slot_key[j] == wr_rsp_slot_key[s] &&
-                    wr_rsp_slot_seq[j] < wr_rsp_slot_seq[s])
-                    same_key_older = 1'b1;
-            end
-            if (!decerr_b_sel_vld && wr_rsp_ost_slot_vld[s] &&
-                wr_rsp_slot_ctx[s].decerr &&
-                wr_rsp_slot_ctx[s].decerr_valid &&
-                !same_key_older) begin
-                decerr_b_sel_vld = 1'b1;
-                decerr_b_sel_slot = slot_idx(s);
+                rd_rsp_sel_slot = rd_rsp_match_slot[gi];
             end
         end
     end
@@ -421,20 +426,20 @@ module axi_demux #(
     always_comb begin
         wr_rsp_sel_vld = 1'b0;
         wr_rsp_sel_idx = '0;
+        wr_rsp_sel_slot = '0;
         for (int unsigned off = 0; off < GST_NUM; off++) begin
             int unsigned gi;
             gi = (int'(wr_rsp_rr_idx) + off) % GST_NUM;
-            if (!wr_rsp_sel_vld && gst_b_vld[gi]) begin
+            if (!wr_rsp_sel_vld && gst_b_vld[gi] &&
+                wr_rsp_match_vld[gi] &&
+                !wr_rsp_slot_ctx[wr_rsp_match_slot[gi]].decerr &&
+                wr_rsp_slot_ctx[wr_rsp_match_slot[gi]].gst_idx == gst_idx(gi)) begin
                 wr_rsp_sel_vld = 1'b1;
                 wr_rsp_sel_idx = gst_idx(gi);
+                wr_rsp_sel_slot = wr_rsp_match_slot[gi];
             end
         end
     end
-
-    assign wr_rsp_sel_match = b_raw_vld_q && wr_rsp_lookup_vld &&
-        wr_rsp_lookup_ctx.gst_idx == b_raw_idx_q &&
-        !wr_rsp_lookup_ctx.decerr;
-    assign wr_rsp_sel_slot = wr_rsp_lookup_slot;
 
     always_comb begin
         ar_issue_vld = '0;
@@ -460,12 +465,10 @@ module axi_demux #(
         end
     end
 
-    assign ar_decerr_sel = ar_fifo_rd_vld && !ar_hit &&
-        !r_sel_vld_q && !r_grant_vld_q && !r_raw_vld_q;
+    assign ar_decerr_sel = ar_fifo_rd_vld && !ar_hit && !rd_rsp_sel_vld;
     assign ar_fifo_rd_rdy = ar_hit ?
         (rd_ost_alloc_rdy && gst_ar_rdy[ar_gst_idx]) :
-        (!r_sel_vld_q && !r_grant_vld_q && !r_raw_vld_q &&
-            host_axi4_r_mst.rdy);
+        (!rd_rsp_sel_vld && host_axi4_r_mst.rdy);
     assign aw_fifo_rd_rdy = aw_hit ?
         (wr_data_ost_alloc_rdy && wr_rsp_ost_alloc_rdy &&
             gst_aw_rdy[aw_gst_idx]) :
@@ -515,117 +518,45 @@ module axi_demux #(
         assign gst_axi4_aw_msts[i].pkt = aw_pkt;
         assign gst_axi4_w_msts[i].vld = w_issue_vld[i];
         assign gst_axi4_w_msts[i].pkt = w_pkt;
-        assign gst_axi4_r_slvs[i].rdy = r_grant_vld_q &&
-            !r_raw_vld_q && r_grant_idx_q == gst_idx(i);
-        assign gst_axi4_b_slvs[i].rdy = !b_raw_vld_q && wr_rsp_sel_vld &&
-            wr_rsp_sel_idx == gst_idx(i);
+        assign gst_axi4_r_slvs[i].rdy = rd_rsp_sel_vld &&
+            rd_rsp_sel_idx == gst_idx(i) && host_axi4_r_mst.rdy;
+        assign gst_axi4_b_slvs[i].rdy = !b_sel_decerr && wr_rsp_sel_vld &&
+            wr_rsp_sel_idx == gst_idx(i) && host_axi4_b_mst.rdy;
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             rd_rsp_rr_idx <= '0;
             wr_rsp_rr_idx <= '0;
-            rd_free_vld_q <= 1'b0;
-            rd_free_slot_q <= '0;
-            r_sel_vld_q <= 1'b0;
-            r_sel_idx_q <= '0;
-            r_sel_id_q <= '0;
-            r_grant_vld_q <= 1'b0;
-            r_grant_idx_q <= '0;
-            r_grant_slot_q <= '0;
-            r_raw_vld_q <= 1'b0;
-            r_raw_id_q <= '0;
-            r_raw_data_q <= '0;
-            r_raw_resp_q <= AXI4_R_RESP_OKAY;
-            r_raw_last_q <= 1'b0;
-            r_raw_slot_q <= '0;
-            wr_free_vld_q <= 1'b0;
-            wr_free_slot_q <= '0;
-            b_raw_vld_q <= 1'b0;
-            b_raw_idx_q <= '0;
-            b_raw_id_q <= '0;
-            b_raw_resp_q <= AXI4_B_RESP_OKAY;
-            b_out_vld_q <= 1'b0;
-            b_out_id_q <= '0;
-            b_out_resp_q <= AXI4_B_RESP_OKAY;
-            b_out_slot_q <= '0;
         end else begin
-            rd_free_vld_q <= r_raw_hsk && r_raw_last_q;
-            rd_free_slot_q <= r_raw_slot_q;
-            wr_free_vld_q <= wr_rsp_hsk;
-            wr_free_slot_q <= b_out_slot_q;
-
-            if (r_raw_hsk)
-                r_raw_vld_q <= 1'b0;
-
-            if (r_grant_hsk) begin
-                r_grant_vld_q <= 1'b0;
-                r_raw_vld_q <= 1'b1;
-                r_raw_id_q <= gst_r_id[r_grant_idx_q];
-                r_raw_data_q <= gst_r_data[r_grant_idx_q];
-                r_raw_resp_q <= gst_r_resp[r_grant_idx_q];
-                r_raw_last_q <= gst_r_last[r_grant_idx_q];
-                r_raw_slot_q <= r_grant_slot_q;
-                rd_rsp_rr_idx <= r_grant_idx_q + 1'b1;
-            end
-
-            if (!r_grant_vld_q && !r_raw_vld_q && rd_rsp_sel_match) begin
-                r_grant_vld_q <= 1'b1;
-                r_grant_idx_q <= r_sel_idx_q;
-                r_grant_slot_q <= rd_rsp_sel_slot;
-                r_sel_vld_q <= 1'b0;
-            end else if (!r_grant_vld_q && !r_raw_vld_q && r_sel_vld_q &&
-                rd_rsp_lookup_vld) begin
-                r_sel_vld_q <= 1'b0;
-                rd_rsp_rr_idx <= r_sel_idx_q + 1'b1;
-            end else if (!r_grant_vld_q && !r_raw_vld_q && !r_sel_vld_q &&
-                rd_rsp_sel_vld) begin
-                r_sel_vld_q <= 1'b1;
-                r_sel_idx_q <= rd_rsp_sel_idx;
-                r_sel_id_q <= gst_r_id[rd_rsp_sel_idx];
-            end
-
-            if (wr_rsp_hsk)
-                b_out_vld_q <= 1'b0;
-
-            if (!b_out_vld_q) begin
-                if (b_sel_decerr) begin
-                    b_out_vld_q <= 1'b1;
-                    b_out_id_q <= wr_rsp_slot_key[decerr_b_sel_slot];
-                    b_out_resp_q <= AXI4_B_RESP_DECERR;
-                    b_out_slot_q <= decerr_b_sel_slot;
-                end else if (wr_rsp_sel_match) begin
-                    b_out_vld_q <= 1'b1;
-                    b_out_id_q <= b_raw_id_q;
-                    b_out_resp_q <= b_raw_resp_q;
-                    b_out_slot_q <= wr_rsp_sel_slot;
-                    b_raw_vld_q <= 1'b0;
-                end
-            end
-
-            if (!b_raw_vld_q && wr_rsp_sel_vld) begin
-                b_raw_vld_q <= 1'b1;
-                b_raw_idx_q <= wr_rsp_sel_idx;
-                b_raw_id_q <= gst_b_id[wr_rsp_sel_idx];
-                b_raw_resp_q <= gst_b_resp[wr_rsp_sel_idx];
+            if (rd_rsp_hsk && rd_rsp_sel_vld)
+                rd_rsp_rr_idx <= rd_rsp_sel_idx + 1'b1;
+            if (wr_rsp_hsk && !b_sel_decerr && wr_rsp_sel_vld)
                 wr_rsp_rr_idx <= wr_rsp_sel_idx + 1'b1;
-            end
         end
     end
 
-    assign host_axi4_r_mst.vld = ar_decerr_sel || r_raw_vld_q;
-    assign host_axi4_r_mst.pkt.id = ar_decerr_sel ? ar_pkt.id :
-        r_raw_id_q;
-    assign host_axi4_r_mst.pkt.data = ar_decerr_sel ? 32'h0 :
-        r_raw_data_q;
-    assign host_axi4_r_mst.pkt.resp = ar_decerr_sel ? AXI4_R_RESP_DECERR :
-        r_raw_resp_q;
-    assign host_axi4_r_mst.pkt.last = ar_decerr_sel ? 1'b1 :
-        r_raw_last_q;
+    assign rd_free_vld = rd_rsp_hsk && rd_rsp_sel_vld &&
+        gst_r_last[rd_rsp_sel_idx];
+    assign rd_free_slot = rd_rsp_sel_slot;
+    assign wr_free_vld = wr_rsp_hsk;
+    assign wr_free_slot = b_sel_decerr ? decerr_b_sel_slot : wr_rsp_sel_slot;
 
-    assign host_axi4_b_mst.vld = b_out_vld_q;
-    assign host_axi4_b_mst.pkt.id = b_out_id_q;
-    assign host_axi4_b_mst.pkt.resp = b_out_resp_q;
+    assign host_axi4_r_mst.vld = rd_rsp_sel_vld || ar_decerr_sel;
+    assign host_axi4_r_mst.pkt.id = ar_decerr_sel ? ar_pkt.id :
+        gst_r_id[rd_rsp_sel_idx];
+    assign host_axi4_r_mst.pkt.data = ar_decerr_sel ? 32'h0 :
+        gst_r_data[rd_rsp_sel_idx];
+    assign host_axi4_r_mst.pkt.resp = ar_decerr_sel ? AXI4_R_RESP_DECERR :
+        gst_r_resp[rd_rsp_sel_idx];
+    assign host_axi4_r_mst.pkt.last = ar_decerr_sel ? 1'b1 :
+        gst_r_last[rd_rsp_sel_idx];
+
+    assign host_axi4_b_mst.vld = b_sel_decerr || wr_rsp_sel_vld;
+    assign host_axi4_b_mst.pkt.id = b_sel_decerr ?
+        wr_rsp_slot_key[decerr_b_sel_slot] : gst_b_id[wr_rsp_sel_idx];
+    assign host_axi4_b_mst.pkt.resp = b_sel_decerr ? AXI4_B_RESP_DECERR :
+        gst_b_resp[wr_rsp_sel_idx];
 
     wire unused = (|rd_ost_alloc_slot) | (|wr_data_ost_alloc_slot) |
         (|wr_data_head_slot);
