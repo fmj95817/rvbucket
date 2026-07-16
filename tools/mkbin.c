@@ -63,13 +63,12 @@ static uint32_t parse_u32(const char *str)
 
 int main(int argc, char *argv[])
 {
-    if (argc < 4) {
+    if (argc < 3) {
         return 0;
     }
 
     bool linux_image = false;
-    const char *itcm_path;
-    const char *dtcm_path;
+    const char *firmware_path;
     const char *kernel_path = NULL;
     const char *initrd_path = NULL;
     const char *dtb_path = NULL;
@@ -78,35 +77,31 @@ int main(int argc, char *argv[])
     uint32_t initrd_load = 0;
     uint32_t dtb_load = 0;
 
-    if (argc >= 11 && strcmp(argv[1], "--linux") == 0) {
+    if (argc >= 10 && strcmp(argv[1], "--linux") == 0) {
         linux_image = true;
-        itcm_path = argv[2];
-        dtcm_path = argv[3];
-        kernel_path = argv[4];
-        initrd_path = argv[5];
-        dtb_path = argv[6];
-        bin_path = argv[7];
-        kernel_load = parse_u32(argv[8]);
-        initrd_load = parse_u32(argv[9]);
-        dtb_load = parse_u32(argv[10]);
+        firmware_path = argv[2];
+        kernel_path = argv[3];
+        initrd_path = argv[4];
+        dtb_path = argv[5];
+        bin_path = argv[6];
+        kernel_load = parse_u32(argv[7]);
+        initrd_load = parse_u32(argv[8]);
+        dtb_load = parse_u32(argv[9]);
     } else {
-        itcm_path = argv[1];
-        dtcm_path = argv[2];
-        bin_path = argv[3];
+        firmware_path = argv[1];
+        bin_path = argv[2];
     }
 
-    uint32_t itcm_size = 0;
-    uint32_t dtcm_size = 0;
+    uint32_t firmware_size = 0;
     uint32_t kernel_size = 0;
     uint32_t initrd_size = 0;
     uint32_t dtb_size = 0;
 
-    void *itcm = read_bin(itcm_path, &itcm_size);
-    void *dtcm = read_bin(dtcm_path, &dtcm_size);
+    void *firmware = read_bin(firmware_path, &firmware_size);
     void *kernel = NULL;
     void *initrd = NULL;
     void *dtb = NULL;
-    assert(itcm != NULL);
+    assert(firmware != NULL);
     if (linux_image) {
         kernel = read_bin(kernel_path, &kernel_size);
         initrd = read_bin(initrd_path, &initrd_size);
@@ -118,8 +113,8 @@ int main(int argc, char *argv[])
 
     FILE *bin = fopen(bin_path, "wb");
     write_u32(bin, linux_image ? BIN_TYPE_LINUX : BIN_TYPE_BARE);
-    write_u32(bin, itcm_size);
-    write_u32(bin, dtcm_size);
+    write_u32(bin, firmware_size);
+    write_u32(bin, 0);
     if (linux_image) {
         write_u32(bin, kernel_size);
         write_u32(bin, initrd_size);
@@ -138,13 +133,8 @@ int main(int argc, char *argv[])
         write_u32(bin, 0);
     }
 
-    write_blob_aligned(bin, itcm, itcm_size);
-    free(itcm);
-
-    if (dtcm != NULL) {
-        write_blob_aligned(bin, dtcm, dtcm_size);
-        free(dtcm);
-    }
+    write_blob_aligned(bin, firmware, firmware_size);
+    free(firmware);
     if (kernel != NULL) {
         write_blob_aligned(bin, kernel, kernel_size);
         free(kernel);

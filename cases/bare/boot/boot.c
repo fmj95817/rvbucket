@@ -3,8 +3,7 @@
 #include "drivers/pcm/pcm_map.h"
 
 #define FLASH_BASE   ((const uint32_t *)0x80000000)
-#define ITCM_BASE    ((volatile uint32_t *)0x10000000)
-#define DTCM_BASE    ((volatile uint32_t *)0x20000000)
+#define FIRMWARE_BASE ((volatile uint32_t *)0x40000000)
 #define UART_BC      (*(volatile uint32_t *)0x30000000u)
 #define UART_TX      (*(volatile uint32_t *)0x30000004u)
 #define GPIO_IN      (*(volatile uint32_t *)0x30001000u)
@@ -21,8 +20,8 @@
 
 typedef struct {
     uint32_t type;
-    uint32_t itcm_size;
-    uint32_t dtcm_size;
+    uint32_t firmware_size;
+    uint32_t reserved;
     uint32_t kernel_size;
     uint32_t initrd_size;
     uint32_t dtb_size;
@@ -109,18 +108,15 @@ static void print_progress(uint32_t sec, uint32_t cur_kb,
 {
     switch (sec) {
         case 0:
-            uart_puts("\rload ITCM: ");
+            uart_puts("\rload FIRMWARE: ");
             break;
         case 1:
-            uart_puts("\rload DTCM: ");
-            break;
-        case 2:
             uart_puts("\rload KERNEL: ");
             break;
-        case 3:
+        case 2:
             uart_puts("\rload INITRD: ");
             break;
-        case 4:
+        case 3:
             uart_puts("\rload DTB: ");
             break;
     }
@@ -138,7 +134,7 @@ static void print_progress(uint32_t sec, uint32_t cur_kb,
 static void copy_sec(const uint32_t *src, volatile uint32_t *dst,
                      uint32_t size, uint32_t sec)
 {
-    uint32_t words = size >> 2;
+    uint32_t words = (size + 3u) >> 2;
     uint32_t kb_total = div_u(size + 1023, 1024);
     uint32_t bytes = 0, next_tick = PROG_CHUNK_BYTES;
 
@@ -167,6 +163,11 @@ static void perf_clear(void)
     PCM_CLEAR = 1u;
 }
 
+static void sync_loaded_image(void)
+{
+    __asm__ volatile("fence rw, rw\n.word 0x0000100f" ::: "memory");
+}
+
 void boot_main(void)
 {
     uart_init();
@@ -180,42 +181,40 @@ void boot_main(void)
     const uint8_t *src = (const uint8_t *)hdr + 40;
     uint32_t a;
 
-    copy_sec((const uint32_t *)src, ITCM_BASE, hdr->itcm_size, 0);
-    a = align4(hdr->itcm_size);
-    src += a;
-
-    copy_sec((const uint32_t *)src, DTCM_BASE, hdr->dtcm_size, 1);
-    a = align4(hdr->dtcm_size);
+    copy_sec((const uint32_t *)src, FIRMWARE_BASE, hdr->firmware_size, 0);
+    a = align4(hdr->firmware_size);
     src += a;
 
     if (hdr->type != 1) {
         if (progress_on()) {
             uart_puts("\033[?25h>>>>> bootloader done, jumping to user program ...\n");
         }
+        sync_loaded_image();
         perf_clear();
-        __asm__ volatile("jr %0" : : "r"(ITCM_BASE));
+        __asm__ volatile("jr %0" : : "r"(FIRMWARE_BASE));
     }
 
-    copy_sec((const uint32_t *)src, (volatile uint32_t *)hdr->kernel_load, hdr->kernel_size, 2);
+    copy_sec((const uint32_t *)src, (volatile uint32_t *)hdr->kernel_load, hdr->kernel_size, 1);
     a = align4(hdr->kernel_size);
     src += a;
 
-    copy_sec((const uint32_t *)src, (volatile uint32_t *)hdr->initrd_load, hdr->initrd_size, 3);
+    copy_sec((const uint32_t *)src, (volatile uint32_t *)hdr->initrd_load, hdr->initrd_size, 2);
     a = align4(hdr->initrd_size);
     src += a;
 
-    copy_sec((const uint32_t *)src, (volatile uint32_t *)hdr->dtb_load, hdr->dtb_size, 4);
+    copy_sec((const uint32_t *)src, (volatile uint32_t *)hdr->dtb_load, hdr->dtb_size, 3);
 
     if (progress_on()) {
         uart_puts("\033[?25h>>>>> bootloader done, jumping to OpenSBI ...\n");
     }
+    sync_loaded_image();
     perf_clear();
     __asm__ volatile(
         "mv a0, zero\n\t"
         "mv a1, %1\n\t"
         "jr %0"
         :
-        : "r"(ITCM_BASE), "r"(hdr->dtb_load)
+        : "r"(FIRMWARE_BASE), "r"(hdr->dtb_load)
         : "a0", "a1"
     );
 }

@@ -157,6 +157,16 @@ _start:
 
     la gp, __global_pointer$
 
+    /* DDR is not reset-cleared; initialize the C zero-data contract. */
+    la t0, __bss_start
+    la t1, __bss_end
+1:
+    bgeu t0, t1, 2f
+    sw zero, 0(t0)
+    addi t0, t0, 4
+    j 1b
+2:
+
     la t0, _trap_entry
     csrw mtvec, t0
 

@@ -1,7 +1,6 @@
 #include <stdint.h>
 
-#define ITCM_BASE        0x10000000u
-#define DTCM_BASE        0x20000000u
+#define DDR_BASE         0x40000000u
 #define UART_BASE        0x30000000u
 #define UART_TX          (*(volatile uint32_t *)(UART_BASE + 0x04u))
 
@@ -78,14 +77,14 @@ static uint32_t table_pte(const uint32_t *table)
 static void setup_page_table(void)
 {
     for (uint32_t i = 0; i < 1024; i++) {
-        code_pt[i] = leaf_pte(ITCM_BASE + i * 4096u, PTE_R | PTE_X);
+        code_pt[i] = leaf_pte(DDR_BASE + i * 4096u,
+            PTE_R | PTE_W | PTE_X);
     }
 
     uint32_t target_vpn0 = ((uint32_t)ifetch_target >> 12u) & 0x3ffu;
     code_pt[target_vpn0] = 0;
 
-    root_pt[ITCM_BASE >> 22u] = table_pte(code_pt);
-    root_pt[DTCM_BASE >> 22u] = leaf_pte(DTCM_BASE, PTE_R | PTE_W);
+    root_pt[DDR_BASE >> 22u] = table_pte(code_pt);
     root_pt[UART_BASE >> 22u] = leaf_pte(UART_BASE, PTE_R | PTE_W);
 }
 

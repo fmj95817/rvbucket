@@ -1,8 +1,8 @@
 #include <stdint.h>
 
-#define DTCM_BASE           0x20000000u
+#define DDR_BASE            0x40000000u
 #define UART_BASE           0x30000000u
-#define HIGH_DTCM_BASE      0x40000000u
+#define DDR_ALIAS_BASE      0x50000000u
 #define UART_TX             (*(volatile uint32_t *)(UART_BASE + 0x04u))
 
 #define PTE_V               (1u << 0)
@@ -76,10 +76,11 @@ static uint32_t superpage_pte(uint32_t pa, uint32_t flags)
 
 static void setup_page_table(void)
 {
-    root_pt[0x10000000u >> 22u] = superpage_pte(0x10000000u, PTE_R | PTE_X);
-    root_pt[DTCM_BASE >> 22u] = superpage_pte(DTCM_BASE, PTE_R | PTE_W);
+    root_pt[DDR_BASE >> 22u] =
+        superpage_pte(DDR_BASE, PTE_R | PTE_W | PTE_X);
     root_pt[UART_BASE >> 22u] = superpage_pte(UART_BASE, PTE_R | PTE_W);
-    root_pt[HIGH_DTCM_BASE >> 22u] = superpage_pte(DTCM_BASE, PTE_R | PTE_W);
+    root_pt[DDR_ALIAS_BASE >> 22u] =
+        superpage_pte(DDR_BASE, PTE_R | PTE_W);
 }
 
 uint32_t s_trap_handler(uint32_t scause, uint32_t sepc, uint32_t stval)
@@ -221,9 +222,9 @@ asm(
     "    li t1, 1\n"
     "    sw t1, 0(t0)\n"
     "    la t0, target\n"
-    "    li t1, 0x20000000\n"
-    "    sub t0, t0, t1\n"
     "    li t1, 0x40000000\n"
+    "    sub t0, t0, t1\n"
+    "    li t1, 0x50000000\n"
     "    add t0, t0, t1\n"
     "    li t1, 0x5a5a0001\n"
     "    sw t1, 0(t0)\n"

@@ -1,8 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define DDR_BASE      0x40000000u
-#define CODE_ADDR     (DDR_BASE + 0x00100000u)
+#define CODE_ADDR     0x40400000u
 #define L1_LINE_SIZE  64u
 #define L1_SET_STRIDE (128u * L1_LINE_SIZE)
 

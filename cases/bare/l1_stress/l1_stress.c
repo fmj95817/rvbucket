@@ -1,13 +1,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define DDR_BASE        0x40000000u
+#define DDR_TEST_BASE   0x41000000u
 #define L1_LINE_SIZE    64u
 #define L1_SET_STRIDE   (128u * L1_LINE_SIZE)
 #define LINE_NUM        4u
 #define CROSS_BASE_OFF  (LINE_NUM * L1_SET_STRIDE)
 
-static volatile uint8_t *const ddr = (volatile uint8_t *)DDR_BASE;
+static volatile uint8_t *const ddr = (volatile uint8_t *)DDR_TEST_BASE;
 
 static uint8_t pattern(unsigned line, unsigned off)
 {

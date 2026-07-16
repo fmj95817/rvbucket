@@ -1,11 +1,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define DDR_BASE       0x40000000u
+#define DDR_TEST_BASE  0x41000000u
 #define L1_LINE_SIZE   64u
 #define L1_SET_STRIDE  (128u * L1_LINE_SIZE)
 
-static volatile uint32_t *const ddr = (volatile uint32_t *)DDR_BASE;
+static volatile uint32_t *const ddr = (volatile uint32_t *)DDR_TEST_BASE;
 
 static volatile uint32_t *line_ptr(unsigned line)
 {

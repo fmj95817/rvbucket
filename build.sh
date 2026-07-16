@@ -40,7 +40,8 @@ LINUX_CC="${LINUX_CROSS_PREFIX}-gcc"
 LINUX_USER_CFLAGS=(-Wall -Os -static -s -ffunction-sections -fdata-sections -Wl,--gc-sections)
 LINUX_BUILD_DIR="./build/sw/linux"
 LINUX_USER_BIN_DIR="${LINUX_BUILD_DIR}/bin"
-LINUX_KERNEL_LOAD="0x40000000"
+# RV32 Linux requires the kernel image to be PMD-aligned (4MB).
+LINUX_KERNEL_LOAD="0x40400000"
 LINUX_INITRD_LOAD="0x45000000"
 LINUX_DTB_LOAD="0x44f00000"
 
@@ -57,23 +58,22 @@ function build_opensbi_case {
     local fw_dir="${OPEN_SBI_DIR}/build/platform/rvbucket/firmware"
     local fw_bin="${fw_dir}/fw_payload.bin"
     local fw_elf="${fw_dir}/fw_payload.elf"
-    local empty_dtcm="${output_dir}/${case_name}.dtcm"
+    local firmware="${output_dir}/${case_name}.fw"
     local bin="${output_dir}/${case_name}.bin"
     local hex="${output_dir}/${case_name}.hex"
 
     mkdir -p "${output_dir}"
 
-    ${MAKE} -C "${OPEN_SBI_DIR}" \
+    ${MAKE} -B -C "${OPEN_SBI_DIR}" \
         PLATFORM=rvbucket \
         CROSS_COMPILE="${CROSS_PREFIX}-" \
         FW_PAYLOAD_OFFSET=0x50000 \
         FW_PIC=n
 
     cp "${fw_elf}" "${output_dir}/${case_name}.elf"
-    cp "${fw_bin}" "${output_dir}/${case_name}.itcm"
-    : > "${empty_dtcm}"
+    cp "${fw_bin}" "${firmware}"
 
-    ${MKBIN} "${fw_bin}" "${empty_dtcm}" "${bin}"
+    ${MKBIN} "${firmware}" "${bin}"
     ${BIN2X} "${bin}" hex > "${hex}"
 }
 
@@ -242,7 +242,7 @@ function build_linux_case {
     local kernel="${LINUX_DIR}/arch/riscv/boot/Image"
     local initrd="${BUSYBOX_DIR}/rootfs.cpio"
     local dtb="${LINUX_DIR}/arch/riscv/boot/dts/rvbucket/rvbucket.dtb"
-    local empty_dtcm="${output_dir}/${case_name}.dtcm"
+    local firmware="${output_dir}/${case_name}.fw"
     local bin="${output_dir}/${case_name}.bin"
     local hex="${output_dir}/${case_name}.hex"
 
@@ -253,11 +253,10 @@ function build_linux_case {
     build_linux_opensbi
 
     cp "${fw_elf}" "${output_dir}/${case_name}.elf"
-    cp "${fw_bin}" "${output_dir}/${case_name}.itcm"
+    cp "${fw_bin}" "${firmware}"
     cp "${dtb}" "${output_dir}/${case_name}.dtb"
-    : > "${empty_dtcm}"
 
-    ${MKBIN} --linux "${fw_bin}" "${empty_dtcm}" \
+    ${MKBIN} --linux "${firmware}" \
         "${kernel}" "${initrd}" "${dtb}" "${bin}" \
         "${LINUX_KERNEL_LOAD}" "${LINUX_INITRD_LOAD}" "${LINUX_DTB_LOAD}"
     ${BIN2X} "${bin}" hex > "${hex}"
@@ -291,8 +290,7 @@ function build_sw_case {
 
     local lds="$(find ${case_dir} -name *.lds)"
     local elf="${output_dir}/${case_name}.elf"
-    local itcm="${output_dir}/${case_name}.itcm"
-    local dtcm="${output_dir}/${case_name}.dtcm"
+    local firmware="${output_dir}/${case_name}.fw"
     local bin="${output_dir}/${case_name}.bin"
     local dis="${output_dir}/${case_name}.S"
     local hex="${output_dir}/${case_name}.hex"
@@ -319,18 +317,10 @@ function build_sw_case {
     done
 
     ${CROSS_LD} ${CROSS_LDFLAGS[@]} ${ld_flags[@]} -o "${elf}" "${objs[@]}"
-    ${CROSS_OBJCOPY} -S "${elf}" -O binary \
-        --only-section='.text*' \
-        "${itcm}"
-    ${CROSS_OBJCOPY} -S "${elf}" -O binary \
-        --only-section='.*data*' \
-        --only-section='.*bss*' \
-        --only-section='.got*' \
-        --only-section='.gnu.linkonce.*' \
-        "${dtcm}"
+    ${CROSS_OBJCOPY} -S "${elf}" -O binary "${firmware}"
     ${CROSS_OBJDUMP} -D "${elf}" > "${dis}"
 
-    ${MKBIN} "${itcm}" "${dtcm}" "${bin}"
+    ${MKBIN} "${firmware}" "${bin}"
     ${BIN2X} "${bin}" hex > "${hex}"
 
     if [ "${case_name}" = "boot" ]; then

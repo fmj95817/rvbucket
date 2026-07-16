@@ -3,29 +3,18 @@
     .type _boot,@function
 
 _boot:
-    /* sp = DTCM_BASE + DTCM_SIZE (256KB, grows down) */
-    li sp, 0x20040000
+    /* Reserve the top 8KB of the 2MB DDR firmware window for the stack. */
+    li sp, 0x40200000
 
-    /* read flash header to check dtcm overflow */
+    /* Check firmware_size + stack_size <= firmware window size. */
     li t0, 0x80000000
-    lw t1, 0(t0)
-    li t2, 1
-    bltu t2, t1, 1f          /* first word > 1 → bare: itcm_size */
-
-    /* new header: type (t1) is 0 or 1 */
-    lw t1, 8(t0)             /* dtcm_size */
-    j 2f
-
-1:  /* bare header */
-    lw t1, 4(t0)             /* dtcm_size */
-
-2:  /* check dtcm_size + stack_margin <= DTCM_SIZE */
-    li t2, 2048              /* 2KB stack margin */
+    lw t1, 4(t0)
+    li t2, 0x2000
     add t1, t1, t2
-    li t2, 0x40000           /* DTCM_SIZE = 256KB */
-    bge t2, t1, 3f
-    j .                      /* overflow: spin forever */
+    li t2, 0x200000
+    bgeu t2, t1, 1f
+    j .
 
-3:
+1:
     call boot_main
     j .
