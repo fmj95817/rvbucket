@@ -3,8 +3,7 @@ ENTRY(_start)
 
 MEMORY
 {
-    ITCM (rwx)  : ORIGIN = 0x10000000, LENGTH = 0x80000
-    DTCM (rw)   : ORIGIN = 0x20000000, LENGTH = 0x40000
+    DDR (rwx) : ORIGIN = 0x40000000, LENGTH = 0x200000
 }
 
 SECTIONS
@@ -14,46 +13,50 @@ SECTIONS
         *(.init)
         *(.text.entry)
         *(.text .text.*)
-    } > ITCM
+    } > DDR
 
-    /* data segment */
     .data : {
         *(.data .data.*)
         *(.rodata*)
-    } > DTCM
+    } > DDR
 
     .sdata : {
         __global_pointer$ = . + 0x800;
         *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2)
         *(.srodata*)
         *(.sdata .sdata.* .gnu.linkonce.s.*)
-    } > DTCM
+    } > DDR
 
-    /* bss segment */
-    .sbss : {
+    . = ALIGN(4);
+    PROVIDE(__bss_start = .);
+    .sbss (NOLOAD) : {
         *(.sbss .sbss.* .gnu.linkonce.sb.*)
         *(.scommon)
-    } > DTCM
-    .bss : {
+    } > DDR
+    .bss (NOLOAD) : {
         *(.bss .bss.*)
-    } > DTCM
+        *(COMMON)
+    } > DDR
+    . = ALIGN(4);
+    PROVIDE(__bss_end = .);
 
     .got : {
         *(.got .got.*)
-    } > DTCM
+    } > DDR
 
     /* End of uninitalized data segement */
     . = ALIGN(8);
     PROVIDE( _end = . );
     PROVIDE( end = . );
 
-    /* stack */
-    PROVIDE(__stack_top = ORIGIN(DTCM) + LENGTH(DTCM));
-	PROVIDE(__stack_size = 0x2000);
+    PROVIDE(__stack_top = ORIGIN(DDR) + LENGTH(DDR));
+    PROVIDE(__stack_size = 0x2000);
 
-    .stack ORIGIN(DTCM) + LENGTH(DTCM) - __stack_size :
+    .stack ORIGIN(DDR) + LENGTH(DDR) - __stack_size (NOLOAD) :
     {
         PROVIDE( _heap_end = . );
         . = __stack_size;
-    } > DTCM
+    } > DDR
+
+    ASSERT(_end <= ADDR(.stack), "firmware exceeds DDR load window")
 }

@@ -1,10 +1,10 @@
 #include <stdint.h>
 
-#define DTCM_BASE           0x20000000u
+#define DDR_BASE            0x40000000u
 #define UART_BASE           0x30000000u
 #define UART_TX             (*(volatile uint32_t *)(UART_BASE + 0x04u))
 
-#define VA_TEST             0x40000000u
+#define VA_TEST             0x50000000u
 
 #define PTE_V               (1u << 0)
 #define PTE_R               (1u << 1)
@@ -74,8 +74,8 @@ __attribute__((used, noinline, section(".text"))) static void uart_puts_raw(
 
 static void setup_page_table(void)
 {
-    root_pt[0x10000000u >> 22u] = pte(0x10000000u, PTE_R | PTE_X);
-    root_pt[DTCM_BASE >> 22u] = pte(DTCM_BASE, PTE_R | PTE_W);
+    root_pt[DDR_BASE >> 22u] =
+        pte(DDR_BASE, PTE_R | PTE_W | PTE_X);
     root_pt[UART_BASE >> 22u] = pte(UART_BASE, PTE_R | PTE_W);
     root_pt[VA_TEST >> 22u] = table_pte(l1_test);
     l1_test[(VA_TEST >> 12u) & 0x3ffu] = ptr_pte((void *)page_a);
@@ -118,15 +118,15 @@ asm(
     ".globl s_entry\n"
     ".type s_entry,@function\n"
     "s_entry:\n"
-    "    li t0, 0x40000fff\n"
+    "    li t0, 0x50000fff\n"
     "    lhu t1, 0(t0)\n"
     "    li t2, 0x7812\n"
     "    bne t1, t2, 9f\n"
-    "    li t0, 0x40000ffe\n"
+    "    li t0, 0x50000ffe\n"
     "    lw t1, 0(t0)\n"
     "    li t2, 0x56781234\n"
     "    bne t1, t2, 9f\n"
-    "    li t0, 0x40000fff\n"
+    "    li t0, 0x50000fff\n"
     "    li t1, 0xa1b2\n"
     "    sh t1, 0(t0)\n"
     "    la t0, page_a\n"
@@ -139,7 +139,7 @@ asm(
     "    lbu t1, 0(t0)\n"
     "    li t2, 0xa1\n"
     "    bne t1, t2, 9f\n"
-    "    li t0, 0x40000ffe\n"
+    "    li t0, 0x50000ffe\n"
     "    li t1, 0xc3d4e5f6\n"
     "    sw t1, 0(t0)\n"
     "    la t0, page_a\n"

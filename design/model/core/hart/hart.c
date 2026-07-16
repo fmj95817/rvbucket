@@ -182,8 +182,8 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
         .latency = conf->l1_latency,
         .stg_fifo_depth = conf->l1i_stg_fifo_depth,
         .ost_depth = conf->l1_ost_depth,
-        .bypass_bases = { conf->boot_rom_base, conf->itcm_base },
-        .bypass_sizes = { conf->boot_rom_size, conf->itcm_size }
+        .bypass_bases = { conf->boot_rom_base },
+        .bypass_sizes = { conf->boot_rom_size }
     };
     s->l1i.mod.cycle = s->mod.cycle;
     BTI_SLV_CONNECT(&s->l1i, , s, pa_i_);
@@ -200,8 +200,8 @@ void hart_construct(hart_t *s, const char *parent, const char *name,
         .latency = conf->l1_latency,
         .stg_fifo_depth = conf->l1d_stg_fifo_depth,
         .ost_depth = conf->l1_ost_depth,
-        .bypass_bases = { conf->boot_rom_base, conf->itcm_base, conf->dtcm_base, conf->cfg_base },
-        .bypass_sizes = { conf->boot_rom_size, conf->itcm_size, conf->dtcm_size, conf->cfg_size }
+        .bypass_bases = { conf->boot_rom_base, conf->cfg_base },
+        .bypass_sizes = { conf->boot_rom_size, conf->cfg_size }
     };
     s->l1d.mod.cycle = s->mod.cycle;
     BTI_SLV_CONNECT(&s->l1d, , s, l1d_);

@@ -32,8 +32,8 @@ typedef struct program {
 
 typedef struct program_header {
     u32 type;
-    u32 itcm_size;
-    u32 dtcm_size;
+    u32 firmware_size;
+    u32 reserved;
     u32 kernel_size;
     u32 initrd_size;
     u32 dtb_size;
@@ -110,8 +110,7 @@ static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
         return;
     }
 
-    u32 itcm_size = header->itcm_size;
-    u32 dtcm_size = header->dtcm_size;
+    u32 firmware_size = header->firmware_size;
     u32 kernel_size = header->kernel_size;
     u32 initrd_size = header->initrd_size;
     u32 dtb_size = header->dtb_size;
@@ -119,7 +118,7 @@ static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
     u32 initrd_load = header->initrd_load;
     u32 dtb_load = header->dtb_load;
 
-    u32 off = LINUX_BIN_HEADER_SIZE + align4(itcm_size) + align4(dtcm_size);
+    u32 off = LINUX_BIN_HEADER_SIZE + align4(firmware_size);
     DBG_CHECK(off <= program->size);
     DBG_CHECK(off + align4(kernel_size) <= program->size);
     ram_load(&sim_top->ddr, program->code + off, kernel_load - DDR_BASE, kernel_size);

@@ -14,8 +14,9 @@
 #define MSTATUS_MPP_MASK    (3u << 11)
 #define MSTATUS_MPP_S       (1u << 11)
 
-#define VA_DATA             0x40000000u
-#define VA_FUNC             0x50000000u
+#define DDR_BASE            0x40000000u
+#define VA_DATA             0x50000000u
+#define VA_FUNC             0x60000000u
 
 extern void s_entry(void);
 extern void fn_a(void);
@@ -79,11 +80,11 @@ static inline void csr_write_mepc(uintptr_t val)
 
 static void setup_page_table(void)
 {
-    root_pt[0x10000000u >> 22u] = pte(0x10000000u, PTE_R | PTE_X);
+    root_pt[DDR_BASE >> 22u] =
+        pte(DDR_BASE, PTE_R | PTE_W | PTE_X);
     root_pt[VA_FUNC >> 22u] = table_pte(l1_func);
     l1_func[(VA_FUNC >> 12u) & 0x3ffu] = func_pte(fn_a);
 
-    root_pt[0x20000000u >> 22u] = pte(0x20000000u, PTE_R | PTE_W);
     root_pt[UART_BASE >> 22u] = pte(UART_BASE, PTE_R | PTE_W);
 
     root_pt[VA_DATA >> 22u] = table_pte(l1_data);
@@ -145,7 +146,7 @@ asm(
     ".globl s_entry\n"
     ".type s_entry,@function\n"
     "s_entry:\n"
-    "    li t0, 0x40000000\n"
+    "    li t0, 0x50000000\n"
     "    lw t1, 0(t0)\n"
     "    li t2, 0x13572468\n"
     "    bne t1, t2, 9f\n"
@@ -153,13 +154,13 @@ asm(
     "    bne t1, t2, 9f\n"
     "    lw t1, 0(t0)\n"
     "    bne t1, t2, 9f\n"
-    "    li t3, 0x50000000\n"
+    "    li t3, 0x60000000\n"
     "    jalr ra, 0(t3)\n"
     "    jalr ra, 0(t3)\n"
     "    li t2, 0x11110001\n"
     "    bne a0, t2, 9f\n"
     "    la t0, l1_data\n"
-    "    li t1, 0x40000000\n"
+    "    li t1, 0x50000000\n"
     "    srli t1, t1, 12\n"
     "    andi t1, t1, 1023\n"
     "    slli t1, t1, 2\n"
@@ -171,7 +172,7 @@ asm(
     "    or t2, t2, t4\n"
     "    sw t2, 0(t0)\n"
     "    la t0, l1_func\n"
-    "    li t1, 0x50000000\n"
+    "    li t1, 0x60000000\n"
     "    srli t1, t1, 12\n"
     "    andi t1, t1, 1023\n"
     "    slli t1, t1, 2\n"
@@ -183,11 +184,11 @@ asm(
     "    or t2, t2, t4\n"
     "    sw t2, 0(t0)\n"
     "    sfence.vma\n"
-    "    li t0, 0x40000000\n"
+    "    li t0, 0x50000000\n"
     "    lw t1, 0(t0)\n"
     "    li t2, 0x24681357\n"
     "    bne t1, t2, 9f\n"
-    "    li t3, 0x50000000\n"
+    "    li t3, 0x60000000\n"
     "    jalr ra, 0(t3)\n"
     "    li t2, 0x22220002\n"
     "    bne a0, t2, 9f\n"

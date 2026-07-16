@@ -19,10 +19,6 @@
 typedef struct hart_conf {
     u32 boot_rom_base;
     u32 boot_rom_size;
-    u32 itcm_base;
-    u32 itcm_size;
-    u32 dtcm_base;
-    u32 dtcm_size;
     u32 cfg_base;
     u32 cfg_size;
     u32 ifu_ctrlq_depth;

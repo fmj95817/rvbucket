@@ -2,6 +2,8 @@
 #include <stdio.h>
 
 #define DDR_BASE           0x40000000u
+#define REDIRECT_PA        0x40400000u
+#define DATA_ALIAS_BASE    0x50000000u
 #define PTE_V              (1u << 0)
 #define PTE_R              (1u << 1)
 #define PTE_W              (1u << 2)
@@ -55,9 +57,10 @@ static uint32_t encode_addi(uint32_t rd, uint32_t rs1, uintptr_t value)
 static void setup_redirect_code(void)
 {
     uintptr_t next_pc = (uintptr_t)s_satp_after;
-    volatile uint32_t *code = (volatile uint32_t *)(DDR_BASE +
+    volatile uint32_t *code = (volatile uint32_t *)(REDIRECT_PA +
         (next_pc & 0x003fffffu));
-    uintptr_t flag_addr = (uintptr_t)&good_path;
+    uintptr_t flag_addr = DATA_ALIAS_BASE +
+        ((uintptr_t)&good_path - DDR_BASE);
 
     /* li t0,&good_path; li t1,1; sw t1,0(t0); ecall */
     code[0] = encode_lui(5u, flag_addr);
@@ -126,10 +129,10 @@ int main(void)
     stale_path = 0;
     bad_mcause = 0;
 
-    root_pt[0x10000000u >> 22u] =
-        superpage_pte(DDR_BASE, PTE_R | PTE_X);
-    root_pt[0x20000000u >> 22u] =
-        superpage_pte(0x20000000u, PTE_R | PTE_W);
+    root_pt[DDR_BASE >> 22u] =
+        superpage_pte(REDIRECT_PA, PTE_R | PTE_X);
+    root_pt[DATA_ALIAS_BASE >> 22u] =
+        superpage_pte(DDR_BASE, PTE_R | PTE_W);
     setup_redirect_code();
 
     enter_supervisor();

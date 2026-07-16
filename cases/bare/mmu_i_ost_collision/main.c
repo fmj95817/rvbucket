@@ -1,14 +1,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define DDR_BASE         0x40000000u
-#define ITCM_BASE        0x10000000u
-#define DTCM_BASE        0x20000000u
+#define FIRMWARE_BASE    0x40000000u
+#define USER_CODE_PA     0x40400000u
 #define USER_CODE_VA     0x00177000u
 #define USER_DATA_VA     0x00178000u
-#define USER_DATA_PA     (DDR_BASE + 0x1000u)
+#define USER_DATA_PA     0x40401000u
 #define KERNEL_TRAP_VA   0xc0400000u
-#define KERNEL_TRAP_PA   (DDR_BASE + 0x00400000u)
+#define KERNEL_TRAP_PA   0x40800000u
 #define PTE_V            (1u << 0)
 #define PTE_R            (1u << 1)
 #define PTE_W            (1u << 2)
@@ -75,14 +74,12 @@ uint32_t trap_handler(uint32_t mcause, uint32_t mepc, uint32_t mtval)
 
 static void setup_page_table(void)
 {
-    root_pt[ITCM_BASE >> 22u] =
-        superpage_pte(ITCM_BASE, PTE_R | PTE_X);
-    root_pt[DTCM_BASE >> 22u] =
-        superpage_pte(DTCM_BASE, PTE_R | PTE_W);
+    root_pt[FIRMWARE_BASE >> 22u] =
+        superpage_pte(FIRMWARE_BASE, PTE_R | PTE_W | PTE_X);
     root_pt[USER_CODE_VA >> 22u] =
         (((uintptr_t)user_l0_pt >> 12u) << 10u) | PTE_V;
     user_l0_pt[(USER_CODE_VA >> 12u) & 0x3ffu] =
-        superpage_pte(DDR_BASE, PTE_R | PTE_X | PTE_U);
+        superpage_pte(USER_CODE_PA, PTE_R | PTE_X | PTE_U);
     user_l0_pt[(USER_DATA_VA >> 12u) & 0x3ffu] =
         superpage_pte(USER_DATA_PA, PTE_R | PTE_W | PTE_U);
     root_pt[KERNEL_TRAP_VA >> 22u] =
@@ -91,7 +88,7 @@ static void setup_page_table(void)
 
 static void copy_user_payload(void)
 {
-    volatile uint32_t *dst = (volatile uint32_t *)DDR_BASE;
+    volatile uint32_t *dst = (volatile uint32_t *)USER_CODE_PA;
     const uint32_t *src = user_payload_start;
     uint32_t word_num = (uint32_t)(user_payload_end - user_payload_start);
 

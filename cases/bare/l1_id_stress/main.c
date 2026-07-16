@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define DDR_EXEC_ADDR  0x40000000u
+#define DDR_EXEC_ADDR  0x40400000u
 #define DDR_DATA_ADDR  0x41000000u
 #define OUTER_ITER     32u
 #define DATA_LINE_NUM  1024u

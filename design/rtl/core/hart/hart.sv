@@ -259,9 +259,7 @@ module hart(
         .STG_FIFO_DEPTH (`HART_L1I_STG_FIFO_DEPTH),
         .OST_DEPTH      (`HART_L1_OST_DEPTH),
         .BYPASS0_BASE (32'h00000000),
-        .BYPASS0_SIZE (32'h00000800),
-        .BYPASS1_BASE (32'h10000000),
-        .BYPASS1_SIZE (32'h00080000)
+        .BYPASS0_SIZE (32'h00000800)
     ) u_l1i(
         .clk              (clk),
         .rst_n            (rst_n),
@@ -286,12 +284,8 @@ module hart(
         .OST_DEPTH      (`HART_L1_OST_DEPTH),
         .BYPASS0_BASE (32'h00000000),
         .BYPASS0_SIZE (32'h00000800),
-        .BYPASS1_BASE (32'h10000000),
-        .BYPASS1_SIZE (32'h00080000),
-        .BYPASS2_BASE (32'h20000000),
-        .BYPASS2_SIZE (32'h00040000),
-        .BYPASS3_BASE (32'h30000000),
-        .BYPASS3_SIZE (32'h02000000)
+        .BYPASS1_BASE (32'h30000000),
+        .BYPASS1_SIZE (32'h02000000)
     ) u_l1d(
         .clk              (clk),
         .rst_n            (rst_n),

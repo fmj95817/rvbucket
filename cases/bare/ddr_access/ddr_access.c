@@ -1,11 +1,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define DDR_BASE 0x40000000u
+#define DDR_TEST_BASE 0x41000000u
 
 int main(void)
 {
-    volatile uint32_t *ddr = (volatile uint32_t *)DDR_BASE;
+    volatile uint32_t *ddr = (volatile uint32_t *)DDR_TEST_BASE;
 
     printf("ddr_access: start\n");
     ddr[0] = 0x11223344u;

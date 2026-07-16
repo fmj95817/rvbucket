@@ -27,8 +27,6 @@ module rv32g(
     ext_irq_if_t.slv  gtimer_irq_slv
 );
     localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
-    localparam ITCM_AW = 19;
-    localparam DTCM_AW = 18;
 
     axi4_aw_if_t hart_i_aw();
     axi4_w_if_t hart_i_w();
@@ -70,12 +68,6 @@ module rv32g(
     apb_rsp_if_t plic_rsp();
     bti_req_if_t boot_rom_req();
     bti_rsp_if_t boot_rom_rsp();
-    bti_req_if_t itcm_i_req();
-    bti_rsp_if_t itcm_i_rsp();
-    bti_req_if_t itcm_d_req();
-    bti_rsp_if_t itcm_d_rsp();
-    bti_req_if_t dtcm_req();
-    bti_rsp_if_t dtcm_rsp();
     core_timer_if_t core_timer();
     core_m_irq_if_t core_m_irq();
     ext_irq_if_t ext_irq();
@@ -152,12 +144,6 @@ module rv32g(
         .hart_d_axi4_r_mst    (cbi_d_r),
         .boot_rom_bti_req_mst (boot_rom_req),
         .boot_rom_bti_rsp_slv (boot_rom_rsp),
-        .itcm_i_bti_req_mst   (itcm_i_req),
-        .itcm_i_bti_rsp_slv   (itcm_i_rsp),
-        .itcm_d_bti_req_mst   (itcm_d_req),
-        .itcm_d_bti_rsp_slv   (itcm_d_rsp),
-        .dtcm_bti_req_mst     (dtcm_req),
-        .dtcm_bti_rsp_slv     (dtcm_rsp),
         .cfg_apb_req_mst      (cfg_req),
         .cfg_apb_rsp_slv      (cfg_rsp),
         .mm_i_axi4_aw_mst     (mm_i_aw),
@@ -249,30 +235,6 @@ module rv32g(
         .cs          (boot_rom_cs),
         .addr        (boot_rom_addr),
         .data        (boot_rom_data)
-    );
-
-    bti_dp_sram #(
-        .BTI_AW  (`RV_AW),
-        .BTI_DW  (`RV_XLEN),
-        .SRAM_AW (ITCM_AW)
-    ) u_itcm(
-        .clk           (clk),
-        .rst_n         (rst_n),
-        .bti_r_req_slv (itcm_i_req),
-        .bti_r_rsp_mst (itcm_i_rsp),
-        .bti_w_req_slv (itcm_d_req),
-        .bti_w_rsp_mst (itcm_d_rsp)
-    );
-
-    bti_sram #(
-        .BTI_AW  (`RV_AW),
-        .BTI_DW  (`RV_XLEN),
-        .SRAM_AW (DTCM_AW)
-    ) u_dtcm(
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .bti_req_slv (dtcm_req),
-        .bti_rsp_mst (dtcm_rsp)
     );
 
     l2 u_l2(

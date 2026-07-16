@@ -10,8 +10,6 @@
 - **L1 Cache**: ASM中支持可配置组相联L1指令缓存和数据缓存，支持写回；RTL缓存优化仍在开发中
 - **Boot ROM**: 2 KB
 - **Flash**: 32 MB
-- **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
-- **DTCM (Data Tightly Coupled Memory)**: 64 KB
 - **DDR**: 可配置大小，支持预加载Linux镜像
 - **UART**: 基本TX/RX功能
 - **GPIO**: 24位双向GPIO，支持输出/输入/中断三种模式，Web UI模拟按钮和开关
@@ -27,7 +25,7 @@
 - **MMU与Sv32分页**: ASM和RTL均支持TLB和页表遍历器，RTL已可运行Linux smoke。
 - **L1缓存**: ASM支持可配置组相联L1指令/数据缓存和bypass模式；RTL缓存优化待实现。
 - **陷阱处理**: 机器态/监管态陷阱、中断、委托机制。
-- **简单SoC系统**: Boot ROM、Flash、ITCM/DTCM、DDR、UART、GPIO、GTimer、ACLINT、PLIC。
+- **简单SoC系统**: Boot ROM、Flash、DDR、UART、GPIO、GTimer、ACLINT、PLIC。
 - **ASM（架构仿真模型）**: 精确到时钟周期的仿真，支持VCD波形和接口事务trace。
 - **双UI**: Web UI Dashboard（xterm.js终端 + GPIO面板）和 Terminal UI（vim风格命令模式）。
 - **RTL实现**: SystemVerilog实现，接口由 `itfgen.py` 自动生成，支持VCS/Verilator/FPGA。

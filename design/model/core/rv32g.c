@@ -8,9 +8,6 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     bool smp_opt = conf->smp_opt;
 
     BTI_IF_CONSTRUCT(s, boot_rom_, 1);
-    BTI_IF_CONSTRUCT(s, itcm_i_, 1);
-    BTI_IF_CONSTRUCT(s, itcm_d_, 1);
-    BTI_IF_CONSTRUCT(s, dtcm_, 1);
     APB_IF_CONSTRUCT(s, aclint_cfg_, 1);
     APB_IF_CONSTRUCT(s, plic_cfg_, 1);
     AXI4_SIM_PROT_IF_CONSTRUCT(s, hart_i_, 1, smp_opt);
@@ -34,10 +31,6 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     hart_conf_t hart_conf = {
         .boot_rom_base = conf->boot_rom_base,
         .boot_rom_size = conf->boot_rom_size,
-        .itcm_base = conf->itcm_base,
-        .itcm_size = conf->itcm_size,
-        .dtcm_base = conf->dtcm_base,
-        .dtcm_size = conf->dtcm_size,
         .cfg_base = conf->cfg_base,
         .cfg_size = conf->cfg_size,
         .ifu_ctrlq_depth = conf->hart_ifu_ctrlq_depth,
@@ -64,9 +57,6 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     AXI4_MST_CONNECT(&s->cbi, mm_d_, s, cbi_mm_d_);
     APB_MST_IMPORT(&s->cbi, peri_, s, peri_);
     BTI_MST_CONNECT(&s->cbi, boot_rom_, s, boot_rom_);
-    BTI_MST_CONNECT(&s->cbi, itcm_i_, s, itcm_i_);
-    BTI_MST_CONNECT(&s->cbi, itcm_d_, s, itcm_d_);
-    BTI_MST_CONNECT(&s->cbi, dtcm_, s, dtcm_);
     APB_MST_CONNECT(&s->cbi, aclint_cfg_, s, aclint_cfg_);
     APB_MST_CONNECT(&s->cbi, plic_cfg_, s, plic_cfg_);
     AXI4_SLV_CONNECT(&s->cbi, hart_i_, s, hart_i_);
@@ -74,10 +64,6 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     cbi_conf_t cbi_conf = {
         .boot_rom_base = conf->boot_rom_base,
         .boot_rom_size = conf->boot_rom_size,
-        .itcm_base = conf->itcm_base,
-        .itcm_size = conf->itcm_size,
-        .dtcm_base = conf->dtcm_base,
-        .dtcm_size = conf->dtcm_size,
         .mm_base = conf->mm_base,
         .mm_size = conf->mm_size,
         .cfg_base = conf->cfg_base,
@@ -125,17 +111,6 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     rom_construct(&s->boot_rom, s->mod.hier_name, "u_boot_rom", ROM_MODE_BTI,
         conf->boot_rom_size, g_boot_code, g_boot_code_size, conf->boot_rom_base);
 
-    BTI_SLV_ARR_CONNECT(&s->itcm, , 0, s, itcm_i_);
-    BTI_SLV_ARR_CONNECT(&s->itcm, , 1, s, itcm_d_);
-    s->itcm.mod.cycle = s->mod.cycle;
-    ram_construct(&s->itcm, s->mod.hier_name, "u_itcm", 2, RAM_MODE_BTI,
-        conf->itcm_size, conf->itcm_base, conf->itcm_latency);
-
-    BTI_SLV_ARR_CONNECT(&s->dtcm, , 0, s, dtcm_);
-    s->dtcm.mod.cycle = s->mod.cycle;
-    ram_construct(&s->dtcm, s->mod.hier_name, "u_dtcm", 1, RAM_MODE_BTI,
-        conf->dtcm_size, conf->dtcm_base, conf->dtcm_latency);
-
     s->aclint.mod.cycle = s->mod.cycle;
     APB_SLV_CONNECT(&s->aclint, cfg_, s, aclint_cfg_);
     s->aclint.core_timer_out = &s->core_timer_sig_itf;
@@ -171,16 +146,11 @@ void rv32g_reset(rv32g_t *s)
     hart_reset(&s->hart);
     cbi_reset(&s->cbi);
     rom_reset(&s->boot_rom);
-    ram_reset(&s->itcm);
-    ram_reset(&s->dtcm);
     aclint_reset(&s->aclint);
     plic_reset(&s->plic);
     l2_reset(&s->l2);
 
     BTI_IF_RESET(s, boot_rom_);
-    BTI_IF_RESET(s, itcm_i_);
-    BTI_IF_RESET(s, itcm_d_);
-    BTI_IF_RESET(s, dtcm_);
     APB_IF_RESET(s, aclint_cfg_);
     APB_IF_RESET(s, plic_cfg_);
     AXI4_IF_RESET(s, hart_i_);
@@ -200,16 +170,11 @@ void rv32g_free(rv32g_t *s)
     hart_free(&s->hart);
     cbi_free(&s->cbi);
     rom_free(&s->boot_rom);
-    ram_free(&s->itcm);
-    ram_free(&s->dtcm);
     aclint_free(&s->aclint);
     plic_free(&s->plic);
     l2_free(&s->l2);
 
     BTI_IF_FREE(s, boot_rom_);
-    BTI_IF_FREE(s, itcm_i_);
-    BTI_IF_FREE(s, itcm_d_);
-    BTI_IF_FREE(s, dtcm_);
     APB_IF_FREE(s, aclint_cfg_);
     APB_IF_FREE(s, plic_cfg_);
     AXI4_IF_FREE(s, hart_i_);
@@ -227,8 +192,6 @@ static void rv32g_rest_clock(rv32g_t *s)
 {
     cbi_clock(&s->cbi);
     rom_clock(&s->boot_rom);
-    ram_clock(&s->itcm);
-    ram_clock(&s->dtcm);
     aclint_clock(&s->aclint);
     plic_clock(&s->plic);
     l2_clock(&s->l2);
@@ -241,9 +204,6 @@ void rv32g_clock(rv32g_t *s)
     rv32g_rest_clock(s);
 
     BTI_IF_DBG_CLOCK(s, boot_rom_);
-    BTI_IF_DBG_CLOCK(s, itcm_i_);
-    BTI_IF_DBG_CLOCK(s, itcm_d_);
-    BTI_IF_DBG_CLOCK(s, dtcm_);
     APB_IF_DBG_CLOCK(s, aclint_cfg_);
     APB_IF_DBG_CLOCK(s, plic_cfg_);
     AXI4_IF_DBG_CLOCK(s, hart_i_);

@@ -7,8 +7,6 @@
 #define L2_SIZE        (128u * KiB)
 #define L2_WAY_NUM     4u
 #define L2_LATENCY     1u
-#define ITCM_LATENCY   1u
-#define DTCM_LATENCY   1u
 
 #define CORE_BUS_STG_FIFO_DEPTH 16u
 #define CORE_BUS_OST_DEPTH 8u
@@ -17,10 +15,6 @@
 
 #define BOOT_ROM_BASE  0x00000000u
 #define BOOT_ROM_SIZE  (2u * KiB)
-#define ITCM_BASE      0x10000000u
-#define ITCM_SIZE      (512u * KiB)
-#define DTCM_BASE      0x20000000u
-#define DTCM_SIZE      (256u * KiB)
 #define MM_BASE        0x40000000u
 #define MM_SIZE        (2u * GiB)
 #define CFG_BASE       0x30000000u

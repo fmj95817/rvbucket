@@ -208,8 +208,7 @@ module sim_top(
         input string path
     );
         int unsigned image_type;
-        int unsigned itcm_size;
-        int unsigned dtcm_size;
+        int unsigned firmware_size;
         int unsigned kernel_size;
         int unsigned initrd_size;
         int unsigned dtb_size;
@@ -223,8 +222,7 @@ module sim_top(
             $readmemh(path, staging_mem);
 
             image_type = staging_mem[0];
-            itcm_size = staging_mem[1];
-            dtcm_size = staging_mem[2];
+            firmware_size = staging_mem[1];
             kernel_size = staging_mem[3];
             initrd_size = staging_mem[4];
             dtb_size = staging_mem[5];
@@ -232,8 +230,7 @@ module sim_top(
             initrd_load = staging_mem[7];
             dtb_load = staging_mem[8];
 
-            boot_words = BIN_HEADER_WORDS + align4_words(itcm_size) +
-                align4_words(dtcm_size);
+            boot_words = BIN_HEADER_WORDS + align4_words(firmware_size);
             image_words = boot_words;
             if (image_type == BIN_TYPE_LINUX) begin
                 image_words += align4_words(kernel_size) +
