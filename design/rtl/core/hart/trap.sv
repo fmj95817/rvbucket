@@ -13,7 +13,7 @@ module trap(
     csr_trap_write_rsp_if_t.slv csr_trap_write_rsp_slv,
     trap_send_if_t.mst trap_send_mst
 );
-    typedef enum logic [1:0] {IDLE, WRITE, REDIRECT} state_t;
+    typedef enum logic [1:0] {IDLE, PREPARE, WRITE, REDIRECT} state_t;
     state_t state;
     logic [1:0] write_idx;
     logic [2:0] write_count;
@@ -21,6 +21,19 @@ module trap(
     logic [31:0] wr_val[0:3];
     logic [31:0] target_pc;
     logic [1:0] target_priv;
+    logic event_mret_q;
+    logic event_sret_q;
+    logic event_is_interrupt_q;
+    logic event_delegated_q;
+    logic [1:0] event_source_priv_q;
+    logic [4:0] event_cause_q;
+    logic [31:0] event_epc_q;
+    logic [31:0] event_tval_q;
+    logic [31:0] event_mstatus_q;
+    logic [31:0] event_mepc_q;
+    logic [31:0] event_sepc_q;
+    logic [31:0] event_mtvec_q;
+    logic [31:0] event_stvec_q;
 
     wire [31:0] pending = csr_trap_state_slv.pkt.mip & csr_trap_state_slv.pkt.mie;
     wire [31:0] m_pending = pending & ~csr_trap_state_slv.pkt.mideleg;
@@ -56,6 +69,18 @@ module trap(
         (fch_expt_slv.vld ? fch_expt_slv.pkt.pc : ldst_expt_slv.pkt.pc);
     wire [31:0] expt_tval = ex_expt_slv.vld ? ex_expt_slv.pkt.tval :
         (fch_expt_slv.vld ? fch_expt_slv.pkt.tval : ldst_expt_slv.pkt.tval);
+    wire event_is_interrupt = irq_valid && !expt_valid;
+    wire [1:0] event_source_priv = event_is_interrupt ?
+        exu_state_slv.pkt.priv : expt_priv;
+    wire [4:0] event_cause = event_is_interrupt ? irq_cause :
+        (expt_cause == HART_EXPT_CAUSE_ECALL ?
+        (expt_priv == 2'b11 ? 5'd11 : (expt_priv == 2'b01 ? 5'd9 : 5'd8)) :
+        expt_cause);
+    wire event_delegated = event_is_interrupt ? irq_to_s :
+        (expt_priv != 2'b11 && csr_trap_state_slv.pkt.medeleg[event_cause]);
+    wire [31:0] event_epc = event_is_interrupt ?
+        (exu_state_slv.pkt.wfi ? exu_state_slv.pkt.wfi_resume_pc :
+        exu_state_slv.pkt.irq_epc) : expt_pc;
 
     integer i;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -65,67 +90,82 @@ module trap(
             write_count <= 0;
             target_pc <= 0;
             target_priv <= 2'b11;
+            event_mret_q <= 1'b0;
+            event_sret_q <= 1'b0;
+            event_is_interrupt_q <= 1'b0;
+            event_delegated_q <= 1'b0;
+            event_source_priv_q <= 2'b11;
+            event_cause_q <= '0;
+            event_epc_q <= '0;
+            event_tval_q <= '0;
+            event_mstatus_q <= '0;
+            event_mepc_q <= '0;
+            event_sepc_q <= '0;
+            event_mtvec_q <= '0;
+            event_stvec_q <= '0;
             for (i = 0; i < 4; i = i + 1) begin wr_addr[i] <= 0; wr_val[i] <= 0; end
         end else begin
             case (state)
                 IDLE: if (event_valid) begin
+                    event_mret_q <= event_mret;
+                    event_sret_q <= event_sret;
+                    event_is_interrupt_q <= event_is_interrupt;
+                    event_delegated_q <= event_delegated;
+                    event_source_priv_q <= event_source_priv;
+                    event_cause_q <= event_cause;
+                    event_epc_q <= event_epc;
+                    event_tval_q <= expt_valid ? expt_tval : 32'b0;
+                    event_mstatus_q <= csr_trap_state_slv.pkt.mstatus;
+                    event_mepc_q <= csr_trap_state_slv.pkt.mepc;
+                    event_sepc_q <= csr_trap_state_slv.pkt.sepc;
+                    event_mtvec_q <= csr_trap_state_slv.pkt.mtvec;
+                    event_stvec_q <= csr_trap_state_slv.pkt.stvec;
+                    state <= PREPARE;
+                end
+                PREPARE: begin
                     write_idx <= 0;
-                    if (event_mret) begin
+                    if (event_mret_q) begin
                         wr_addr[0] <= 12'h300;
-                        wr_val[0] <= ((csr_trap_state_slv.pkt.mstatus & ~32'h00001888) |
-                            (csr_trap_state_slv.pkt.mstatus[7] ? 32'h00000008 : 32'b0) |
+                        wr_val[0] <= ((event_mstatus_q & ~32'h00001888) |
+                            (event_mstatus_q[7] ? 32'h00000008 : 32'b0) |
                             32'h00000080) &
-                            (csr_trap_state_slv.pkt.mstatus[12:11] == 2'b11 ?
+                            (event_mstatus_q[12:11] == 2'b11 ?
                             32'hffffffff : ~32'h00020000);
                         write_count <= 1;
-                        target_pc <= csr_trap_state_slv.pkt.mepc & 32'hfffffffc;
-                        target_priv <= csr_trap_state_slv.pkt.mstatus[12:11];
-                    end else if (event_sret) begin
+                        target_pc <= event_mepc_q & 32'hfffffffc;
+                        target_priv <= event_mstatus_q[12:11];
+                    end else if (event_sret_q) begin
                         wr_addr[0] <= 12'h300;
-                        wr_val[0] <= (csr_trap_state_slv.pkt.mstatus & ~32'h00020122) |
-                            (csr_trap_state_slv.pkt.mstatus[5] ? 32'h00000002 : 32'b0) |
+                        wr_val[0] <= (event_mstatus_q & ~32'h00020122) |
+                            (event_mstatus_q[5] ? 32'h00000002 : 32'b0) |
                             32'h00000020;
                         write_count <= 1;
-                        target_pc <= csr_trap_state_slv.pkt.sepc & 32'hfffffffc;
-                        target_priv <= csr_trap_state_slv.pkt.mstatus[8] ? 2'b01 : 2'b00;
+                        target_pc <= event_sepc_q & 32'hfffffffc;
+                        target_priv <= event_mstatus_q[8] ? 2'b01 : 2'b00;
                     end else begin : take_trap
-                        logic [4:0] cause;
-                        logic is_interrupt;
-                        logic delegated;
-                        logic [31:0] epc;
-                        logic [1:0] source_priv;
-                        is_interrupt = irq_valid && !expt_valid;
-                        source_priv = is_interrupt ? exu_state_slv.pkt.priv : expt_priv;
-                        cause = is_interrupt ? irq_cause :
-                            (expt_cause == HART_EXPT_CAUSE_ECALL ?
-                            (expt_priv == 2'b11 ? 5'd11 : (expt_priv == 2'b01 ? 5'd9 : 5'd8)) :
-                            expt_cause);
-                        delegated = is_interrupt ? irq_to_s :
-                            (expt_priv != 2'b11 && csr_trap_state_slv.pkt.medeleg[cause]);
-                        epc = is_interrupt ?
-                            (exu_state_slv.pkt.wfi ? exu_state_slv.pkt.wfi_resume_pc : exu_state_slv.pkt.irq_epc) :
-                            expt_pc;
                         wr_addr[0] <= 12'h300;
-                        wr_val[0] <= delegated ?
-                            ((csr_trap_state_slv.pkt.mstatus & ~32'h00000122) |
-                            (csr_trap_state_slv.pkt.mstatus[1] ? 32'h00000020 : 32'b0) |
-                            (source_priv == 2'b01 ? 32'h00000100 : 32'b0)) :
-                            ((csr_trap_state_slv.pkt.mstatus & ~32'h00001888) |
-                            (csr_trap_state_slv.pkt.mstatus[3] ? 32'h00000080 : 32'b0) |
-                            {19'b0, source_priv, 11'b0});
-                        wr_addr[1] <= delegated ? 12'h142 : 12'h342;
-                        wr_val[1] <= {is_interrupt, 26'b0, cause};
-                        wr_addr[2] <= delegated ? 12'h141 : 12'h341;
-                        wr_val[2] <= epc & 32'hfffffffc;
-                        wr_addr[3] <= delegated ? 12'h143 : 12'h343;
-                        wr_val[3] <= expt_valid ? expt_tval : 0;
+                        wr_val[0] <= event_delegated_q ?
+                            ((event_mstatus_q & ~32'h00000122) |
+                            (event_mstatus_q[1] ? 32'h00000020 : 32'b0) |
+                            (event_source_priv_q == 2'b01 ? 32'h00000100 : 32'b0)) :
+                            ((event_mstatus_q & ~32'h00001888) |
+                            (event_mstatus_q[3] ? 32'h00000080 : 32'b0) |
+                            {19'b0, event_source_priv_q, 11'b0});
+                        wr_addr[1] <= event_delegated_q ? 12'h142 : 12'h342;
+                        wr_val[1] <= {event_is_interrupt_q, 26'b0, event_cause_q};
+                        wr_addr[2] <= event_delegated_q ? 12'h141 : 12'h341;
+                        wr_val[2] <= event_epc_q & 32'hfffffffc;
+                        wr_addr[3] <= event_delegated_q ? 12'h143 : 12'h343;
+                        wr_val[3] <= event_tval_q;
                         write_count <= 4;
-                        target_pc <= (delegated ? {csr_trap_state_slv.pkt.stvec[31:2], 2'b00} :
-                            {csr_trap_state_slv.pkt.mtvec[31:2], 2'b00}) +
-                            ((is_interrupt && (delegated ? csr_trap_state_slv.pkt.stvec[1:0] == 2'b01 :
-                            csr_trap_state_slv.pkt.mtvec[1:0] == 2'b01)) ?
-                            {25'b0, cause, 2'b00} : 32'b0);
-                        target_priv <= delegated ? 2'b01 : 2'b11;
+                        target_pc <= (event_delegated_q ?
+                            {event_stvec_q[31:2], 2'b00} :
+                            {event_mtvec_q[31:2], 2'b00}) +
+                            ((event_is_interrupt_q &&
+                            (event_delegated_q ? event_stvec_q[1:0] == 2'b01 :
+                            event_mtvec_q[1:0] == 2'b01)) ?
+                            {25'b0, event_cause_q, 2'b00} : 32'b0);
+                        target_priv <= event_delegated_q ? 2'b01 : 2'b11;
                     end
                     state <= WRITE;
                 end
@@ -151,55 +191,4 @@ module trap(
     assign trap_exu_ctrl_mst.pkt.irq_epc = wfi_wakeup ? exu_state_slv.pkt.wfi_resume_pc : target_pc;
     assign trap_exu_ctrl_mst.pkt.wfi = state != REDIRECT && !wfi_wakeup;
 
-`ifndef SYNTHESIS
-    logic rtl_progress_en;
-    longint unsigned rtl_progress_cycle;
-
-    initial begin
-        rtl_progress_en = $test$plusargs("rtl_progress");
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            rtl_progress_cycle <= 0;
-        end else if (rtl_progress_en) begin
-            rtl_progress_cycle <= rtl_progress_cycle + 1;
-            if (state == IDLE && event_valid) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d event ex=%0b fch=%0b ldst=%0b irq=%0b type=%0d cause=%0d priv=%0d pc=%08x tval=%08x mstatus=%08x medeleg=%08x mtvec=%08x stvec=%08x mepc=%08x sepc=%08x",
-                    rtl_progress_cycle,
-                    ex_expt_slv.vld,
-                    fch_expt_slv.vld,
-                    ldst_expt_slv.vld,
-                    irq_valid,
-                    ex_expt_slv.vld ? ex_expt_slv.pkt.expt_type : HART_EXPT_TYPE_EXCEPTION,
-                    expt_cause,
-                    expt_priv,
-                    expt_pc,
-                    expt_tval,
-                    csr_trap_state_slv.pkt.mstatus,
-                    csr_trap_state_slv.pkt.medeleg,
-                    csr_trap_state_slv.pkt.mtvec,
-                    csr_trap_state_slv.pkt.stvec,
-                    csr_trap_state_slv.pkt.mepc,
-                    csr_trap_state_slv.pkt.sepc);
-            end
-            if (trap_csr_write_req_mst.vld) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d csr_write addr=%03x val=%08x idx=%0d count=%0d rsp=%0b/%0b",
-                    rtl_progress_cycle,
-                    trap_csr_write_req_mst.pkt.addr,
-                    trap_csr_write_req_mst.pkt.val,
-                    write_idx,
-                    write_count,
-                    csr_trap_write_rsp_slv.vld,
-                    csr_trap_write_rsp_slv.pkt.ok);
-            end
-            if (trap_send_mst.vld) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d redirect pc=%08x priv=%0d",
-                    rtl_progress_cycle,
-                    trap_send_mst.pkt.target_pc,
-                    target_priv);
-            end
-        end
-    end
-`endif
 endmodule

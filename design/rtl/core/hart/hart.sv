@@ -24,9 +24,11 @@ module hart(
     perf_l1_if_t.mst  perf_l1i_mst,
     perf_l1_if_t.mst  perf_l1d_mst
 );
-    fch_req_if_t fch_req_if();
+    fch_req_if_t ifu_fch_req_if();
+    fch_req_if_t hbi_fch_req_if();
     fch_rsp_if_t fch_rsp_if();
-    ex_req_if_t ex_req_if();
+    ex_req_if_t ifu_ex_req_if();
+    ex_req_if_t exu_ex_req_if();
     ex_rsp_if_t ex_rsp_if();
     fl_req_if_t fl_req_if();
     bpu_pred_req_if_t bpu_pred_req_if();
@@ -66,12 +68,54 @@ module hart(
     bti_rsp_if_t pa_i_bti_rsp_if();
     bti_req_if_t pa_d_bti_req_if();
     bti_rsp_if_t pa_d_bti_rsp_if();
+    bti_req_if_t pa_ptw_bti_req_if();
+    bti_rsp_if_t pa_ptw_bti_rsp_if();
+    bti_req_if_t l1d_bti_req_if();
+    bti_rsp_if_t l1d_bti_rsp_if();
+
+    localparam int FCH_REQ_DW = 32;
+    localparam int EX_REQ_DW = 98;
+    logic [FCH_REQ_DW-1:0] fch_req_data;
+    logic [EX_REQ_DW-1:0] ex_req_data;
+
+    bidir_reg_slice #(
+        .DW (FCH_REQ_DW)
+    ) u_fch_req_reg_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (1'b0),
+        .src_vld  (ifu_fch_req_if.vld),
+        .src_rdy  (ifu_fch_req_if.rdy),
+        .src_data (ifu_fch_req_if.pkt),
+        .dst_vld  (hbi_fch_req_if.vld),
+        .dst_rdy  (hbi_fch_req_if.rdy),
+        .dst_data (fch_req_data)
+    );
+
+    assign hbi_fch_req_if.pkt = fch_req_data;
+
+    bidir_reg_slice #(
+        .DW (EX_REQ_DW)
+    ) u_ex_req_reg_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (fl_req_if.vld || tlb_flush_if.vld || l1i_flush_if.vld),
+        .src_vld  (ifu_ex_req_if.vld),
+        .src_rdy  (ifu_ex_req_if.rdy),
+        .src_data (ifu_ex_req_if.pkt),
+        .dst_vld  (exu_ex_req_if.vld),
+        .dst_rdy  (exu_ex_req_if.rdy),
+        .dst_data (ex_req_data)
+    );
+
+    assign exu_ex_req_if.pkt = ex_req_data;
+
     ifu u_ifu(
         .clk         (clk),
         .rst_n       (rst_n),
-        .fch_req_mst (fch_req_if),
+        .fch_req_mst (ifu_fch_req_if),
         .fch_rsp_slv (fch_rsp_if),
-        .ex_req_mst  (ex_req_if),
+        .ex_req_mst  (ifu_ex_req_if),
         .ex_rsp_slv  (ex_rsp_if),
         .fl_req_mst  (fl_req_if),
         .bpu_pred_req_mst (bpu_pred_req_if),
@@ -97,7 +141,7 @@ module hart(
     exu u_exu(
         .clk          (clk),
         .rst_n        (rst_n),
-        .ex_req_slv   (ex_req_if),
+        .ex_req_slv   (exu_ex_req_if),
         .ex_rsp_mst   (ex_rsp_if),
         .fl_req_slv   (fl_req_if),
         .ldst_req_mst (exu_lsu_ldst_req_if),
@@ -170,6 +214,8 @@ module hart(
         .pa_i_rsp_slv      (pa_i_bti_rsp_if),
         .pa_d_req_mst      (pa_d_bti_req_if),
         .pa_d_rsp_slv      (pa_d_bti_rsp_if),
+        .ptw_req_mst       (pa_ptw_bti_req_if),
+        .ptw_rsp_slv       (pa_ptw_bti_rsp_if),
         .exu_state_slv     (exu_state_if),
         .csr_mmu_state_slv (csr_mmu_state_if),
         .tlb_flush_slv     (tlb_flush_if),
@@ -181,7 +227,7 @@ module hart(
     hbi u_hbi(
         .clk           (clk),
         .rst_n         (rst_n),
-        .fch_req_slv   (fch_req_if),
+        .fch_req_slv   (hbi_fch_req_if),
         .fch_rsp_mst   (fch_rsp_if),
         .mmu_fch_expt_slv (mmu_fch_expt_if),
         .ldst_req_slv  (lsu_hbi_ldst_req_if),
@@ -192,10 +238,26 @@ module hart(
         .d_bti_rsp_slv (hbi_d_bti_rsp_if)
     );
 
+    bti_mux2 #(
+        .STG_FIFO_DEPTH (`HART_L1D_BTI_MUX_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`HART_L1D_BTI_MUX_OST_DEPTH)
+    ) u_l1d_bti_mux(
+        .clk           (clk),
+        .rst_n         (rst_n),
+        .host0_req_slv (pa_d_bti_req_if),
+        .host0_rsp_mst (pa_d_bti_rsp_if),
+        .host1_req_slv (pa_ptw_bti_req_if),
+        .host1_rsp_mst (pa_ptw_bti_rsp_if),
+        .gst_req_mst   (l1d_bti_req_if),
+        .gst_rsp_slv   (l1d_bti_rsp_if)
+    );
+
     l1 #(
-        .RO           (1),
-        .SIZE         (`L1I_SIZE),
-        .WAY_NUM      (`L1I_WAY_NUM),
+        .RO             (1),
+        .SIZE           (`L1I_SIZE),
+        .WAY_NUM        (`L1I_WAY_NUM),
+        .STG_FIFO_DEPTH (`HART_L1I_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`HART_L1_OST_DEPTH),
         .BYPASS0_BASE (32'h00000000),
         .BYPASS0_SIZE (32'h00000800),
         .BYPASS1_BASE (32'h10000000),
@@ -216,10 +278,12 @@ module hart(
     );
 
     l1 #(
-        .RO           (0),
-        .FULL_BYPASS  (0),
-        .SIZE         (`L1D_SIZE),
-        .WAY_NUM      (`L1D_WAY_NUM),
+        .RO             (0),
+        .FULL_BYPASS    (0),
+        .SIZE           (`L1D_SIZE),
+        .WAY_NUM        (`L1D_WAY_NUM),
+        .STG_FIFO_DEPTH (`HART_L1D_STG_FIFO_DEPTH),
+        .OST_DEPTH      (`HART_L1_OST_DEPTH),
         .BYPASS0_BASE (32'h00000000),
         .BYPASS0_SIZE (32'h00000800),
         .BYPASS1_BASE (32'h10000000),
@@ -231,8 +295,8 @@ module hart(
     ) u_l1d(
         .clk              (clk),
         .rst_n            (rst_n),
-        .host_bti_req_slv (pa_d_bti_req_if),
-        .host_bti_rsp_mst (pa_d_bti_rsp_if),
+        .host_bti_req_slv (l1d_bti_req_if),
+        .host_bti_rsp_mst (l1d_bti_rsp_if),
         .flush_slv        (l1d_flush_if),
         .flush_ack_mst    (l1d_flush_ack_if),
         .mem_axi4_aw_mst   (d_axi4_aw_mst),
@@ -243,36 +307,4 @@ module hart(
         .perf_mst          (perf_l1d_mst)
     );
 
-`ifndef SYNTHESIS
-    logic rtl_progress_en;
-    longint unsigned rtl_progress_cycle;
-
-    initial begin
-        rtl_progress_en = $test$plusargs("rtl_progress");
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            rtl_progress_cycle <= 0;
-        end else if (rtl_progress_en) begin
-            rtl_progress_cycle <= rtl_progress_cycle + 1;
-            if (rtl_progress_cycle[19:0] == 20'h0) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d pc=%08x ex=%0b/%0b fch=%0b/%0b:%0b/%0b ldst=%0b/%0b:%0b/%0b pa_i=%0b/%0b:%0b/%0b pa_d=%0b/%0b:%0b/%0b flush_i=%0b flush_d=%0b",
-                    rtl_progress_cycle,
-                    exu_state_if.pkt.pc,
-                    ex_req_if.vld, ex_req_if.rdy,
-                    fch_req_if.vld, fch_req_if.rdy,
-                    fch_rsp_if.vld, fch_rsp_if.rdy,
-                    lsu_hbi_ldst_req_if.vld, lsu_hbi_ldst_req_if.rdy,
-                    lsu_hbi_ldst_rsp_if.vld, lsu_hbi_ldst_rsp_if.rdy,
-                    pa_i_bti_req_if.vld, pa_i_bti_req_if.rdy,
-                    pa_i_bti_rsp_if.vld, pa_i_bti_rsp_if.rdy,
-                    pa_d_bti_req_if.vld, pa_d_bti_req_if.rdy,
-                    pa_d_bti_rsp_if.vld, pa_d_bti_rsp_if.rdy,
-                    l1i_flush_if.vld,
-                    l1d_flush_if.vld);
-            end
-        end
-    end
-`endif
 endmodule

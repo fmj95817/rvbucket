@@ -33,6 +33,7 @@
         }
     ],
     "jobs": 4,
+    "impl_strategy": "Performance_ExplorePostRoutePhysOpt",
 
     "ip": {
         "clk_wiz": {

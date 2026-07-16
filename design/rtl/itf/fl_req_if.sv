@@ -12,5 +12,5 @@ interface fl_req_if_t;
     modport mst (output vld);
     modport slv (input vld);
 
-    `RVB_ITF_TRACE_WHEN("drv", "", vld)
+    `RVB_ITF_TRACE_WHEN_NOPKT("drv", "", vld)
 endinterface

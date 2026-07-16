@@ -295,6 +295,7 @@ def gen_tcl(proj, board, root, out_dir, flow, mig_prj_path):
         defines.append("RVB_QSPI_HAS_IO23")
     jobs = int(proj.get("jobs", 8))
     max_threads = int(proj.get("max_threads", jobs))
+    impl_strategy = proj.get("impl_strategy")
 
     lines = []
     lines.append(f"set_param general.maxThreads {max_threads}")
@@ -427,6 +428,10 @@ def gen_tcl(proj, board, root, out_dir, flow, mig_prj_path):
     lines.append("report_utilization -file reports/post_synth_util.rpt")
     lines.append('if {$RVB_FLOW eq "syn"} { exit }')
     lines.append("")
+    if impl_strategy:
+        lines.append(
+            f"set_property strategy {q(impl_strategy)} [get_runs impl_1]"
+        )
     lines.append(f"launch_runs impl_1 -jobs {jobs}")
     lines.append("wait_on_run impl_1")
     lines.append("open_run impl_1")

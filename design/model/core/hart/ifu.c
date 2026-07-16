@@ -13,6 +13,7 @@ void ifu_construct(ifu_t *ifu, const char *parent, const char *name,
     DBG_CHECK(conf);
     DBG_CHECK(conf->ctrlq_depth > 0);
     DBG_CHECK(conf->fch_ost_depth > 0);
+    DBG_CHECK(conf->fch_ost_depth < (1u << 31));
     DBG_CHECK(ifu->bpu_pred_req_mst != NULL);
     DBG_CHECK(ifu->bpu_pred_rsp_slv != NULL);
     DBG_CHECK(ifu->bpu_update_mst != NULL);
@@ -38,7 +39,14 @@ void ifu_construct(ifu_t *ifu, const char *parent, const char *name,
 
     dbg_vcd_add_sig("fch_pc", DBG_SIG_TYPE_REG, 32, &ifu->fch.pc);
     dbg_vcd_add_sig("fch_state", DBG_SIG_TYPE_REG, 2, &ifu->fch.state);
-    dbg_vcd_add_sig("fch_epoch", DBG_SIG_TYPE_REG, 32, &ifu->fch.epoch);
+    dbg_vcd_add_sig("fch_req_ptr", DBG_SIG_TYPE_REG, 32,
+        &ifu->fch.req_ptr);
+    dbg_vcd_add_sig("fch_rsp_ptr", DBG_SIG_TYPE_REG, 32,
+        &ifu->fch.rsp_ptr);
+    dbg_vcd_add_sig("fch_discard_end_ptr", DBG_SIG_TYPE_REG, 32,
+        &ifu->fch.discard_end_ptr);
+    dbg_vcd_add_sig("fch_discard_vld", DBG_SIG_TYPE_REG, 1,
+        &ifu->fch.discard_vld);
     dbg_vcd_add_sig("fch_ost_count", DBG_SIG_TYPE_REG, 32,
         &ifu->fch_ost.count);
     dbg_vcd_add_sig("fch_rspq_num", DBG_SIG_TYPE_REG, 32,
@@ -56,7 +64,10 @@ void ifu_reset(ifu_t *ifu)
     ifu->fch.state = IFU_FCH_STATE_REQ;
     ifu->fch.pc = ifu->reset_pc;
     ifu->fch.ir = 0;
-    ifu->fch.epoch = 0;
+    ifu->fch.req_ptr = 0;
+    ifu->fch.rsp_ptr = 0;
+    ifu->fch.discard_end_ptr = 0;
+    ifu->fch.discard_vld = false;
     ifu->back_blocked = false;
     ostq_reset(&ifu->fch_ost);
     fifo_reset(&ifu->fch_rspq);
@@ -137,9 +148,50 @@ static void ifu_update_fch_state(ifu_t *ifu)
     ifu->fch.state = IFU_FCH_STATE_REQ;
 }
 
+static u32 ifu_fch_ptr_next(const ifu_t *ifu, u32 ptr)
+{
+    const u32 ptr_num = ifu->fch_ost_depth * 2u;
+    DBG_CHECK(ptr < ptr_num);
+    return ptr + 1u == ptr_num ? 0 : ptr + 1u;
+}
+
+static u32 ifu_fch_ptr_distance(const ifu_t *ifu, u32 begin, u32 end)
+{
+    const u32 ptr_num = ifu->fch_ost_depth * 2u;
+    DBG_CHECK(begin < ptr_num);
+    DBG_CHECK(end < ptr_num);
+    return end >= begin ? end - begin : ptr_num - begin + end;
+}
+
+static void ifu_check_fch_ost(const ifu_t *ifu)
+{
+    DBG_CHECK(ifu->fch_ost.count >= ifu->fch_ost.free_pending_count);
+    const u32 active_num = ifu->fch_ost.count -
+        ifu->fch_ost.free_pending_count;
+    const u32 ptr_active_num = ifu_fch_ptr_distance(ifu,
+        ifu->fch.rsp_ptr, ifu->fch.req_ptr);
+    DBG_CHECK(ptr_active_num == active_num);
+    DBG_CHECK(active_num <= ifu->fch_ost_depth);
+
+    if (!ifu->fch.discard_vld) {
+        return;
+    }
+
+    const u32 discard_num = ifu_fch_ptr_distance(ifu,
+        ifu->fch.rsp_ptr, ifu->fch.discard_end_ptr);
+    DBG_CHECK(discard_num > 0);
+    DBG_CHECK(discard_num <= active_num);
+}
+
+static void ifu_set_fch_discard_boundary(ifu_t *ifu)
+{
+    ifu->fch.discard_end_ptr = ifu->fch.req_ptr;
+    ifu->fch.discard_vld = ifu->fch.rsp_ptr != ifu->fch.req_ptr;
+}
+
 static void ifu_flush_fetch_path(ifu_t *ifu, u32 pc)
 {
-    ifu->fch.epoch++;
+    ifu_set_fch_discard_boundary(ifu);
     ifu->fch.pc = pc;
     ifu->fch.ir = 0;
     ifu->fch.state = IFU_FCH_STATE_REQ;
@@ -148,7 +200,7 @@ static void ifu_flush_fetch_path(ifu_t *ifu, u32 pc)
 
 static void ifu_fault_fetch_path(ifu_t *ifu, u32 pc)
 {
-    ifu->fch.epoch++;
+    ifu_set_fch_discard_boundary(ifu);
     ifu->fch.pc = pc;
     ifu->fch.ir = 0;
     ifu->fch.state = IFU_FCH_STATE_FAULT;
@@ -298,11 +350,11 @@ static void ifu_send_fch(ifu_t *ifu)
     fch_req.pc = ifu->fch.pc;
 
     ifu_fch_ost_ctx_t ctx = {
-        .pc = ifu->fch.pc,
-        .epoch = ifu->fch.epoch
+        .pc = ifu->fch.pc
     };
     bool alloc_ok = ostq_alloc(&ifu->fch_ost, &ctx, NULL);
     DBG_CHECK(alloc_ok);
+    ifu->fch.req_ptr = ifu_fch_ptr_next(ifu, ifu->fch.req_ptr);
 
     itf_write(ifu->fch_req_mst, &fch_req);
     ifu->fch.pc += 4;
@@ -324,19 +376,22 @@ static void ifu_proc_fch_rsp(ifu_t *ifu)
     fch_rsp_if_t fch_rsp;
     itf_fifo_get_front(ifu->fch_rsp_slv, &fch_rsp);
 
-    if (ctx.epoch != ifu->fch.epoch) {
-        itf_fifo_pop_front(ifu->fch_rsp_slv);
-        (*ifu->perf.fch_rsp_inst)++;
-        ostq_free_head(&ifu->fch_ost);
-        return;
-    }
-
-    if (fifo_full(&ifu->fch_rspq)) {
+    const bool discard = ifu->fch.discard_vld;
+    if (!discard && fifo_full(&ifu->fch_rspq)) {
         return;
     }
 
     itf_fifo_pop_front(ifu->fch_rsp_slv);
     (*ifu->perf.fch_rsp_inst)++;
+
+    ostq_free_head(&ifu->fch_ost);
+    ifu->fch.rsp_ptr = ifu_fch_ptr_next(ifu, ifu->fch.rsp_ptr);
+    if (discard && ifu->fch.rsp_ptr == ifu->fch.discard_end_ptr) {
+        ifu->fch.discard_vld = false;
+    }
+    if (discard) {
+        return;
+    }
 
     ifu_fch_rspq_entry_t entry = {
         .pc = ctx.pc,
@@ -348,7 +403,6 @@ static void ifu_proc_fch_rsp(ifu_t *ifu)
         .tval = fch_rsp.tval
     };
     fifo_push(&ifu->fch_rspq, &entry);
-    ostq_free_head(&ifu->fch_ost);
 
     ifu->fch.ir = fch_rsp.ir;
     ifu->fch.state = IFU_FCH_STATE_RSP;
@@ -614,4 +668,5 @@ void ifu_clock(ifu_t *ifu)
 {
     ifu_front_proc(ifu);
     ifu_back_proc(ifu);
+    ifu_check_fch_ost(ifu);
 }

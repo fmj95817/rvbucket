@@ -209,6 +209,8 @@ def gen_rtl_perf(desc):
         f"module pcm_perf #(",
         "    parameter int COUNTER_NUM = `RVB_PCM_COUNTER_NUM",
         ")(",
+        "    input logic clk,",
+        "    input logic rst_n,",
         "    output logic [COUNTER_NUM-1:0] inc_en,",
     ]
     for idx, instance in enumerate(desc["instances"]):
@@ -217,15 +219,24 @@ def gen_rtl_perf(desc):
             f"    perf_{instance['type']}_if_t.slv {instance['port']}{comma}")
     lines.extend([
         ");",
+        "    logic [COUNTER_NUM-1:0] inc_en_next;",
+        "",
         "    always_comb begin",
-        "        inc_en = '0;",
+        "        inc_en_next = '0;",
     ])
     for counter in desc["counters"]:
         lines.append(
-            f"        inc_en[{counter['idx']}] = "
+            f"        inc_en_next[{counter['idx']}] = "
             f"{counter['port']}.pkt.{counter['event']};"
             f" // {counter['name']}")
     lines.extend([
+        "    end",
+        "",
+        "    always_ff @(posedge clk or negedge rst_n) begin",
+        "        if (!rst_n)",
+        "            inc_en <= '0;",
+        "        else",
+        "            inc_en <= inc_en_next;",
         "    end",
         "endmodule",
         "",

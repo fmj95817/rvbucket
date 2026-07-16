@@ -6,9 +6,9 @@
 #define HART_NUM       1u
 #define L2_SIZE        (128u * KiB)
 #define L2_WAY_NUM     4u
-#define L2_LATENCY     5u
-#define ITCM_LATENCY   2u
-#define DTCM_LATENCY   2u
+#define L2_LATENCY     1u
+#define ITCM_LATENCY   1u
+#define DTCM_LATENCY   1u
 
 #define CORE_BUS_STG_FIFO_DEPTH 16u
 #define CORE_BUS_OST_DEPTH 8u
@@ -37,7 +37,7 @@
 #define ACLINT_MTIMER_SIZE        0x8u
 #define ACLINT_MTIMECMP_BASE      0x31010000u
 #define ACLINT_MTIMECMP_SIZE      0x7ff8u
-#define ACLINT_MTIMER_TICK_CYCLES 0x1000u
+#define ACLINT_MTIMER_TICK_CYCLES 10000u
 #define ACLINT_MSWI_BASE          0x31020000u
 #define ACLINT_MSWI_SIZE          0x4000u
 #define ACLINT_SSWI_BASE          0x31030000u

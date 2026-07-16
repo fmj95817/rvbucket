@@ -24,11 +24,11 @@ module ifu #(
     perf_ifu_if_t.mst perf_mst
 );
     localparam int FCH_OST_SLOT_W = $clog2(FCH_OST_DEPTH);
-    localparam int FCH_EPOCH_W = FCH_OST_SLOT_W + 1;
+    localparam int FCH_OST_PTR_W = $clog2(FCH_OST_DEPTH) + 1;
+    localparam int FCH_COUNT_W = $clog2(FCH_OST_DEPTH + 1);
 
     typedef struct packed {
         logic [31:0] pc;
-        logic [FCH_EPOCH_W-1:0] epoch;
     } fch_ost_ctx_t;
 
     typedef struct packed {
@@ -57,7 +57,10 @@ module ifu #(
     localparam int CTRLQ_DW = $bits(ctrlq_entry_t);
 
     logic [31:0] fch_pc;
-    logic [FCH_EPOCH_W-1:0] fch_epoch;
+    logic [FCH_OST_PTR_W-1:0] fch_req_ptr;
+    logic [FCH_OST_PTR_W-1:0] fch_rsp_ptr;
+    logic [FCH_OST_PTR_W-1:0] fch_discard_end_ptr;
+    logic fch_discard_vld;
     logic trap_pend_vld;
     logic [31:0] trap_pend_pc;
 
@@ -95,7 +98,6 @@ module ifu #(
     logic [31:0] br_rsp_target_pc;
 
     logic issue_vld;
-    logic issue_ctrlq_pushed;
     logic [31:0] issue_pc;
     logic [31:0] issue_ir;
     logic issue_is_ctrl;
@@ -113,7 +115,8 @@ module ifu #(
     wire fch_rsp_hsk = fch_rsp_slv.vld && fch_rsp_slv.rdy;
     wire ex_req_hsk = ex_req_mst.vld && ex_req_mst.rdy;
     wire ex_rsp_hsk = ex_rsp_slv.vld && ex_rsp_slv.rdy;
-    wire ctrlq_wr_hsk = ctrlq_wr_vld && ctrlq_wr_rdy;
+    wire fch_rspq_wr_hsk = fch_rspq_wr_vld && fch_rspq_wr_rdy;
+    wire fch_rspq_rd_hsk = fch_rspq_rd_vld && fch_rspq_rd_rdy;
 
     wire trap_req_vld = trap_pend_vld || trap_send_slv.vld;
     wire [31:0] trap_req_pc = trap_pend_vld ? trap_pend_pc :
@@ -134,15 +137,31 @@ module ifu #(
     wire rspq_any_bad = fch_rspq_rd_vld &&
         (!fch_rspq_head.ok || fch_rspq_head.expt);
     wire rspq_bad = rspq_non_expt_bad || rspq_expt_fire;
-    wire pred_req_vld = fch_rspq_rd_vld && !issue_vld && !ctrlq_rd_vld &&
+    wire issue_pop = ex_req_hsk;
+    wire issue_push_rdy = !issue_vld || issue_pop;
+    wire pred_req_vld = fch_rspq_rd_vld && issue_push_rdy &&
         !trap_req_vld &&
-        !rspq_any_bad && !redirect_flush;
+        !rspq_any_bad && !control_redirect;
     wire pred_rsp_vld = bpu_pred_rsp_slv.pkt.vld;
     wire prepare_issue = pred_req_vld && pred_rsp_vld;
     wire pred_taken_flush = prepare_issue && bpu_pred_rsp_slv.pkt.is_ctrl &&
         bpu_pred_rsp_slv.pkt.pred_taken;
+    wire fch_path_flush = redirect_flush || pred_taken_flush || rspq_bad;
     wire [31:0] pred_next_pc = bpu_pred_rsp_slv.pkt.pred_pc;
-    wire is_boot_code = issue_pc < 32'h00000800;
+    wire is_boot_code;
+    logic [FCH_COUNT_W-1:0] fch_ost_count;
+    logic [FCH_COUNT_W-1:0] fch_rspq_count;
+    wire [FCH_OST_PTR_W-1:0] fch_req_ptr_after_hsk =
+        fch_req_ptr + fch_req_hsk;
+    wire [FCH_OST_PTR_W-1:0] fch_rsp_ptr_after_hsk =
+        fch_rsp_ptr + fch_rsp_hsk;
+    wire [FCH_OST_PTR_W-1:0] fch_active_num =
+        fch_req_ptr - fch_rsp_ptr;
+    wire [FCH_OST_PTR_W-1:0] fch_discard_num =
+        fch_discard_end_ptr - fch_rsp_ptr;
+    wire fch_ost_rspq_full =
+        ({1'b0, fch_ost_count} + {1'b0, fch_rspq_count}) >=
+        (FCH_COUNT_W + 1)'(FCH_OST_DEPTH);
 
     assign fch_ost_head_ctx = fch_ost_head_ctx_raw;
     assign fch_rspq_head = fch_rspq_rd_data;
@@ -164,7 +183,7 @@ module ifu #(
         .rst_n         (rst_n),
         .alloc_vld     (fch_req_hsk),
         .alloc_rdy     (fch_ost_alloc_rdy),
-        .alloc_ctx     (fch_ost_ctx_t'{pc:fch_pc, epoch:fch_epoch}),
+        .alloc_ctx     (fch_ost_ctx_t'{pc:fch_pc}),
         .alloc_slot    (fch_ost_alloc_slot),
         .head_vld      (fch_ost_head_vld),
         .head_ctx      (fch_ost_head_ctx_raw),
@@ -219,12 +238,24 @@ module ifu #(
             assert (fch_ost_head_vld)
                 else $fatal(1, "IFU fetch response without OST entry");
         end
+        if (rst_n) begin
+            assert (fch_active_num == FCH_OST_PTR_W'(fch_ost_count))
+                else $fatal(1,
+                    "IFU fetch pointer/count mismatch req=%0d rsp=%0d count=%0d",
+                    fch_req_ptr, fch_rsp_ptr, fch_ost_count);
+            assert (!fch_discard_vld ||
+                (fch_discard_num != '0 &&
+                fch_discard_num <= FCH_OST_PTR_W'(fch_ost_count)))
+                else $fatal(1,
+                    "IFU invalid discard boundary rsp=%0d end=%0d count=%0d",
+                    fch_rsp_ptr, fch_discard_end_ptr, fch_ost_count);
+        end
         if (rst_n && ex_rsp_slv.vld) begin
             assert (ctrlq_rd_vld)
                 else $fatal(1,
                     "IFU branch response without ctrlq entry pc=%08x rsp_pc=%08x issue=%0b issue_pc=%08x ctrlpush=%0b trap=%0b pend=%0b redir=%0b clear=%0b exreq=%0b/%0b",
                     fch_pc, ex_rsp_slv.pkt.pc, issue_vld, issue_pc,
-                    issue_ctrlq_pushed, trap_req_vld, trap_pend_vld,
+                    ctrlq_wr_vld, trap_req_vld, trap_pend_vld,
                     redirect_flush, ctrlq_clear, ex_req_mst.vld,
                     ex_req_mst.rdy);
             assert (!ctrlq_rd_vld || ctrlq_head.pc == ex_rsp_slv.pkt.pc)
@@ -245,12 +276,12 @@ module ifu #(
         fch_rspq_push_entry.tval = fch_rsp_slv.pkt.tval;
     end
 
+    wire fch_rsp_discard = fch_discard_vld || fch_path_flush;
     assign fch_rspq_wr_vld = fch_rsp_slv.vld && fch_ost_head_vld &&
-        fch_ost_head_ctx.epoch == fch_epoch && !redirect_flush;
+        !fch_rsp_discard;
     assign fch_rspq_wr_data = fch_rspq_push_entry;
     assign fch_rsp_slv.rdy = fch_ost_head_vld &&
-        (fch_ost_head_ctx.epoch != fch_epoch || redirect_flush ||
-        fch_rspq_wr_rdy);
+        (fch_rsp_discard || fch_rspq_wr_rdy);
     assign fch_ost_free_head = fch_rsp_hsk;
 
     assign fch_rspq_clear = redirect_flush || pred_taken_flush || rspq_bad;
@@ -264,6 +295,8 @@ module ifu #(
     assign fch_expt_mst.pkt.pc = fch_rspq_head.pc;
     assign fch_expt_mst.pkt.tval = fch_rspq_head.tval;
 
+    assign ctrlq_wr_vld = issue_vld && issue_is_ctrl &&
+        ex_req_mst.rdy && !trap_req_vld && !control_redirect;
     always_comb begin
         ctrlq_push_entry.pc = issue_pc;
         ctrlq_push_entry.ir = issue_ir;
@@ -274,20 +307,19 @@ module ifu #(
         ctrlq_push_entry.jalr_btb_hit = issue_jalr_btb_hit;
         ctrlq_push_entry.jalr_btb_miss = issue_jalr_btb_miss;
     end
-
-    assign ctrlq_wr_vld = issue_vld && issue_is_ctrl &&
-        !issue_ctrlq_pushed && !trap_req_vld && !control_redirect;
     assign ctrlq_wr_data = ctrlq_push_entry;
     assign ctrlq_rd_rdy = ex_rsp_hsk;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             fch_pc <= 32'h00000000;
-            fch_epoch <= '0;
+            fch_req_ptr <= '0;
+            fch_rsp_ptr <= '0;
+            fch_discard_end_ptr <= '0;
+            fch_discard_vld <= 1'b0;
             trap_pend_vld <= 1'b0;
             trap_pend_pc <= 32'h00000000;
             issue_vld <= 1'b0;
-            issue_ctrlq_pushed <= 1'b0;
             issue_pc <= 32'h00000000;
             issue_ir <= 32'h00000000;
             issue_is_ctrl <= 1'b0;
@@ -302,6 +334,8 @@ module ifu #(
             br_rsp_taken <= 1'b0;
             br_rsp_pred_true <= 1'b0;
             br_rsp_target_pc <= 32'h00000000;
+            fch_ost_count <= '0;
+            fch_rspq_count <= '0;
         end else begin
             br_rsp_vld <= 1'b0;
             if (ex_rsp_hsk) begin
@@ -321,16 +355,12 @@ module ifu #(
 
             if (redirect_flush) begin
                 fch_pc <= redirect_pc;
-                fch_epoch <= fch_epoch + 1'b1;
                 issue_vld <= 1'b0;
-                issue_ctrlq_pushed <= 1'b0;
                 issue_is_ctrl <= 1'b0;
                 issue_pred_taken <= 1'b0;
             end else if (rspq_bad) begin
                 fch_pc <= fch_rspq_head.pc;
-                fch_epoch <= fch_epoch + 1'b1;
                 issue_vld <= 1'b0;
-                issue_ctrlq_pushed <= 1'b0;
                 issue_is_ctrl <= 1'b0;
                 issue_pred_taken <= 1'b0;
             end else begin
@@ -339,7 +369,6 @@ module ifu #(
 
                 if (prepare_issue) begin
                     issue_vld <= 1'b1;
-                    issue_ctrlq_pushed <= 1'b0;
                     issue_pc <= fch_rspq_head.pc;
                     issue_ir <= fch_rspq_head.ir;
                     issue_is_ctrl <= bpu_pred_rsp_slv.pkt.is_ctrl;
@@ -351,24 +380,49 @@ module ifu #(
                     issue_jalr_btb_miss <= bpu_pred_rsp_slv.pkt.jalr_btb_miss;
                     if (pred_taken_flush) begin
                         fch_pc <= pred_next_pc;
-                        fch_epoch <= fch_epoch + 1'b1;
                     end
-                end else if (ctrlq_wr_hsk) begin
-                    issue_ctrlq_pushed <= 1'b1;
-                end
-
-                if (ex_req_hsk) begin
+                end else if (issue_pop) begin
                     issue_vld <= 1'b0;
-                    issue_ctrlq_pushed <= 1'b0;
                     issue_is_ctrl <= 1'b0;
                     issue_pred_taken <= 1'b0;
                 end
+            end
+
+            unique case ({fch_req_hsk, fch_rsp_hsk})
+            2'b10: fch_ost_count <= fch_ost_count + 1'b1;
+            2'b01: fch_ost_count <= fch_ost_count - 1'b1;
+            default: ;
+            endcase
+
+            if (fch_req_hsk)
+                fch_req_ptr <= fch_req_ptr_after_hsk;
+            if (fch_rsp_hsk)
+                fch_rsp_ptr <= fch_rsp_ptr_after_hsk;
+
+            if (fch_path_flush) begin
+                fch_discard_end_ptr <= fch_req_ptr_after_hsk;
+                fch_discard_vld <=
+                    fch_rsp_ptr_after_hsk != fch_req_ptr_after_hsk;
+            end else if (fch_discard_vld && fch_rsp_hsk &&
+                fch_rsp_ptr_after_hsk == fch_discard_end_ptr) begin
+                fch_discard_vld <= 1'b0;
+            end
+
+            if (fch_rspq_clear) begin
+                fch_rspq_count <= '0;
+            end else begin
+                unique case ({fch_rspq_wr_hsk, fch_rspq_rd_hsk})
+                2'b10: fch_rspq_count <= fch_rspq_count + 1'b1;
+                2'b01: fch_rspq_count <= fch_rspq_count - 1'b1;
+                default: ;
+                endcase
             end
         end
     end
 
     assign fch_req_mst.vld = !trap_req_vld && !redirect_flush &&
-        !pred_taken_flush && fch_ost_alloc_rdy;
+        !pred_taken_flush && !rspq_bad && fch_ost_alloc_rdy &&
+        !fch_ost_rspq_full;
     assign fch_req_mst.pkt.pc = fch_pc;
 
     assign bpu_pred_req_mst.pkt.vld = pred_req_vld;
@@ -376,8 +430,9 @@ module ifu #(
     assign bpu_pred_req_mst.pkt.ir = fch_rspq_head.ir;
 
     assign ex_req_mst.vld = issue_vld &&
-        (!issue_is_ctrl || issue_ctrlq_pushed) &&
+        (!issue_is_ctrl || ctrlq_wr_rdy) &&
         !trap_req_vld && !control_redirect;
+    assign is_boot_code = issue_pc < 32'h00000800;
     assign ex_req_mst.pkt.inst.raw = issue_ir;
     assign ex_req_mst.pkt.pc = issue_pc;
     assign ex_req_mst.pkt.pred_taken = issue_pred_taken;
@@ -404,7 +459,8 @@ module ifu #(
 
     assign perf_mst.pkt.fch_rsp_inst = fch_rsp_hsk;
     assign perf_mst.pkt.fch_ost_full = !trap_req_vld &&
-        !redirect_flush && !pred_taken_flush && !fch_ost_alloc_rdy;
+        !redirect_flush && !pred_taken_flush &&
+        (!fch_ost_alloc_rdy || fch_ost_rspq_full);
     assign perf_mst.pkt.fch_req_bp = fch_req_mst.vld && !fch_req_mst.rdy;
     assign perf_mst.pkt.fch_rspq_bp = fch_rspq_wr_vld && !fch_rspq_wr_rdy;
     assign perf_mst.pkt.ctrlq_bp = ctrlq_wr_vld && !ctrlq_wr_rdy;
@@ -414,55 +470,7 @@ module ifu #(
     assign perf_mst.pkt.issue_hold = ex_req_mst.vld && !ex_req_mst.rdy;
 
     wire unused_fch_ost = (|fch_ost_alloc_slot) | (|fch_ost_head_slot) |
-        inst_is_ctrl(issue_inst) | inst_is_ctrl(rspq_inst);
+        inst_is_ctrl(issue_inst) | inst_is_ctrl(rspq_inst) |
+        fch_rspq_wr_hsk | fch_rspq_rd_hsk;
 
-`ifndef SYNTHESIS
-    logic rtl_progress_en;
-    longint unsigned rtl_progress_cycle;
-
-    initial begin
-        rtl_progress_en = $test$plusargs("rtl_progress");
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            rtl_progress_cycle <= 0;
-        end else if (rtl_progress_en) begin
-            rtl_progress_cycle <= rtl_progress_cycle + 1;
-            if (rtl_progress_cycle[19:0] == 20'h0 || fch_expt_mst.vld ||
-                redirect_flush || rspq_bad) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d pc=%08x epoch=%08x trap=%0b pend=%0b pend_pc=%08x ost_alloc=%0b head=%0b rspq=%0b/%0b ctrlq=%0b/%0b issue=%0b ctrlpush=%0b req=%0b/%0b rsp=%0b/%0b exreq=%0b/%0b exrsp=%0b/%0b bad=%0b expt=%0b expt_fire=%0b redir=%0b trap_redir=%0b br=%0b predflush=%0b",
-                    rtl_progress_cycle,
-                    fch_pc,
-                    fch_epoch,
-                    trap_req_vld,
-                    trap_pend_vld,
-                    trap_pend_pc,
-                    fch_ost_alloc_rdy,
-                    fch_ost_head_vld,
-                    fch_rspq_rd_vld,
-                    fch_rspq_rd_rdy,
-                    ctrlq_rd_vld,
-                    ctrlq_rd_rdy,
-                    issue_vld,
-                    issue_ctrlq_pushed,
-                    fch_req_mst.vld,
-                    fch_req_mst.rdy,
-                    fch_rsp_slv.vld,
-                    fch_rsp_slv.rdy,
-                    ex_req_mst.vld,
-                    ex_req_mst.rdy,
-                    ex_rsp_slv.vld,
-                    ex_rsp_slv.rdy,
-                    rspq_bad,
-                    rspq_expt,
-                    rspq_expt_fire,
-                    redirect_flush,
-                    trap_redirect,
-                    branch_redirect,
-                    pred_taken_flush);
-            end
-        end
-    end
-`endif
 endmodule

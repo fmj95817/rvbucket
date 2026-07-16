@@ -11,6 +11,8 @@ module l1 #(
     parameter int SIZE = `L1D_SIZE,
     parameter int WAY_NUM = `L1D_WAY_NUM,
     parameter int LINE_SIZE = `L1_LINE_SIZE,
+    parameter int STG_FIFO_DEPTH = `HART_L1D_STG_FIFO_DEPTH,
+    parameter int OST_DEPTH = `HART_L1_OST_DEPTH,
     parameter logic [31:0] BYPASS0_BASE = 32'h0,
     parameter logic [31:0] BYPASS0_SIZE = 32'h0,
     parameter logic [31:0] BYPASS1_BASE = 32'h0,
@@ -41,8 +43,8 @@ module l1 #(
     axi4_r_if_t.slv   mem_axi4_r_slv,
     perf_l1_if_t.mst  perf_mst
 );
-    localparam int WORD_SIZE = 4;
-    localparam int WORD_NUM = LINE_SIZE / WORD_SIZE;
+    localparam int BANK_NUM = 4;
+    localparam int WORD_NUM = LINE_SIZE / BANK_NUM;
     localparam int WORD_IDX_W = $clog2(WORD_NUM);
     localparam int LINE_OFF_W = $clog2(LINE_SIZE);
     localparam int SET_NUM = SIZE / (WAY_NUM * LINE_SIZE);
@@ -50,127 +52,269 @@ module l1 #(
     localparam int WAY_W = WAY_NUM <= 1 ? 1 : $clog2(WAY_NUM);
     localparam int TAG_W = 32 - LINE_OFF_W - SET_W;
     localparam int DATA_AW = SET_W + WORD_IDX_W;
-    localparam logic [WORD_IDX_W-1:0] LAST_BEAT = WORD_IDX_W'(WORD_NUM - 1);
+    localparam int OST_SLOT_W = $clog2(OST_DEPTH);
+    localparam logic [WORD_IDX_W-1:0] LAST_BEAT =
+        WORD_IDX_W'(WORD_NUM - 1);
     localparam logic [WAY_W-1:0] LAST_WAY = WAY_W'(WAY_NUM - 1);
     localparam logic [SET_W-1:0] LAST_SET = SET_W'(SET_NUM - 1);
     localparam logic [7:0] AXI_LINE_LEN = 8'(WORD_NUM - 1);
 
+    typedef struct packed {
+        logic [15:0] trans_id;
+        bti_req_cmd_t cmd;
+        logic [31:0] addr;
+        bti_req_size_t size;
+        logic [31:0] data;
+        logic [3:0] strobe;
+    } bti_req_ctx_t;
+
+    typedef enum logic [1:0] {
+        OST_CACHED,
+        OST_BYPASS_RD,
+        OST_BYPASS_WR
+    } ost_kind_t;
+
+    typedef struct packed {
+        logic [15:0] trans_id;
+        ost_kind_t kind;
+        bti_req_cmd_t cmd;
+        logic [31:0] addr;
+        bti_req_size_t size;
+        logic [31:0] req_data;
+        logic [3:0] strobe;
+        logic split;
+        logic [1:0] req_idx;
+        logic [1:0] rsp_idx;
+        logic rsp_vld;
+        logic ok;
+        logic [31:0] rsp_data;
+    } ost_ctx_t;
+
     typedef enum logic [4:0] {
-        S_IDLE,
-        S_BYPASS_RD_SEND0,
-        S_BYPASS_RD_RESP0,
-        S_BYPASS_RD_SEND1,
-        S_BYPASS_RD_RESP1,
-        S_BYPASS_WR_SEND0,
-        S_BYPASS_WR_RESP0,
-        S_BYPASS_WR_SEND1,
-        S_BYPASS_WR_RESP1,
-        S_LOOKUP,
-        S_LOOKUP_CHECK,
-        S_WB_AW,
-        S_WB_READ,
-        S_WB_CAPTURE,
-        S_WB_W,
-        S_WB_B,
-        S_REFILL_AR,
-        S_REFILL_R,
-        S_SERVE_READ,
-        S_SERVE_USE,
-        S_RESP,
-        S_FLUSH_CHECK,
-        S_FLUSH_WB_AW,
-        S_FLUSH_WB_READ,
-        S_FLUSH_WB_CAPTURE,
-        S_FLUSH_WB_W,
-        S_FLUSH_WB_B,
-        S_FLUSH_DONE
-    } state_t;
+        M_IDLE,
+        M_LOOKUP,
+        M_WB_AW,
+        M_WB_READ,
+        M_WB_SEND,
+        M_WB_B,
+        M_REFILL_AR,
+        M_REFILL_R,
+        M_SERVE_READ,
+        M_SERVE_USE,
+        M_SERVE_WRITE,
+        M_COMPLETE,
+        M_FLUSH_CHECK,
+        M_FLUSH_WB_AW,
+        M_FLUSH_WB_READ,
+        M_FLUSH_WB_SEND,
+        M_FLUSH_WB_B,
+        M_FLUSH_ACK
+    } miss_state_t;
 
-    state_t state;
+    typedef struct packed {
+        logic [OST_SLOT_W-1:0] slot;
+        logic [31:0] addr;
+        bti_req_cmd_t cmd;
+        bti_req_size_t size;
+        logic [31:0] data;
+        logic [3:0] strobe;
+        logic [WAY_W-1:0] way;
+        logic ok;
+    } hit_pipe_t;
 
-    logic [15:0] req_trans_id;
-    bti_req_cmd_t req_cmd;
-    bti_req_size_t req_size;
-    logic [31:0] req_addr;
-    logic [31:0] req_data;
-    logic [3:0] req_strobe;
-    logic req_split;
-
-    logic [2:0] req_byte_idx;
-    logic [31:0] rsp_data;
-    logic rsp_ok;
-
-    logic [SET_W-1:0] req_set;
-    logic [WAY_W-1:0] req_way;
-    logic [TAG_W-1:0] req_tag;
-    logic [31:0] req_line_addr;
-    logic [31:0] wb_line_addr;
-    logic [WORD_IDX_W-1:0] beat_idx;
-    logic aw_done;
-    logic w_done;
-    logic refill_ok;
-    logic [31:0] wb_word_data;
-    logic [SET_W-1:0] flush_set;
-    logic [WAY_W-1:0] flush_way;
-    logic flush_pending;
+    localparam int STG_DW = $bits(bti_req_ctx_t);
+    localparam int OST_CTX_DW = $bits(ost_ctx_t);
 
     logic [TAG_W-1:0] tag_ram[WAY_NUM][SET_NUM];
     logic valid_ram[WAY_NUM][SET_NUM];
     logic dirty_ram[WAY_NUM][SET_NUM];
     logic [WAY_W-1:0] replace_way[SET_NUM];
 
-    sram_rw_if_t #(DATA_AW, 32) data_rw_if[WAY_NUM]();
-    logic data_cs;
-    logic data_wen;
-    logic [WAY_W-1:0] data_way;
-    logic [DATA_AW-1:0] data_addr;
-    logic [31:0] data_wdata;
-    logic [31:0] way_rdata[WAY_NUM];
-    logic [31:0] data_rdata;
+    sram_rw_if_t #(DATA_AW, 8) data_r_if[WAY_NUM * BANK_NUM]();
+    sram_rw_if_t #(DATA_AW, 8) data_w_if[WAY_NUM * BANK_NUM]();
+    logic data_r_cs[WAY_NUM][BANK_NUM];
+    logic [DATA_AW-1:0] data_r_addr[WAY_NUM][BANK_NUM];
+    logic [7:0] data_bank_rdata[WAY_NUM][BANK_NUM];
+    logic data_w_cs[WAY_NUM][BANK_NUM];
+    logic [DATA_AW-1:0] data_w_addr[WAY_NUM][BANK_NUM];
+    logic [7:0] data_wdata[WAY_NUM][BANK_NUM];
 
-    logic hit;
-    logic [WAY_W-1:0] hit_way;
-    logic found_invalid;
-    logic [WAY_W-1:0] victim_way;
-    logic victim_dirty;
-    logic [TAG_W-1:0] victim_tag;
+    logic stg_wr_rdy;
+    logic [STG_DW-1:0] stg_wr_data;
+    logic fifo_rd_vld;
+    logic fifo_rd_rdy;
+    logic [STG_DW-1:0] fifo_rd_data;
+    logic stg_rd_vld;
+    logic stg_rd_rdy;
+    logic [STG_DW-1:0] stg_rd_data;
+    logic stg_full;
+    bti_req_ctx_t stg_wr_req;
+    bti_req_ctx_t stg_req;
 
+    logic ost_alloc_vld;
+    logic ost_alloc_rdy;
+    logic [OST_CTX_DW-1:0] ost_alloc_ctx_raw;
+    logic [OST_SLOT_W-1:0] ost_alloc_slot;
+    logic ost_head_vld;
+    logic [OST_CTX_DW-1:0] ost_head_ctx_raw;
+    logic [OST_SLOT_W-1:0] ost_head_slot;
+    logic ost_free_head;
+    logic ost_slot_wr_vld;
+    logic [OST_SLOT_W-1:0] ost_slot_wr_idx;
+    logic [OST_CTX_DW-1:0] ost_slot_wr_ctx_raw;
+    logic [OST_DEPTH-1:0] ost_slot_vld;
+    logic [OST_DEPTH*OST_CTX_DW-1:0] ost_slot_ctx_flat;
+    logic ost_empty;
+    logic ost_full;
+    ost_ctx_t ost_alloc_ctx;
+    ost_ctx_t ost_head_ctx;
+    ost_ctx_t ost_slot_ctx[OST_DEPTH];
+    ost_ctx_t ost_slot_wr_ctx;
+
+    miss_state_t miss_state;
+    bti_req_ctx_t active_req;
+    logic [OST_SLOT_W-1:0] active_slot;
+    logic [2:0] active_byte_idx;
+    logic [31:0] active_rsp_data;
+    logic active_ok;
+    logic active_precounted_hit;
+    logic [SET_W-1:0] active_set;
+    logic [TAG_W-1:0] active_tag;
+    logic [WAY_W-1:0] active_way;
+    logic active_way_vld;
+    logic [31:0] active_line_addr;
+    logic [31:0] wb_line_addr;
+    logic [WORD_IDX_W-1:0] beat_idx;
+    logic refill_ok;
+    logic [SET_W-1:0] flush_set;
+    logic [WAY_W-1:0] flush_way;
+    logic flush_pending;
+
+    logic hit_pipe_vld;
+    hit_pipe_t hit_pipe;
+
+    logic wr_issue_vld;
+    logic [OST_SLOT_W-1:0] wr_issue_slot;
+    ost_ctx_t wr_issue_ctx;
+    logic wr_issue_aw_done;
+    logic wr_issue_w_done;
+
+    logic front_hit0;
+    logic front_hit1;
+    logic [WAY_W-1:0] front_way0;
+    logic [WAY_W-1:0] front_way1;
+    logic front_cross_line;
+    logic front_all_hit;
+    logic front_active_conflict;
+    logic active_hit;
+    logic [WAY_W-1:0] active_hit_way;
+    logic active_found_invalid;
+    logic [WAY_W-1:0] active_victim_way;
+    logic active_victim_dirty;
+    logic [TAG_W-1:0] active_victim_tag;
+
+    logic has_bypass_ost;
+    logic rd_issue_found;
+    logic [OST_SLOT_W-1:0] rd_issue_slot;
+    ost_ctx_t rd_issue_ctx;
+    logic wr_load_found;
+    logic [OST_SLOT_W-1:0] wr_load_slot;
+    ost_ctx_t wr_load_ctx;
+
+    logic accept_fast;
+    logic accept_ro_error;
+    logic accept_active;
+    logic accept_bypass_rd;
+    logic accept_bypass_wr;
+    logic accept_req;
+    logic flush_active;
+    logic flush_start;
+    logic fast_port_blocked;
+    logic hit_pipe_retire;
+    logic hit_pipe_write_blocked;
+
+    logic read_launch;
+    logic read_all_ways;
+    logic read_word_mode;
+    logic [WAY_W-1:0] read_way;
+    logic [SET_W-1:0] read_set;
+    logic [WORD_IDX_W-1:0] read_word_idx;
+    logic [31:0] read_addr;
+    logic [31:0] hit_pipe_read_data;
+    logic [31:0] active_read_data;
+    logic [31:0] wb_read_data;
+
+    logic write_launch;
+    logic write_word_mode;
+    logic [WAY_W-1:0] write_way;
+    logic [SET_W-1:0] write_set;
+    logic [WORD_IDX_W-1:0] write_word_idx;
+    logic [31:0] write_addr;
+    logic [31:0] write_data;
+    logic [3:0] write_strobe;
+    logic [2:0] write_byte_base;
+    logic [2:0] write_byte_count;
+
+    logic miss_complete_req;
+    logic bypass_r_update;
+    logic bypass_b_update;
+    logic wr_issue_update;
+    logic hit_pipe_update;
+    logic rd_issue_update;
+    logic slot_writer_busy;
+    logic slot_pre_busy;
+    logic bypass_r_candidate;
+    logic bypass_b_candidate;
+    logic [OST_SLOT_W-1:0] bypass_r_slot;
+    logic [OST_SLOT_W-1:0] bypass_b_slot;
+    ost_ctx_t bypass_r_ctx;
+    ost_ctx_t bypass_b_ctx;
+    logic ar_sel_rd_issue;
+    logic ar_sel_front_bypass;
+    logic [DATA_AW-1:0] read_base_addr;
+    logic [DATA_AW-1:0] write_base_addr;
+
+    wire host_req_hsk = host_bti_req_slv.vld && host_bti_req_slv.rdy;
+    wire host_rsp_hsk = host_bti_rsp_mst.vld && host_bti_rsp_mst.rdy;
     wire aw_hsk = mem_axi4_aw_mst.vld && mem_axi4_aw_mst.rdy;
     wire w_hsk = mem_axi4_w_mst.vld && mem_axi4_w_mst.rdy;
     wire b_hsk = mem_axi4_b_slv.vld && mem_axi4_b_slv.rdy;
     wire ar_hsk = mem_axi4_ar_mst.vld && mem_axi4_ar_mst.rdy;
     wire r_hsk = mem_axi4_r_slv.vld && mem_axi4_r_slv.rdy;
-    wire rsp_hsk = host_bti_rsp_mst.vld && host_bti_rsp_mst.rdy;
-    wire [31:0] cur_addr = req_addr + {29'b0, req_byte_idx};
-    wire [SET_W-1:0] cur_set = cur_addr[LINE_OFF_W +: SET_W];
-    wire [TAG_W-1:0] cur_tag = cur_addr[31 -: TAG_W];
-    wire [WORD_IDX_W-1:0] cur_word_idx = cur_addr[2 +: WORD_IDX_W];
-    wire [1:0] cur_byte_off = cur_addr[1:0];
-    wire [DATA_AW-1:0] cur_data_addr = {req_set, cur_word_idx};
-    wire [DATA_AW-1:0] beat_data_addr = {req_set, beat_idx};
-    wire [DATA_AW-1:0] flush_data_addr = {flush_set, beat_idx};
-    wire [31:0] req_aligned_addr = {req_addr[31:2], 2'b00};
-    wire bypass_second = state == S_BYPASS_RD_SEND1 ||
-        state == S_BYPASS_RD_RESP1 ||
-        state == S_BYPASS_WR_SEND1 ||
-        state == S_BYPASS_WR_RESP1;
-    wire flush_active =
-        state == S_FLUSH_CHECK ||
-        state == S_FLUSH_WB_AW ||
-        state == S_FLUSH_WB_READ ||
-        state == S_FLUSH_WB_CAPTURE ||
-        state == S_FLUSH_WB_W ||
-        state == S_FLUSH_WB_B ||
-        state == S_FLUSH_DONE;
-    wire flush_req = flush_slv.vld || flush_pending;
 
-    function automatic logic [WAY_W-1:0] way_idx(input int unsigned idx);
-        way_idx = idx[WAY_W-1:0];
-    endfunction
+    wire [2:0] front_byte_num = req_byte_num(stg_req.size);
+    wire [31:0] front_end_addr = stg_req.addr +
+        {29'b0, front_byte_num} - 32'd1;
+    wire [31:0] front_line0 = line_addr(stg_req.addr);
+    wire [31:0] front_line1 = line_addr(front_end_addr);
+    wire [SET_W-1:0] front_set0 = req_set(stg_req.addr);
+    wire [SET_W-1:0] front_set1 = req_set(front_end_addr);
+    wire [TAG_W-1:0] front_tag0 = req_tag(stg_req.addr);
+    wire [TAG_W-1:0] front_tag1 = req_tag(front_end_addr);
 
-    function automatic logic [SET_W-1:0] set_idx(input int unsigned idx);
-        set_idx = idx[SET_W-1:0];
-    endfunction
+    wire [31:0] active_cur_addr = active_req.addr +
+        {29'b0, active_byte_idx};
+    wire [2:0] active_total_bytes = req_byte_num(active_req.size);
+    wire [SET_W-1:0] active_cur_set = req_set(active_cur_addr);
+    wire [TAG_W-1:0] active_cur_tag = req_tag(active_cur_addr);
+    wire [31:0] active_cur_line = line_addr(active_cur_addr);
+    wire [6:0] active_line_left = 7'(LINE_SIZE) -
+        {1'b0, active_cur_addr[LINE_OFF_W-1:0]};
+    wire [2:0] active_bytes_left = active_total_bytes - active_byte_idx;
+    wire [2:0] active_fragment_bytes =
+        active_line_left < {4'b0, active_bytes_left} ?
+        active_line_left[2:0] :
+        active_bytes_left;
+    wire active_fragment_last =
+        active_byte_idx + active_fragment_bytes >= active_total_bytes;
+
+    wire front_is_bypass = bypass_addr(stg_req.addr);
+    wire front_is_write = stg_req.cmd == BTI_REQ_CMD_WRITE;
+    wire front_is_read = stg_req.cmd == BTI_REQ_CMD_READ;
+    wire front_fast_hit = front_all_hit && !front_cross_line &&
+        !front_active_conflict;
+    wire wr_issue_complete = wr_issue_vld &&
+        (wr_issue_aw_done || aw_hsk) && (wr_issue_w_done || w_hsk);
 
     function automatic logic [2:0] req_byte_num(
         input bti_req_size_t size
@@ -182,12 +326,29 @@ module l1 #(
         endcase
     endfunction
 
+    function automatic logic [31:0] line_addr(input logic [31:0] addr);
+        line_addr = {addr[31:LINE_OFF_W], {LINE_OFF_W{1'b0}}};
+    endfunction
+
+    function automatic logic [SET_W-1:0] req_set(input logic [31:0] addr);
+        req_set = addr[LINE_OFF_W +: SET_W];
+    endfunction
+
+    function automatic logic [TAG_W-1:0] req_tag(input logic [31:0] addr);
+        req_tag = addr[31 -: TAG_W];
+    endfunction
+
+    function automatic logic [WAY_W-1:0] way_idx(input int unsigned idx);
+        way_idx = WAY_W'(idx);
+    endfunction
+
     function automatic logic addr_in_range(
         input logic [31:0] addr,
         input logic [31:0] base,
-        input logic [31:0] size
+        input logic [31:0] range_size
     );
-        addr_in_range = size != 32'b0 && addr >= base && addr < base + size;
+        addr_in_range = range_size != 0 && addr >= base &&
+            addr < base + range_size;
     endfunction
 
     function automatic logic bypass_addr(input logic [31:0] addr);
@@ -203,615 +364,953 @@ module l1 #(
     endfunction
 
     function automatic logic req_cross_word(
-        input logic [1:0] off,
+        input logic [31:0] addr,
         input bti_req_size_t size
     );
-        req_cross_word = ({1'b0, off} + req_byte_num(size)) > 3'd4;
+        req_cross_word = {1'b0, addr[1:0]} + req_byte_num(size) > 3'd4;
+    endfunction
+
+    function automatic logic [1:0] bypass_beat_num(input ost_ctx_t ctx);
+        bypass_beat_num = ctx.split ? 2'd2 : 2'd1;
+    endfunction
+
+    function automatic logic [31:0] bypass_beat_addr(input ost_ctx_t ctx);
+        bypass_beat_addr = {ctx.addr[31:2], 2'b00} +
+            ({30'b0, ctx.req_idx} << 2);
+    endfunction
+
+    function automatic logic [31:0] bypass_write_data(input ost_ctx_t ctx);
+        if (ctx.req_idx == 0)
+            bypass_write_data = ctx.req_data << ({3'b0, ctx.addr[1:0]} << 3);
+        else
+            bypass_write_data = ctx.req_data >>
+                ((3'd4 - {1'b0, ctx.addr[1:0]}) << 3);
+    endfunction
+
+    function automatic logic [3:0] bypass_write_strobe(input ost_ctx_t ctx);
+        if (ctx.req_idx == 0)
+            bypass_write_strobe = (ctx.strobe << ctx.addr[1:0]) & 4'hf;
+        else
+            bypass_write_strobe = ctx.strobe >>
+                (3'd4 - {1'b0, ctx.addr[1:0]});
     endfunction
 
     function automatic logic axi_resp_ok(input logic [1:0] resp);
         axi_resp_ok = resp == 2'b00;
     endfunction
 
-    function automatic logic [31:0] first_read_data(
-        input logic [31:0] data,
-        input logic [1:0] off
-    );
-        first_read_data = data >> ({3'b0, off} << 3);
+    function automatic logic [31:0] byte_mask(input logic [2:0] count);
+        unique case (count)
+        3'd1: byte_mask = 32'h000000ff;
+        3'd2: byte_mask = 32'h0000ffff;
+        3'd3: byte_mask = 32'h00ffffff;
+        default: byte_mask = 32'hffffffff;
+        endcase
     endfunction
 
-    function automatic logic [31:0] second_read_data(
-        input logic [31:0] data,
-        input logic [1:0] off
+`ifndef SYNTHESIS
+    initial begin
+        assert (WAY_NUM > 0);
+        assert (SET_NUM > 1);
+        assert ((SET_NUM & (SET_NUM - 1)) == 0);
+        assert ((LINE_SIZE & (LINE_SIZE - 1)) == 0);
+        assert ((OST_DEPTH & (OST_DEPTH - 1)) == 0);
+        assert (OST_DEPTH <= 256);
+    end
+`endif
+
+    always_comb begin
+        stg_wr_req.trans_id = host_bti_req_slv.pkt.trans_id;
+        stg_wr_req.cmd = host_bti_req_slv.pkt.cmd;
+        stg_wr_req.addr = host_bti_req_slv.pkt.addr;
+        stg_wr_req.size = host_bti_req_slv.pkt.size;
+        stg_wr_req.data = host_bti_req_slv.pkt.data;
+        stg_wr_req.strobe = host_bti_req_slv.pkt.strobe;
+    end
+    assign stg_wr_data = stg_wr_req;
+    assign stg_req = bti_req_ctx_t'(stg_rd_data);
+
+    fifo #(
+        .DW    (STG_DW),
+        .DEPTH (STG_FIFO_DEPTH)
+    ) u_req_fifo(
+        .clk     (clk),
+        .rst_n   (rst_n),
+        .clear   (1'b0),
+        .wr_vld  (host_bti_req_slv.vld),
+        .wr_rdy  (stg_wr_rdy),
+        .wr_data (stg_wr_data),
+        .rd_vld  (fifo_rd_vld),
+        .rd_rdy  (fifo_rd_rdy),
+        .rd_data (fifo_rd_data),
+        .empty   (),
+        .full    (stg_full)
     );
-        second_read_data = data << ((3'd4 - {1'b0, off}) << 3);
-    endfunction
 
-    function automatic logic [31:0] first_write_data(
-        input logic [31:0] data,
-        input logic [1:0] off
+    vld_reg_slice #(
+        .DW (STG_DW)
+    ) u_req_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (1'b0),
+        .src_vld  (fifo_rd_vld),
+        .src_rdy  (fifo_rd_rdy),
+        .src_data (fifo_rd_data),
+        .dst_vld  (stg_rd_vld),
+        .dst_rdy  (stg_rd_rdy),
+        .dst_data (stg_rd_data)
     );
-        first_write_data = data << ({3'b0, off} << 3);
-    endfunction
 
-    function automatic logic [3:0] first_write_strobe(
-        input logic [3:0] strobe,
-        input logic [1:0] off
+    assign ost_alloc_ctx_raw = ost_alloc_ctx;
+    assign ost_head_ctx = ost_ctx_t'(ost_head_ctx_raw);
+    assign ost_slot_wr_ctx_raw = ost_slot_wr_ctx;
+
+    ostq #(
+        .DW    (OST_CTX_DW),
+        .DEPTH (OST_DEPTH)
+    ) u_ost(
+        .clk           (clk),
+        .rst_n         (rst_n),
+        .alloc_vld     (ost_alloc_vld),
+        .alloc_rdy     (ost_alloc_rdy),
+        .alloc_ctx     (ost_alloc_ctx_raw),
+        .alloc_slot    (ost_alloc_slot),
+        .head_vld      (ost_head_vld),
+        .head_ctx      (ost_head_ctx_raw),
+        .head_slot     (ost_head_slot),
+        .free_head     (ost_free_head),
+        .slot_wr_vld   (ost_slot_wr_vld),
+        .slot_wr_idx   (ost_slot_wr_idx),
+        .slot_wr_ctx   (ost_slot_wr_ctx_raw),
+        .slot_vld      (ost_slot_vld),
+        .slot_ctx_flat (ost_slot_ctx_flat),
+        .empty         (ost_empty),
+        .full          (ost_full)
     );
-        first_write_strobe = (strobe << off) & 4'hf;
-    endfunction
 
-    function automatic logic [31:0] second_write_data(
-        input logic [31:0] data,
-        input logic [1:0] off
-    );
-        second_write_data = data >> ((3'd4 - {1'b0, off}) << 3);
-    endfunction
+    for (genvar i = 0; i < OST_DEPTH; i++) begin : gen_ost_view
+        assign ost_slot_ctx[i] = ost_ctx_t'(
+            ost_slot_ctx_flat[i * OST_CTX_DW +: OST_CTX_DW]);
+    end
 
-    function automatic logic [3:0] second_write_strobe(
-        input logic [3:0] strobe,
-        input logic [1:0] off
-    );
-        second_write_strobe = strobe >> (3'd4 - {1'b0, off});
-    endfunction
+    for (genvar w = 0; w < WAY_NUM; w++) begin : gen_data_way
+        for (genvar b = 0; b < BANK_NUM; b++) begin : gen_data_bank
+            localparam int IDX = w * BANK_NUM + b;
 
-    function automatic logic [31:0] write_byte(
-        input logic [31:0] word,
-        input logic [1:0] off,
-        input logic [7:0] byte_val
-    );
-        logic [31:0] mask;
-        begin
-            mask = 32'hff << ({3'b0, off} << 3);
-            write_byte = (word & ~mask) | ({24'b0, byte_val} << ({3'b0, off} << 3));
-        end
-    endfunction
+            assign data_r_if[IDX].cs = data_r_cs[w][b];
+            assign data_r_if[IDX].addr = data_r_addr[w][b];
+            assign data_r_if[IDX].wen = 1'b0;
+            assign data_r_if[IDX].wdata = 8'b0;
+            assign data_bank_rdata[w][b] = data_r_if[IDX].rdata;
 
-    function automatic logic [7:0] read_byte(
-        input logic [31:0] word,
-        input logic [1:0] off
-    );
-        logic [31:0] shifted;
-        begin
-            shifted = word >> ({3'b0, off} << 3);
-            read_byte = shifted[7:0];
-        end
-    endfunction
+            assign data_w_if[IDX].cs = data_w_cs[w][b];
+            assign data_w_if[IDX].addr = data_w_addr[w][b];
+            assign data_w_if[IDX].wen = data_w_cs[w][b];
+            assign data_w_if[IDX].wdata = data_wdata[w][b];
 
-    genvar way;
-    generate
-        for (way = 0; way < WAY_NUM; way++) begin : gen_data_way
-            localparam logic [WAY_W-1:0] WAY_IDX = way_idx(way);
-
-            assign data_rw_if[way].cs = data_cs && data_way == WAY_IDX;
-            assign data_rw_if[way].addr = data_addr;
-            assign data_rw_if[way].wen = data_wen;
-            assign data_rw_if[way].wdata = data_wdata;
-            assign way_rdata[way] = data_rw_if[way].rdata;
-
-            sram #(
+            dp_sram #(
                 .AW (DATA_AW),
-                .DW (32)
+                .DW (8)
             ) u_data_sram(
                 .clk         (clk),
-                .sram_rw_slv (data_rw_if[way])
+                .sram_r_slv  (data_r_if[IDX]),
+                .sram_w_slv  (data_w_if[IDX])
             );
-        end
-    endgenerate
-
-    always_comb begin
-        data_rdata = 32'b0;
-        for (int unsigned i = 0; i < WAY_NUM; i++) begin
-            if (data_way == way_idx(i))
-                data_rdata = way_rdata[i];
         end
     end
 
     always_comb begin
-        hit = 1'b0;
-        hit_way = '0;
+        front_hit0 = 1'b0;
+        front_hit1 = 1'b0;
+        front_way0 = '0;
+        front_way1 = '0;
         for (int unsigned i = 0; i < WAY_NUM; i++) begin
-            if (!hit && valid_ram[i][req_set] &&
-                tag_ram[i][req_set] == req_tag) begin
-                hit = 1'b1;
-                hit_way = way_idx(i);
+            if (!front_hit0 && valid_ram[i][front_set0] &&
+                tag_ram[i][front_set0] == front_tag0) begin
+                front_hit0 = 1'b1;
+                front_way0 = way_idx(i);
+            end
+            if (!front_hit1 && valid_ram[i][front_set1] &&
+                tag_ram[i][front_set1] == front_tag1) begin
+                front_hit1 = 1'b1;
+                front_way1 = way_idx(i);
+            end
+        end
+        front_cross_line = front_line0 != front_line1;
+        front_all_hit = front_hit0 && (!front_cross_line || front_hit1);
+        front_active_conflict = 1'b0;
+        if (miss_state != M_IDLE && active_way_vld) begin
+            front_active_conflict =
+                (front_hit0 && front_set0 == active_set &&
+                    front_way0 == active_way) ||
+                (front_cross_line && front_hit1 &&
+                    front_set1 == active_set && front_way1 == active_way);
+        end else if (miss_state == M_LOOKUP) begin
+            front_active_conflict = front_set0 == active_cur_set ||
+                (front_cross_line && front_set1 == active_cur_set);
+        end
+    end
+
+    always_comb begin
+        active_hit = 1'b0;
+        active_hit_way = '0;
+        active_found_invalid = 1'b0;
+        active_victim_way = replace_way[active_cur_set];
+        for (int unsigned i = 0; i < WAY_NUM; i++) begin
+            if (!active_hit && valid_ram[i][active_cur_set] &&
+                tag_ram[i][active_cur_set] == active_cur_tag) begin
+                active_hit = 1'b1;
+                active_hit_way = way_idx(i);
+            end
+            if (!active_found_invalid && !valid_ram[i][active_cur_set]) begin
+                active_found_invalid = 1'b1;
+                active_victim_way = way_idx(i);
+            end
+        end
+        active_victim_dirty =
+            valid_ram[active_victim_way][active_cur_set] &&
+            dirty_ram[active_victim_way][active_cur_set];
+        active_victim_tag = tag_ram[active_victim_way][active_cur_set];
+    end
+
+    always_comb begin
+        has_bypass_ost = 1'b0;
+        rd_issue_found = 1'b0;
+        rd_issue_slot = '0;
+        rd_issue_ctx = '0;
+        wr_load_found = 1'b0;
+        wr_load_slot = '0;
+        wr_load_ctx = '0;
+        for (int unsigned i = 0; i < OST_DEPTH; i++) begin
+            logic [OST_SLOT_W-1:0] idx;
+            idx = ost_head_slot + OST_SLOT_W'(i);
+            if (ost_slot_vld[idx] &&
+                (ost_slot_ctx[idx].kind == OST_BYPASS_RD ||
+                    ost_slot_ctx[idx].kind == OST_BYPASS_WR))
+                has_bypass_ost = 1'b1;
+            if (!rd_issue_found && ost_slot_vld[idx] &&
+                ost_slot_ctx[idx].kind == OST_BYPASS_RD &&
+                !ost_slot_ctx[idx].rsp_vld &&
+                ost_slot_ctx[idx].req_idx == ost_slot_ctx[idx].rsp_idx &&
+                ost_slot_ctx[idx].req_idx <
+                    bypass_beat_num(ost_slot_ctx[idx])) begin
+                rd_issue_found = 1'b1;
+                rd_issue_slot = idx;
+                rd_issue_ctx = ost_slot_ctx[idx];
+            end
+            if (!wr_load_found && ost_slot_vld[idx] &&
+                ost_slot_ctx[idx].kind == OST_BYPASS_WR &&
+                !ost_slot_ctx[idx].rsp_vld &&
+                ost_slot_ctx[idx].req_idx == ost_slot_ctx[idx].rsp_idx &&
+                ost_slot_ctx[idx].req_idx <
+                    bypass_beat_num(ost_slot_ctx[idx])) begin
+                wr_load_found = 1'b1;
+                wr_load_slot = idx;
+                wr_load_ctx = ost_slot_ctx[idx];
+            end
+        end
+    end
+
+    assign flush_active = miss_state >= M_FLUSH_CHECK;
+    assign flush_start = miss_state == M_IDLE && flush_pending && ost_empty &&
+        !hit_pipe_vld && !wr_issue_vld;
+    assign fast_port_blocked = flush_active ||
+        miss_state == M_WB_READ || miss_state == M_WB_SEND ||
+        miss_state == M_SERVE_READ || miss_state == M_SERVE_USE ||
+        miss_state == M_SERVE_WRITE ||
+        miss_state == M_FLUSH_WB_READ || miss_state == M_FLUSH_WB_SEND;
+
+    assign miss_complete_req = miss_state == M_COMPLETE;
+
+    always_comb begin
+        bypass_r_slot = mem_axi4_r_slv.pkt.id[OST_SLOT_W-1:0];
+        bypass_b_slot = mem_axi4_b_slv.pkt.id[OST_SLOT_W-1:0];
+        bypass_r_ctx = ost_slot_ctx[bypass_r_slot];
+        bypass_b_ctx = ost_slot_ctx[bypass_b_slot];
+        bypass_r_candidate = miss_state != M_REFILL_R &&
+            mem_axi4_r_slv.vld && ost_slot_vld[bypass_r_slot] &&
+            bypass_r_ctx.kind == OST_BYPASS_RD &&
+            bypass_r_ctx.rsp_idx < bypass_r_ctx.req_idx;
+        bypass_b_candidate = miss_state != M_WB_B &&
+            miss_state != M_FLUSH_WB_B && mem_axi4_b_slv.vld &&
+            ost_slot_vld[bypass_b_slot] &&
+            bypass_b_ctx.kind == OST_BYPASS_WR &&
+            bypass_b_ctx.rsp_idx < bypass_b_ctx.req_idx;
+    end
+
+    assign slot_pre_busy = miss_complete_req || bypass_r_candidate ||
+        bypass_b_candidate || wr_issue_complete || hit_pipe_vld;
+    assign hit_pipe_write_blocked = hit_pipe_vld &&
+        hit_pipe.cmd == BTI_REQ_CMD_WRITE &&
+        ((miss_state == M_REFILL_R && r_hsk) ||
+            miss_state == M_SERVE_WRITE);
+    assign ar_sel_rd_issue = miss_state == M_IDLE && rd_issue_found &&
+        !slot_pre_busy;
+    assign ar_sel_front_bypass = miss_state == M_IDLE && stg_rd_vld &&
+        front_is_bypass && front_is_read && ost_alloc_rdy &&
+        !rd_issue_found && !slot_pre_busy && !flush_pending;
+
+    always_comb begin
+        accept_fast = 1'b0;
+        accept_ro_error = 1'b0;
+        accept_active = 1'b0;
+        accept_bypass_rd = 1'b0;
+        accept_bypass_wr = 1'b0;
+
+        if (stg_rd_vld && !flush_pending && !flush_active &&
+            ost_alloc_rdy) begin
+            if (front_is_bypass) begin
+                if (RO && front_is_write) begin
+                    accept_ro_error = 1'b1;
+                end else if (front_is_read) begin
+                    accept_bypass_rd = ar_sel_front_bypass && ar_hsk;
+                end else if (miss_state == M_IDLE && !wr_issue_vld &&
+                    !wr_load_found) begin
+                    accept_bypass_wr = 1'b1;
+                end
+            end else if (RO && front_is_write) begin
+                accept_ro_error = 1'b1;
+            end else if (front_fast_hit && !fast_port_blocked &&
+                (!hit_pipe_vld || hit_pipe_retire) &&
+                !(front_is_write && miss_state == M_REFILL_R && r_hsk)) begin
+                accept_fast = 1'b1;
+            end else if (miss_state == M_IDLE && !has_bypass_ost &&
+                (!front_all_hit || front_cross_line)) begin
+                accept_active = 1'b1;
+            end
+        end
+    end
+
+    assign accept_req = accept_fast || accept_ro_error || accept_active ||
+        accept_bypass_rd || accept_bypass_wr;
+    assign stg_rd_rdy = accept_req;
+    assign ost_alloc_vld = accept_req;
+
+    always_comb begin
+        ost_alloc_ctx = '0;
+        ost_alloc_ctx.trans_id = stg_req.trans_id;
+        ost_alloc_ctx.kind = accept_bypass_rd ? OST_BYPASS_RD :
+            (accept_bypass_wr ? OST_BYPASS_WR : OST_CACHED);
+        ost_alloc_ctx.cmd = stg_req.cmd;
+        ost_alloc_ctx.addr = stg_req.addr;
+        ost_alloc_ctx.size = stg_req.size;
+        ost_alloc_ctx.req_data = stg_req.data;
+        ost_alloc_ctx.strobe = stg_req.strobe;
+        ost_alloc_ctx.split = req_cross_word(stg_req.addr, stg_req.size);
+        ost_alloc_ctx.req_idx = accept_bypass_rd ? 2'd1 : 2'd0;
+        ost_alloc_ctx.rsp_idx = 2'd0;
+        ost_alloc_ctx.rsp_vld = accept_ro_error;
+        ost_alloc_ctx.ok = 1'b0;
+        ost_alloc_ctx.rsp_data = 32'b0;
+    end
+
+    always_comb begin
+        bypass_r_update = 1'b0;
+        bypass_b_update = 1'b0;
+        wr_issue_update = 1'b0;
+        hit_pipe_update = 1'b0;
+        rd_issue_update = 1'b0;
+        slot_writer_busy = 1'b0;
+
+        ost_slot_wr_vld = 1'b0;
+        ost_slot_wr_idx = '0;
+        ost_slot_wr_ctx = '0;
+
+        mem_axi4_r_slv.rdy = 1'b0;
+        mem_axi4_b_slv.rdy = 1'b0;
+
+        if (miss_state == M_REFILL_R) begin
+            mem_axi4_r_slv.rdy = 1'b1;
+        end else if (miss_state == M_WB_B ||
+            miss_state == M_FLUSH_WB_B) begin
+            mem_axi4_b_slv.rdy = 1'b1;
+        end else if (miss_complete_req) begin
+            ost_slot_wr_vld = 1'b1;
+            ost_slot_wr_idx = active_slot;
+            ost_slot_wr_ctx = ost_slot_ctx[active_slot];
+            ost_slot_wr_ctx.rsp_vld = 1'b1;
+            ost_slot_wr_ctx.ok = active_ok;
+            ost_slot_wr_ctx.rsp_data =
+                active_req.cmd == BTI_REQ_CMD_READ ? active_rsp_data : 32'b0;
+            slot_writer_busy = 1'b1;
+        end else if (bypass_r_candidate) begin
+            mem_axi4_r_slv.rdy = 1'b1;
+            bypass_r_update = 1'b1;
+            ost_slot_wr_vld = 1'b1;
+            ost_slot_wr_idx = bypass_r_slot;
+            ost_slot_wr_ctx = bypass_r_ctx;
+            if (bypass_r_ctx.rsp_idx == 0) begin
+                    ost_slot_wr_ctx.rsp_data = mem_axi4_r_slv.pkt.data >>
+                    ({3'b0, bypass_r_ctx.addr[1:0]} << 3);
+                    ost_slot_wr_ctx.ok =
+                        axi_resp_ok(mem_axi4_r_slv.pkt.resp);
+            end else begin
+                ost_slot_wr_ctx.rsp_data = bypass_r_ctx.rsp_data |
+                    (mem_axi4_r_slv.pkt.data <<
+                        ((3'd4 - {1'b0, bypass_r_ctx.addr[1:0]}) << 3));
+                ost_slot_wr_ctx.ok = bypass_r_ctx.ok &&
+                    axi_resp_ok(mem_axi4_r_slv.pkt.resp);
+            end
+            ost_slot_wr_ctx.rsp_idx = bypass_r_ctx.rsp_idx + 1'b1;
+            ost_slot_wr_ctx.rsp_vld = bypass_r_ctx.rsp_idx + 1'b1 ==
+                bypass_beat_num(bypass_r_ctx);
+            slot_writer_busy = 1'b1;
+        end else if (bypass_b_candidate) begin
+            mem_axi4_b_slv.rdy = 1'b1;
+            bypass_b_update = 1'b1;
+            ost_slot_wr_vld = 1'b1;
+            ost_slot_wr_idx = bypass_b_slot;
+            ost_slot_wr_ctx = bypass_b_ctx;
+            ost_slot_wr_ctx.ok = bypass_b_ctx.rsp_idx == 0 ?
+                axi_resp_ok(mem_axi4_b_slv.pkt.resp) :
+                bypass_b_ctx.ok && axi_resp_ok(mem_axi4_b_slv.pkt.resp);
+            ost_slot_wr_ctx.rsp_data = 32'b0;
+            ost_slot_wr_ctx.rsp_idx = bypass_b_ctx.rsp_idx + 1'b1;
+            ost_slot_wr_ctx.rsp_vld = bypass_b_ctx.rsp_idx + 1'b1 ==
+                bypass_beat_num(bypass_b_ctx);
+            slot_writer_busy = 1'b1;
+        end
+
+        if (!slot_writer_busy && wr_issue_complete) begin
+            wr_issue_update = 1'b1;
+            ost_slot_wr_vld = 1'b1;
+            ost_slot_wr_idx = wr_issue_slot;
+            ost_slot_wr_ctx = ost_slot_ctx[wr_issue_slot];
+            ost_slot_wr_ctx.req_idx =
+                ost_slot_ctx[wr_issue_slot].req_idx + 1'b1;
+            slot_writer_busy = 1'b1;
+        end
+
+        if (!slot_writer_busy && hit_pipe_vld && !hit_pipe_write_blocked) begin
+            hit_pipe_update = 1'b1;
+            ost_slot_wr_vld = 1'b1;
+            ost_slot_wr_idx = hit_pipe.slot;
+            ost_slot_wr_ctx = ost_slot_ctx[hit_pipe.slot];
+            ost_slot_wr_ctx.rsp_vld = 1'b1;
+            ost_slot_wr_ctx.ok = hit_pipe.ok;
+            ost_slot_wr_ctx.rsp_data = hit_pipe.cmd == BTI_REQ_CMD_READ ?
+                hit_pipe_read_data : 32'b0;
+            slot_writer_busy = 1'b1;
+        end
+
+        if (!slot_writer_busy && ar_sel_rd_issue) begin
+            rd_issue_update = ar_hsk;
+            if (rd_issue_update) begin
+                ost_slot_wr_vld = 1'b1;
+                ost_slot_wr_idx = rd_issue_slot;
+                ost_slot_wr_ctx = rd_issue_ctx;
+                ost_slot_wr_ctx.req_idx = rd_issue_ctx.req_idx + 1'b1;
+                slot_writer_busy = 1'b1;
+            end
+        end
+    end
+
+    assign hit_pipe_retire = hit_pipe_update;
+
+    always_comb begin
+        read_launch = 1'b0;
+        read_all_ways = 1'b1;
+        read_word_mode = 1'b0;
+        read_way = front_way0;
+        read_set = front_set0;
+        read_word_idx = beat_idx;
+        read_addr = stg_req.addr;
+
+        if (miss_state == M_WB_READ) begin
+            read_launch = 1'b1;
+            read_all_ways = 1'b0;
+            read_word_mode = 1'b1;
+            read_way = active_way;
+            read_set = active_set;
+        end else if (miss_state == M_FLUSH_WB_READ) begin
+            read_launch = 1'b1;
+            read_all_ways = 1'b0;
+            read_word_mode = 1'b1;
+            read_way = flush_way;
+            read_set = flush_set;
+        end else if (miss_state == M_SERVE_READ) begin
+            read_launch = 1'b1;
+            read_all_ways = 1'b0;
+            read_way = active_way;
+            read_set = active_set;
+            read_addr = active_cur_addr;
+        end else if (accept_fast && front_is_read) begin
+            read_launch = 1'b1;
+        end
+    end
+
+    always_comb begin
+        write_launch = 1'b0;
+        write_word_mode = 1'b0;
+        write_way = active_way;
+        write_set = active_set;
+        write_word_idx = beat_idx;
+        write_addr = active_cur_addr;
+        write_data = active_req.data;
+        write_strobe = active_req.strobe;
+        write_byte_base = active_byte_idx;
+        write_byte_count = active_fragment_bytes;
+
+        if (miss_state == M_REFILL_R && r_hsk) begin
+            write_launch = 1'b1;
+            write_word_mode = 1'b1;
+            write_data = mem_axi4_r_slv.pkt.data;
+            write_strobe = 4'hf;
+        end else if (miss_state == M_SERVE_WRITE) begin
+            write_launch = 1'b1;
+        end else if (hit_pipe_vld &&
+            hit_pipe.cmd == BTI_REQ_CMD_WRITE) begin
+            write_launch = hit_pipe_update;
+            write_way = hit_pipe.way;
+            write_set = req_set(hit_pipe.addr);
+            write_addr = hit_pipe.addr;
+            write_data = hit_pipe.data;
+            write_strobe = hit_pipe.strobe;
+            write_byte_base = 3'b0;
+            write_byte_count = req_byte_num(hit_pipe.size);
+        end
+    end
+
+    assign read_base_addr = {read_set,
+        read_word_mode ? read_word_idx : read_addr[2 +: WORD_IDX_W]};
+    assign write_base_addr = {write_set,
+        write_word_mode ? write_word_idx : write_addr[2 +: WORD_IDX_W]};
+
+    always_comb begin
+        for (int unsigned w = 0; w < WAY_NUM; w++) begin
+            for (int unsigned b = 0; b < BANK_NUM; b++) begin
+                data_r_cs[w][b] = 1'b0;
+                data_r_addr[w][b] = read_base_addr;
+                if (!read_word_mode && b < read_addr[1:0])
+                    data_r_addr[w][b] = read_base_addr + 1'b1;
+                data_w_cs[w][b] = 1'b0;
+                data_w_addr[w][b] = '0;
+                data_wdata[w][b] = 8'b0;
+            end
+        end
+
+        if (read_launch) begin
+            for (int unsigned w = 0; w < WAY_NUM; w++) begin
+                for (int unsigned b = 0; b < BANK_NUM; b++) begin
+                    if (read_all_ways || read_way == way_idx(w))
+                        data_r_cs[w][b] = 1'b1;
+                end
+            end
+        end
+
+        if (write_launch) begin
+            if (write_word_mode) begin
+                for (int unsigned b = 0; b < BANK_NUM; b++) begin
+                    data_w_cs[write_way][b] = write_strobe[b];
+                    data_w_addr[write_way][b] = write_base_addr;
+                    data_wdata[write_way][b] = write_data[b * 8 +: 8];
+                end
+            end else begin
+                for (int unsigned j = 0; j < BANK_NUM; j++) begin
+                    if (j < write_byte_count &&
+                        write_strobe[2'(write_byte_base + 3'(j))]) begin
+                        data_w_cs[write_way]
+                            [write_addr[1:0] + 2'(j)] = 1'b1;
+                        data_w_addr[write_way]
+                            [write_addr[1:0] + 2'(j)] = write_base_addr +
+                            (({1'b0, write_addr[1:0]} + 3'(j)) >= 3'd4);
+                        data_wdata[write_way]
+                            [write_addr[1:0] + 2'(j)] = write_data[
+                                (write_byte_base + 3'(j)) * 8 +: 8];
+                    end
+                end
             end
         end
     end
 
     always_comb begin
-        found_invalid = 1'b0;
-        victim_way = replace_way[req_set];
-        for (int unsigned i = 0; i < WAY_NUM; i++) begin
-            if (!found_invalid && !valid_ram[i][req_set]) begin
-                found_invalid = 1'b1;
-                victim_way = way_idx(i);
-            end
+        hit_pipe_read_data = 32'b0;
+        active_read_data = 32'b0;
+        wb_read_data = 32'b0;
+        for (int unsigned j = 0; j < BANK_NUM; j++) begin
+            logic [1:0] hit_bank;
+            logic [1:0] active_bank;
+            hit_bank = hit_pipe.addr[1:0] + 2'(j);
+            active_bank = active_cur_addr[1:0] + 2'(j);
+            hit_pipe_read_data[j * 8 +: 8] =
+                data_bank_rdata[hit_pipe.way][hit_bank];
+            active_read_data[j * 8 +: 8] =
+                data_bank_rdata[active_way][active_bank];
         end
-        victim_dirty = dirty_ram[victim_way][req_set];
-        victim_tag = tag_ram[victim_way][req_set];
-    end
+        for (int unsigned b = 0; b < BANK_NUM; b++)
+            wb_read_data[b * 8 +: 8] =
+                data_bank_rdata[miss_state == M_FLUSH_WB_SEND ?
+                    flush_way : active_way][b];
 
-    always_comb begin
-        logic [31:0] req_data_shifted;
-
-        data_cs = 1'b0;
-        data_wen = 1'b0;
-        data_way = req_way;
-        data_addr = beat_data_addr;
-        data_wdata = 32'b0;
-        req_data_shifted = req_data >> ({3'b0, req_byte_idx} << 3);
-
-        unique case (state)
-        S_WB_READ: begin
-            data_cs = 1'b1;
-            data_way = req_way;
-            data_addr = beat_data_addr;
-        end
-        S_FLUSH_WB_READ: begin
-            data_cs = 1'b1;
-            data_way = flush_way;
-            data_addr = flush_data_addr;
-        end
-        S_FLUSH_WB_CAPTURE: begin
-            data_way = flush_way;
-        end
-        S_REFILL_R: begin
-            data_cs = r_hsk;
-            data_wen = r_hsk;
-            data_way = req_way;
-            data_addr = beat_data_addr;
-            data_wdata = mem_axi4_r_slv.pkt.data;
-        end
-        S_SERVE_READ: begin
-            data_cs = 1'b1;
-            data_way = req_way;
-            data_addr = cur_data_addr;
-        end
-        S_SERVE_USE: begin
-            data_cs = req_cmd == BTI_REQ_CMD_WRITE &&
-                req_strobe[req_byte_idx[1:0]];
-            data_wen = data_cs;
-            data_way = req_way;
-            data_addr = cur_data_addr;
-            data_wdata = write_byte(
-                data_rdata,
-                cur_byte_off,
-                req_data_shifted[7:0]
-            );
-        end
+        unique case (hit_pipe.size)
+        BTI_REQ_SIZE_B1: hit_pipe_read_data[31:8] = '0;
+        BTI_REQ_SIZE_B2: hit_pipe_read_data[31:16] = '0;
         default: ;
         endcase
     end
 
+    always_comb begin
+        mem_axi4_ar_mst.vld = 1'b0;
+        mem_axi4_ar_mst.pkt = '0;
+        mem_axi4_ar_mst.pkt.size = AXI4_AR_SIZE_B4;
+        mem_axi4_ar_mst.pkt.burst = AXI4_AR_BURST_INCR;
+
+        if (miss_state == M_REFILL_AR) begin
+            mem_axi4_ar_mst.vld = 1'b1;
+            mem_axi4_ar_mst.pkt.id = 8'b0;
+            mem_axi4_ar_mst.pkt.addr = active_line_addr;
+            mem_axi4_ar_mst.pkt.len = AXI_LINE_LEN;
+            mem_axi4_ar_mst.pkt.cache = 4'hf;
+        end else if (ar_sel_rd_issue) begin
+            mem_axi4_ar_mst.vld = 1'b1;
+            mem_axi4_ar_mst.pkt.id = 8'(rd_issue_slot);
+            mem_axi4_ar_mst.pkt.addr = bypass_beat_addr(rd_issue_ctx);
+        end else if (ar_sel_front_bypass) begin
+            mem_axi4_ar_mst.vld = 1'b1;
+            mem_axi4_ar_mst.pkt.id = 8'(ost_alloc_slot);
+            mem_axi4_ar_mst.pkt.addr = {stg_req.addr[31:2], 2'b00};
+        end
+    end
+
+    always_comb begin
+        mem_axi4_aw_mst.vld = 1'b0;
+        mem_axi4_aw_mst.pkt = '0;
+        mem_axi4_aw_mst.pkt.size = AXI4_AW_SIZE_B4;
+        mem_axi4_aw_mst.pkt.burst = AXI4_AW_BURST_INCR;
+        mem_axi4_w_mst.vld = 1'b0;
+        mem_axi4_w_mst.pkt = '0;
+
+        if (miss_state == M_WB_AW || miss_state == M_FLUSH_WB_AW) begin
+            mem_axi4_aw_mst.vld = 1'b1;
+            mem_axi4_aw_mst.pkt.id = 8'b0;
+            mem_axi4_aw_mst.pkt.addr = wb_line_addr;
+            mem_axi4_aw_mst.pkt.len = AXI_LINE_LEN;
+            mem_axi4_aw_mst.pkt.cache = 4'hf;
+        end else if (wr_issue_vld && !wr_issue_aw_done) begin
+            mem_axi4_aw_mst.vld = 1'b1;
+            mem_axi4_aw_mst.pkt.id = 8'(wr_issue_slot);
+            mem_axi4_aw_mst.pkt.addr = bypass_beat_addr(wr_issue_ctx);
+        end
+
+        if (miss_state == M_WB_SEND || miss_state == M_FLUSH_WB_SEND) begin
+            mem_axi4_w_mst.vld = 1'b1;
+            mem_axi4_w_mst.pkt.data = wb_read_data;
+            mem_axi4_w_mst.pkt.strb = 4'hf;
+            mem_axi4_w_mst.pkt.last = beat_idx == LAST_BEAT;
+        end else if (wr_issue_vld && !wr_issue_w_done) begin
+            mem_axi4_w_mst.vld = 1'b1;
+            mem_axi4_w_mst.pkt.data = bypass_write_data(wr_issue_ctx);
+            mem_axi4_w_mst.pkt.strb = bypass_write_strobe(wr_issue_ctx);
+            mem_axi4_w_mst.pkt.last = 1'b1;
+        end
+    end
+
+    assign host_bti_req_slv.rdy = stg_wr_rdy;
+    assign host_bti_rsp_mst.vld = ost_head_vld && ost_head_ctx.rsp_vld;
+    assign host_bti_rsp_mst.pkt.trans_id = ost_head_ctx.trans_id;
+    assign host_bti_rsp_mst.pkt.data = ost_head_ctx.rsp_data;
+    assign host_bti_rsp_mst.pkt.ok = ost_head_ctx.ok;
+    assign ost_free_head = host_rsp_hsk;
+    assign flush_ack_mst.vld = miss_state == M_FLUSH_ACK;
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state <= S_IDLE;
-            req_trans_id <= '0;
-            req_cmd <= BTI_REQ_CMD_READ;
-            req_size <= BTI_REQ_SIZE_B1;
-            req_addr <= '0;
-            req_data <= '0;
-            req_strobe <= '0;
-            req_split <= 1'b0;
-            req_byte_idx <= '0;
-            rsp_data <= '0;
-            rsp_ok <= 1'b1;
-            req_set <= '0;
-            req_way <= '0;
-            req_tag <= '0;
-            req_line_addr <= '0;
+            miss_state <= M_IDLE;
+            active_req <= '0;
+            active_slot <= '0;
+            active_byte_idx <= '0;
+            active_rsp_data <= '0;
+            active_ok <= 1'b1;
+            active_precounted_hit <= 1'b0;
+            active_set <= '0;
+            active_tag <= '0;
+            active_way <= '0;
+            active_way_vld <= 1'b0;
+            active_line_addr <= '0;
             wb_line_addr <= '0;
             beat_idx <= '0;
-            aw_done <= 1'b0;
-            w_done <= 1'b0;
             refill_ok <= 1'b1;
-            wb_word_data <= '0;
             flush_set <= '0;
             flush_way <= '0;
             flush_pending <= 1'b0;
-            for (int w = 0; w < WAY_NUM; w++) begin
-                for (int s = 0; s < SET_NUM; s++) begin
+            hit_pipe_vld <= 1'b0;
+            hit_pipe <= '0;
+            wr_issue_vld <= 1'b0;
+            wr_issue_slot <= '0;
+            wr_issue_ctx <= '0;
+            wr_issue_aw_done <= 1'b0;
+            wr_issue_w_done <= 1'b0;
+            for (int unsigned w = 0; w < WAY_NUM; w++) begin
+                for (int unsigned s = 0; s < SET_NUM; s++) begin
                     tag_ram[w][s] <= '0;
                     valid_ram[w][s] <= 1'b0;
                     dirty_ram[w][s] <= 1'b0;
                 end
             end
-            for (int s = 0; s < SET_NUM; s++)
+            for (int unsigned s = 0; s < SET_NUM; s++)
                 replace_way[s] <= '0;
         end else begin
-            if (flush_slv.vld && state != S_IDLE && !flush_active)
+            if (flush_slv.vld && !flush_active)
                 flush_pending <= 1'b1;
 
-            unique case (state)
-            S_IDLE: begin
-                if (flush_req) begin
+            if (hit_pipe_update)
+                hit_pipe_vld <= 1'b0;
+            if (accept_fast) begin
+                hit_pipe_vld <= 1'b1;
+                hit_pipe.slot <= ost_alloc_slot;
+                hit_pipe.addr <= stg_req.addr;
+                hit_pipe.cmd <= stg_req.cmd;
+                hit_pipe.size <= stg_req.size;
+                hit_pipe.data <= stg_req.data;
+                hit_pipe.strobe <= stg_req.strobe;
+                hit_pipe.way <= front_way0;
+                hit_pipe.ok <= 1'b1;
+                if (front_is_write)
+                    dirty_ram[front_way0][front_set0] <= 1'b1;
+            end
+
+            if (wr_issue_vld) begin
+                if (aw_hsk)
+                    wr_issue_aw_done <= 1'b1;
+                if (w_hsk)
+                    wr_issue_w_done <= 1'b1;
+                if (wr_issue_update) begin
+                    wr_issue_vld <= 1'b0;
+                    wr_issue_aw_done <= 1'b0;
+                    wr_issue_w_done <= 1'b0;
+                end
+            end else if (wr_load_found && miss_state == M_IDLE) begin
+                wr_issue_vld <= 1'b1;
+                wr_issue_slot <= wr_load_slot;
+                wr_issue_ctx <= wr_load_ctx;
+                wr_issue_aw_done <= 1'b0;
+                wr_issue_w_done <= 1'b0;
+            end else if (accept_bypass_wr) begin
+                wr_issue_vld <= 1'b1;
+                wr_issue_slot <= ost_alloc_slot;
+                wr_issue_ctx <= ost_alloc_ctx;
+                wr_issue_aw_done <= 1'b0;
+                wr_issue_w_done <= 1'b0;
+            end
+
+            unique case (miss_state)
+            M_IDLE: begin
+                active_way_vld <= 1'b0;
+                if (flush_start) begin
+                    flush_pending <= 1'b0;
                     flush_set <= '0;
                     flush_way <= '0;
-                    flush_pending <= 1'b0;
-                    state <= S_FLUSH_CHECK;
-                end else if (host_bti_req_slv.vld && host_bti_req_slv.rdy) begin
-                    req_trans_id <= host_bti_req_slv.pkt.trans_id;
-                    req_cmd <= host_bti_req_slv.pkt.cmd;
-                    req_size <= host_bti_req_slv.pkt.size;
-                    req_addr <= host_bti_req_slv.pkt.addr;
-                    req_data <= host_bti_req_slv.pkt.data;
-                    req_strobe <= host_bti_req_slv.pkt.strobe;
-                    req_split <= req_cross_word(host_bti_req_slv.pkt.addr[1:0],
-                        host_bti_req_slv.pkt.size);
-                    req_byte_idx <= '0;
-                    rsp_data <= '0;
-                    rsp_ok <= 1'b1;
-                    aw_done <= 1'b0;
-                    w_done <= 1'b0;
-                    refill_ok <= 1'b1;
-                    if (bypass_addr(host_bti_req_slv.pkt.addr)) begin
-                        state <= host_bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE ?
-                            S_BYPASS_WR_SEND0 : S_BYPASS_RD_SEND0;
-                    end else if (RO &&
-                        host_bti_req_slv.pkt.cmd == BTI_REQ_CMD_WRITE) begin
-                        rsp_ok <= 1'b0;
-                        state <= S_RESP;
-                    end else begin
-                        state <= S_LOOKUP;
-                    end
+                    miss_state <= M_FLUSH_CHECK;
+                end else if (accept_active) begin
+                    active_req <= stg_req;
+                    active_slot <= ost_alloc_slot;
+                    active_byte_idx <= '0;
+                    active_rsp_data <= '0;
+                    active_ok <= 1'b1;
+                    active_precounted_hit <= front_all_hit;
+                    miss_state <= M_LOOKUP;
                 end
             end
-            S_BYPASS_RD_SEND0: begin
-                if (ar_hsk)
-                    state <= S_BYPASS_RD_RESP0;
-            end
-            S_BYPASS_RD_RESP0: begin
-                if (r_hsk) begin
-                    rsp_data <= first_read_data(mem_axi4_r_slv.pkt.data,
-                        req_addr[1:0]);
-                    rsp_ok <= axi_resp_ok(mem_axi4_r_slv.pkt.resp);
-                    state <= req_split ? S_BYPASS_RD_SEND1 : S_RESP;
-                end
-            end
-            S_BYPASS_RD_SEND1: begin
-                if (ar_hsk)
-                    state <= S_BYPASS_RD_RESP1;
-            end
-            S_BYPASS_RD_RESP1: begin
-                if (r_hsk) begin
-                    rsp_data <= rsp_data |
-                        second_read_data(mem_axi4_r_slv.pkt.data, req_addr[1:0]);
-                    rsp_ok <= rsp_ok && axi_resp_ok(mem_axi4_r_slv.pkt.resp);
-                    state <= S_RESP;
-                end
-            end
-            S_BYPASS_WR_SEND0: begin
-                if (aw_hsk)
-                    aw_done <= 1'b1;
-                if (w_hsk)
-                    w_done <= 1'b1;
-                if ((aw_done || aw_hsk) && (w_done || w_hsk))
-                    state <= S_BYPASS_WR_RESP0;
-            end
-            S_BYPASS_WR_RESP0: begin
-                if (b_hsk) begin
-                    rsp_ok <= axi_resp_ok(mem_axi4_b_slv.pkt.resp);
-                    if (req_split) begin
-                        aw_done <= 1'b0;
-                        w_done <= 1'b0;
-                        state <= S_BYPASS_WR_SEND1;
-                    end else begin
-                        state <= S_RESP;
-                    end
-                end
-            end
-            S_BYPASS_WR_SEND1: begin
-                if (aw_hsk)
-                    aw_done <= 1'b1;
-                if (w_hsk)
-                    w_done <= 1'b1;
-                if ((aw_done || aw_hsk) && (w_done || w_hsk))
-                    state <= S_BYPASS_WR_RESP1;
-            end
-            S_BYPASS_WR_RESP1: begin
-                if (b_hsk) begin
-                    rsp_ok <= rsp_ok && axi_resp_ok(mem_axi4_b_slv.pkt.resp);
-                    state <= S_RESP;
-                end
-            end
-            S_LOOKUP: begin
-                req_set <= cur_set;
-                req_tag <= cur_tag;
-                req_line_addr <= {cur_addr[31:LINE_OFF_W], {LINE_OFF_W{1'b0}}};
-                state <= S_LOOKUP_CHECK;
-            end
-            S_LOOKUP_CHECK: begin
-                if (hit) begin
-                    req_way <= hit_way;
-                    state <= S_SERVE_READ;
+            M_LOOKUP: begin
+                active_set <= active_cur_set;
+                active_tag <= active_cur_tag;
+                active_line_addr <= active_cur_line;
+                active_way_vld <= 1'b1;
+                if (active_hit) begin
+                    active_way <= active_hit_way;
+                    miss_state <= active_req.cmd == BTI_REQ_CMD_READ ?
+                        M_SERVE_READ : M_SERVE_WRITE;
                 end else begin
-                    req_way <= victim_way;
-                    if (!found_invalid)
-                        replace_way[req_set] <= victim_way + 1'b1;
-                    if (valid_ram[victim_way][req_set] && victim_dirty) begin
-                        wb_line_addr <= {victim_tag, req_set, {LINE_OFF_W{1'b0}}};
+                    active_way <= active_victim_way;
+                    if (!active_found_invalid)
+                        replace_way[active_cur_set] <=
+                            active_victim_way == LAST_WAY ? '0 :
+                            active_victim_way + 1'b1;
+                    if (active_victim_dirty) begin
+                        wb_line_addr <= {active_victim_tag, active_cur_set,
+                            {LINE_OFF_W{1'b0}}};
                         beat_idx <= '0;
-                        state <= S_WB_AW;
+                        miss_state <= M_WB_AW;
                     end else begin
                         beat_idx <= '0;
-                        state <= S_REFILL_AR;
+                        miss_state <= M_REFILL_AR;
                     end
                 end
             end
-            S_WB_AW: begin
+            M_WB_AW: begin
                 if (aw_hsk) begin
                     beat_idx <= '0;
-                    state <= S_WB_READ;
+                    miss_state <= M_WB_READ;
                 end
             end
-            S_WB_READ: begin
-                state <= S_WB_CAPTURE;
-            end
-            S_WB_CAPTURE: begin
-                wb_word_data <= data_rdata;
-                state <= S_WB_W;
-            end
-            S_WB_W: begin
+            M_WB_READ: miss_state <= M_WB_SEND;
+            M_WB_SEND: begin
                 if (w_hsk) begin
                     if (beat_idx == LAST_BEAT) begin
-                        state <= S_WB_B;
+                        miss_state <= M_WB_B;
                     end else begin
                         beat_idx <= beat_idx + 1'b1;
-                        state <= S_WB_READ;
+                        miss_state <= M_WB_READ;
                     end
                 end
             end
-            S_WB_B: begin
+            M_WB_B: begin
                 if (b_hsk) begin
-                    dirty_ram[req_way][req_set] <= 1'b0;
+                    dirty_ram[active_way][active_set] <= 1'b0;
+                    beat_idx <= '0;
                     if (axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
-                        beat_idx <= '0;
-                        state <= S_REFILL_AR;
+                        miss_state <= M_REFILL_AR;
                     end else begin
-                        valid_ram[req_way][req_set] <= 1'b0;
-                        rsp_ok <= 1'b0;
-                        state <= S_RESP;
+                        valid_ram[active_way][active_set] <= 1'b0;
+                        active_ok <= 1'b0;
+                        miss_state <= M_COMPLETE;
                     end
                 end
             end
-            S_REFILL_AR: begin
+            M_REFILL_AR: begin
                 if (ar_hsk) begin
                     beat_idx <= '0;
                     refill_ok <= 1'b1;
-                    state <= S_REFILL_R;
+                    miss_state <= M_REFILL_R;
                 end
             end
-            S_REFILL_R: begin
+            M_REFILL_R: begin
                 if (r_hsk) begin
                     refill_ok <= refill_ok &&
                         axi_resp_ok(mem_axi4_r_slv.pkt.resp);
                     if (mem_axi4_r_slv.pkt.last || beat_idx == LAST_BEAT) begin
-                        tag_ram[req_way][req_set] <= req_tag;
-                        valid_ram[req_way][req_set] <= refill_ok &&
+                        tag_ram[active_way][active_set] <= active_tag;
+                        valid_ram[active_way][active_set] <= refill_ok &&
                             axi_resp_ok(mem_axi4_r_slv.pkt.resp);
-                        dirty_ram[req_way][req_set] <= 1'b0;
+                        dirty_ram[active_way][active_set] <= 1'b0;
                         if (refill_ok && axi_resp_ok(mem_axi4_r_slv.pkt.resp)) begin
-                            state <= S_SERVE_READ;
+                            miss_state <= active_req.cmd == BTI_REQ_CMD_READ ?
+                                M_SERVE_READ : M_SERVE_WRITE;
                         end else begin
-                            rsp_ok <= 1'b0;
-                            state <= S_RESP;
+                            active_ok <= 1'b0;
+                            miss_state <= M_COMPLETE;
                         end
                     end else begin
                         beat_idx <= beat_idx + 1'b1;
                     end
                 end
             end
-            S_SERVE_READ: begin
-                state <= S_SERVE_USE;
-            end
-            S_SERVE_USE: begin
-                if (req_cmd == BTI_REQ_CMD_READ) begin
-                    rsp_data <= rsp_data |
-                        ({24'b0, read_byte(data_rdata, cur_byte_off)} <<
-                            ({3'b0, req_byte_idx} << 3));
-                end else if (req_strobe[req_byte_idx[1:0]]) begin
-                    dirty_ram[req_way][req_set] <= 1'b1;
-                end
-
-                if (req_byte_idx + 3'd1 >= req_byte_num(req_size)) begin
-                    rsp_ok <= 1'b1;
-                    state <= S_RESP;
+            M_SERVE_READ: miss_state <= M_SERVE_USE;
+            M_SERVE_USE: begin
+                active_rsp_data <= active_rsp_data |
+                    ((active_read_data & byte_mask(active_fragment_bytes)) <<
+                        ({3'b0, active_byte_idx} << 3));
+                if (active_fragment_last) begin
+                    miss_state <= M_COMPLETE;
                 end else begin
-                    req_byte_idx <= req_byte_idx + 1'b1;
-                    state <= S_LOOKUP;
+                    active_byte_idx <= active_byte_idx + active_fragment_bytes;
+                    active_way_vld <= 1'b0;
+                    miss_state <= M_LOOKUP;
                 end
             end
-            S_RESP: begin
-                if (rsp_hsk)
-                    state <= S_IDLE;
+            M_SERVE_WRITE: begin
+                dirty_ram[active_way][active_set] <= 1'b1;
+                if (active_fragment_last) begin
+                    miss_state <= M_COMPLETE;
+                end else begin
+                    active_byte_idx <= active_byte_idx + active_fragment_bytes;
+                    active_way_vld <= 1'b0;
+                    miss_state <= M_LOOKUP;
+                end
             end
-            S_FLUSH_CHECK: begin
+            M_COMPLETE: begin
+                if (ost_slot_wr_vld && ost_slot_wr_idx == active_slot) begin
+                    active_way_vld <= 1'b0;
+                    miss_state <= M_IDLE;
+                end
+            end
+            M_FLUSH_CHECK: begin
                 if (valid_ram[flush_way][flush_set] &&
-                    dirty_ram[flush_way][flush_set]) begin
+                    dirty_ram[flush_way][flush_set] && !RO) begin
                     wb_line_addr <= {tag_ram[flush_way][flush_set],
                         flush_set, {LINE_OFF_W{1'b0}}};
                     beat_idx <= '0;
-                    state <= S_FLUSH_WB_AW;
+                    miss_state <= M_FLUSH_WB_AW;
                 end else begin
                     valid_ram[flush_way][flush_set] <= 1'b0;
                     dirty_ram[flush_way][flush_set] <= 1'b0;
                     if (flush_way == LAST_WAY && flush_set == LAST_SET) begin
-                        state <= S_FLUSH_DONE;
+                        miss_state <= M_FLUSH_ACK;
+                    end else if (flush_way == LAST_WAY) begin
+                        flush_way <= '0;
+                        flush_set <= flush_set + 1'b1;
                     end else begin
-                        if (flush_way == LAST_WAY) begin
-                            flush_way <= '0;
-                            flush_set <= flush_set + 1'b1;
-                        end else begin
-                            flush_way <= flush_way + 1'b1;
-                        end
+                        flush_way <= flush_way + 1'b1;
                     end
                 end
             end
-            S_FLUSH_WB_AW: begin
+            M_FLUSH_WB_AW: begin
                 if (aw_hsk) begin
                     beat_idx <= '0;
-                    state <= S_FLUSH_WB_READ;
+                    miss_state <= M_FLUSH_WB_READ;
                 end
             end
-            S_FLUSH_WB_READ: begin
-                state <= S_FLUSH_WB_CAPTURE;
-            end
-            S_FLUSH_WB_CAPTURE: begin
-                wb_word_data <= data_rdata;
-                state <= S_FLUSH_WB_W;
-            end
-            S_FLUSH_WB_W: begin
+            M_FLUSH_WB_READ: miss_state <= M_FLUSH_WB_SEND;
+            M_FLUSH_WB_SEND: begin
                 if (w_hsk) begin
                     if (beat_idx == LAST_BEAT) begin
-                        state <= S_FLUSH_WB_B;
+                        miss_state <= M_FLUSH_WB_B;
                     end else begin
                         beat_idx <= beat_idx + 1'b1;
-                        state <= S_FLUSH_WB_READ;
+                        miss_state <= M_FLUSH_WB_READ;
                     end
                 end
             end
-            S_FLUSH_WB_B: begin
+            M_FLUSH_WB_B: begin
                 if (b_hsk) begin
                     valid_ram[flush_way][flush_set] <= 1'b0;
                     dirty_ram[flush_way][flush_set] <= 1'b0;
                     if (flush_way == LAST_WAY && flush_set == LAST_SET) begin
-                        state <= S_FLUSH_DONE;
+                        miss_state <= M_FLUSH_ACK;
+                    end else if (flush_way == LAST_WAY) begin
+                        flush_way <= '0;
+                        flush_set <= flush_set + 1'b1;
+                        miss_state <= M_FLUSH_CHECK;
                     end else begin
-                        if (flush_way == LAST_WAY) begin
-                            flush_way <= '0;
-                            flush_set <= flush_set + 1'b1;
-                        end else begin
-                            flush_way <= flush_way + 1'b1;
-                        end
-                        state <= S_FLUSH_CHECK;
+                        flush_way <= flush_way + 1'b1;
+                        miss_state <= M_FLUSH_CHECK;
                     end
                 end
             end
-            S_FLUSH_DONE: begin
-                state <= S_IDLE;
+            M_FLUSH_ACK: begin
+                miss_state <= M_IDLE;
             end
-            default: begin
-                state <= S_IDLE;
-            end
+            default: miss_state <= M_IDLE;
             endcase
         end
     end
 
-    assign host_bti_req_slv.rdy = state == S_IDLE && !flush_req;
-
-    assign mem_axi4_ar_mst.vld =
-        state == S_BYPASS_RD_SEND0 ||
-        state == S_BYPASS_RD_SEND1 ||
-        state == S_REFILL_AR;
-    assign mem_axi4_ar_mst.pkt.id = '0;
-    assign mem_axi4_ar_mst.pkt.addr =
-        state == S_REFILL_AR ? req_line_addr :
-        (bypass_second ? req_aligned_addr + 32'd4 : req_aligned_addr);
-    assign mem_axi4_ar_mst.pkt.len = state == S_REFILL_AR ? AXI_LINE_LEN : 8'b0;
-    assign mem_axi4_ar_mst.pkt.size = AXI4_AR_SIZE_B4;
-    assign mem_axi4_ar_mst.pkt.burst = AXI4_AR_BURST_INCR;
-    assign mem_axi4_ar_mst.pkt.lock = 1'b0;
-    assign mem_axi4_ar_mst.pkt.cache = state == S_REFILL_AR ? 4'hf : 4'h0;
-    assign mem_axi4_ar_mst.pkt.prot = 3'h0;
-    assign mem_axi4_ar_mst.pkt.qos = 4'h0;
-    assign mem_axi4_ar_mst.pkt.user = '0;
-
-    assign mem_axi4_aw_mst.vld =
-        ((state == S_BYPASS_WR_SEND0 || state == S_BYPASS_WR_SEND1) &&
-            !aw_done) ||
-        state == S_WB_AW ||
-        state == S_FLUSH_WB_AW;
-    assign mem_axi4_aw_mst.pkt.id = '0;
-    assign mem_axi4_aw_mst.pkt.addr =
-        (state == S_WB_AW || state == S_FLUSH_WB_AW) ? wb_line_addr :
-        (bypass_second ? req_aligned_addr + 32'd4 : req_aligned_addr);
-    assign mem_axi4_aw_mst.pkt.len =
-        (state == S_WB_AW || state == S_FLUSH_WB_AW) ? AXI_LINE_LEN : 8'b0;
-    assign mem_axi4_aw_mst.pkt.size = AXI4_AW_SIZE_B4;
-    assign mem_axi4_aw_mst.pkt.burst = AXI4_AW_BURST_INCR;
-    assign mem_axi4_aw_mst.pkt.lock = 1'b0;
-    assign mem_axi4_aw_mst.pkt.cache =
-        (state == S_WB_AW || state == S_FLUSH_WB_AW) ? 4'hf : 4'h0;
-    assign mem_axi4_aw_mst.pkt.prot = 3'h0;
-    assign mem_axi4_aw_mst.pkt.qos = 4'h0;
-    assign mem_axi4_aw_mst.pkt.user = '0;
-
-    assign mem_axi4_w_mst.vld =
-        ((state == S_BYPASS_WR_SEND0 || state == S_BYPASS_WR_SEND1) &&
-            !w_done) ||
-        state == S_WB_W ||
-        state == S_FLUSH_WB_W;
-    assign mem_axi4_w_mst.pkt.data =
-        (state == S_WB_W || state == S_FLUSH_WB_W) ? wb_word_data :
-        (bypass_second ? second_write_data(req_data, req_addr[1:0]) :
-            first_write_data(req_data, req_addr[1:0]));
-    assign mem_axi4_w_mst.pkt.strb =
-        (state == S_WB_W || state == S_FLUSH_WB_W) ? 4'hf :
-        (bypass_second ? second_write_strobe(req_strobe, req_addr[1:0]) :
-            first_write_strobe(req_strobe, req_addr[1:0]));
-    assign mem_axi4_w_mst.pkt.last =
-        (state != S_WB_W && state != S_FLUSH_WB_W) || beat_idx == LAST_BEAT;
-
-    assign mem_axi4_r_slv.rdy =
-        state == S_BYPASS_RD_RESP0 ||
-        state == S_BYPASS_RD_RESP1 ||
-        state == S_REFILL_R;
-    assign mem_axi4_b_slv.rdy =
-        state == S_BYPASS_WR_RESP0 ||
-        state == S_BYPASS_WR_RESP1 ||
-        state == S_WB_B ||
-        state == S_FLUSH_WB_B;
-
-    assign host_bti_rsp_mst.vld = state == S_RESP;
-    assign host_bti_rsp_mst.pkt.trans_id = req_trans_id;
-    assign host_bti_rsp_mst.pkt.data =
-        req_cmd == BTI_REQ_CMD_WRITE ? 32'b0 : rsp_data;
-    assign host_bti_rsp_mst.pkt.ok = rsp_ok;
-    assign flush_ack_mst.vld = state == S_FLUSH_DONE;
-
-    assign perf_mst.pkt.hit = state == S_LOOKUP_CHECK && hit;
-    assign perf_mst.pkt.miss = state == S_LOOKUP_CHECK && !hit;
-    assign perf_mst.pkt.bypass = state == S_IDLE && host_bti_req_slv.vld &&
-        host_bti_req_slv.rdy && bypass_addr(host_bti_req_slv.pkt.addr);
-    assign perf_mst.pkt.writeback = (state == S_WB_AW ||
-        state == S_FLUSH_WB_AW) && aw_hsk;
-    assign perf_mst.pkt.busy = host_bti_req_slv.vld && !host_bti_req_slv.rdy;
+    assign perf_mst.pkt.hit = accept_fast ||
+        (accept_active && front_all_hit) ||
+        (miss_state == M_LOOKUP && !active_precounted_hit && active_hit);
+    assign perf_mst.pkt.miss = miss_state == M_LOOKUP && !active_hit;
+    assign perf_mst.pkt.bypass = accept_bypass_rd || accept_bypass_wr ||
+        (accept_ro_error && front_is_bypass);
+    assign perf_mst.pkt.writeback = aw_hsk &&
+        (miss_state == M_WB_AW || miss_state == M_FLUSH_WB_AW);
+    assign perf_mst.pkt.stg_full = host_bti_req_slv.vld &&
+        !host_bti_req_slv.rdy;
+    assign perf_mst.pkt.ost_full = stg_rd_vld && !flush_active && ost_full;
+    assign perf_mst.pkt.miss_busy = stg_rd_vld && !flush_pending &&
+        !flush_active && !ost_full && !front_is_bypass &&
+        !(RO && front_is_write) && !front_fast_hit &&
+        (miss_state != M_IDLE || has_bypass_ost);
 
 `ifndef SYNTHESIS
-    logic rtl_progress_en;
-    longint unsigned rtl_progress_cycle;
-
-    initial begin
-        rtl_progress_en = $test$plusargs("rtl_progress");
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            rtl_progress_cycle <= 0;
-        end else if (rtl_progress_en) begin
-            rtl_progress_cycle <= rtl_progress_cycle + 1;
-            if (rtl_progress_cycle[19:0] == 20'h0) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d state=%0d req=%08x cmd=%0d size=%0d set=%0d way=%0d beat=%0d flush=%0d/%0d host=%0b/%0b:%0b/%0b axi_aw=%0b/%0b axi_w=%0b/%0b axi_b=%0b/%0b axi_ar=%0b/%0b axi_r=%0b/%0b rlast=%0b",
-                    rtl_progress_cycle,
-                    state,
-                    req_addr,
-                    req_cmd,
-                    req_size,
-                    req_set,
-                    req_way,
-                    beat_idx,
-                    flush_set,
-                    flush_way,
-                    host_bti_req_slv.vld, host_bti_req_slv.rdy,
-                    host_bti_rsp_mst.vld, host_bti_rsp_mst.rdy,
-                    mem_axi4_aw_mst.vld, mem_axi4_aw_mst.rdy,
-                    mem_axi4_w_mst.vld, mem_axi4_w_mst.rdy,
-                    mem_axi4_b_slv.vld, mem_axi4_b_slv.rdy,
-                    mem_axi4_ar_mst.vld, mem_axi4_ar_mst.rdy,
-                    mem_axi4_r_slv.vld, mem_axi4_r_slv.rdy,
-                    mem_axi4_r_slv.pkt.last);
-            end
+    always_ff @(posedge clk) begin
+        if (rst_n && mem_axi4_r_slv.vld && miss_state != M_REFILL_R) begin
+            assert (mem_axi4_r_slv.pkt.id < 8'(OST_DEPTH))
+                else $fatal(1, "L1 AXI R id outside OST range");
+        end
+        if (rst_n && mem_axi4_b_slv.vld &&
+            miss_state != M_WB_B && miss_state != M_FLUSH_WB_B) begin
+            assert (mem_axi4_b_slv.pkt.id < 8'(OST_DEPTH))
+                else $fatal(1, "L1 AXI B id outside OST range");
         end
     end
 `endif

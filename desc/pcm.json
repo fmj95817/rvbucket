@@ -73,7 +73,9 @@
         "miss",
         "bypass",
         "writeback",
-        "busy"
+        "stg_full",
+        "ost_full",
+        "miss_busy"
       ]
     },
     "exu": {

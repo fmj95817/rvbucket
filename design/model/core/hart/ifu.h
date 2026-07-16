@@ -43,7 +43,6 @@ typedef struct ifu_ctrlq_entry {
 
 typedef struct ifu_fch_ost_ctx {
     u32 pc;
-    u32 epoch;
 } ifu_fch_ost_ctx_t;
 
 typedef struct ifu_fch_rspq_entry {
@@ -95,7 +94,10 @@ typedef struct ifu {
         ifu_fch_state_t state;
         u32 pc;
         u32 ir;
-        u32 epoch;
+        u32 req_ptr;
+        u32 rsp_ptr;
+        u32 discard_end_ptr;
+        bool discard_vld;
     } fch;
     bool back_blocked;
 

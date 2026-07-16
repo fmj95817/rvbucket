@@ -17,6 +17,8 @@ module mmu #(
     bti_rsp_if_t.slv pa_i_rsp_slv,
     bti_req_if_t.mst pa_d_req_mst,
     bti_rsp_if_t.slv pa_d_rsp_slv,
+    bti_req_if_t.mst ptw_req_mst,
+    bti_rsp_if_t.slv ptw_rsp_slv,
     exu_state_if_t.slv exu_state_slv,
     csr_mmu_state_if_t.slv csr_mmu_state_slv,
     tlb_flush_if_t.slv tlb_flush_slv,
@@ -97,6 +99,11 @@ module mmu #(
     ost_ctx_t i_ost_slot_wr_ctx;
     logic [OST_DEPTH-1:0] i_ost_slot_vld;
     logic [OST_DEPTH*OST_CTX_DW-1:0] i_ost_slot_ctx_flat;
+    logic i_ost_empty;
+    logic i_direct_rsp_vld;
+    logic i_direct_rsp_hsk;
+    logic i_rsp_slot_wr;
+    ost_ctx_t i_direct_rsp_ctx;
     ost_ctx_t i_slot_ctx[OST_DEPTH];
 
     logic d_ost_alloc_vld;
@@ -112,6 +119,11 @@ module mmu #(
     ost_ctx_t d_ost_slot_wr_ctx;
     logic [OST_DEPTH-1:0] d_ost_slot_vld;
     logic [OST_DEPTH*OST_CTX_DW-1:0] d_ost_slot_ctx_flat;
+    logic d_ost_empty;
+    logic d_direct_rsp_vld;
+    logic d_direct_rsp_hsk;
+    logic d_rsp_slot_wr;
+    ost_ctx_t d_direct_rsp_ctx;
     ost_ctx_t d_slot_ctx[OST_DEPTH];
 
     logic i_wait_found;
@@ -123,8 +135,6 @@ module mmu #(
 
     logic lookup_vld_q;
     logic lookup_is_inst_q;
-    logic [I_OST_SLOT_W-1:0] lookup_i_slot_q;
-    logic [D_OST_SLOT_W-1:0] lookup_d_slot_q;
     bti_req_pkt_t lookup_req_q;
     logic [31:0] lookup_va_q;
     logic [31:0] lookup_pc_q;
@@ -173,6 +183,12 @@ module mmu #(
     logic dtlb_hit;
     logic [31:0] dtlb_pte;
     logic dtlb_level;
+    logic lookup_rsp_vld;
+    logic lookup_rsp_hit;
+    logic [31:0] lookup_rsp_pte;
+    logic lookup_rsp_level;
+    logic lookup_rsp_fault;
+    logic walk_alloc;
 
     logic new_i_bare_issue;
     logic new_d_bare_issue;
@@ -181,7 +197,6 @@ module mmu #(
     logic pa_i_from_pend;
     logic pa_d_from_pend;
     logic pa_i_from_walk;
-    logic pa_d_from_walk_pte;
     logic pa_d_from_walk_final;
     logic pa_i_from_new_bare;
     logic pa_d_from_new_bare;
@@ -201,9 +216,10 @@ module mmu #(
     wire pa_d_req_hsk = pa_d_req_mst.vld && pa_d_req_mst.rdy;
     wire pa_i_rsp_hsk = pa_i_rsp_slv.vld && pa_i_rsp_slv.rdy;
     wire pa_d_rsp_hsk = pa_d_rsp_slv.vld && pa_d_rsp_slv.rdy;
+    wire ptw_req_hsk = ptw_req_mst.vld && ptw_req_mst.rdy;
+    wire ptw_rsp_hsk = ptw_rsp_slv.vld && ptw_rsp_slv.rdy;
     wire va_i_rsp_hsk = va_i_rsp_mst.vld && va_i_rsp_mst.rdy;
     wire va_d_rsp_hsk = va_d_rsp_mst.vld && va_d_rsp_mst.rdy;
-    wire osts_empty = !(|i_ost_slot_vld) && !(|d_ost_slot_vld);
     wire walk_busy = walk_state != WALK_IDLE;
 
     function automatic logic pte_valid(input logic [31:0] pte);
@@ -346,8 +362,9 @@ module mmu #(
     endfunction
 
     fifo #(
-        .DW    (BTI_REQ_DW),
-        .DEPTH (I_STG_FIFO_DEPTH)
+        .DW           (BTI_REQ_DW),
+        .DEPTH        (I_STG_FIFO_DEPTH),
+        .FALL_THROUGH (1'b1)
     ) u_i_req_fifo(
         .clk     (clk),
         .rst_n   (rst_n),
@@ -363,8 +380,9 @@ module mmu #(
     );
 
     fifo #(
-        .DW    (BTI_REQ_DW),
-        .DEPTH (D_STG_FIFO_DEPTH)
+        .DW           (BTI_REQ_DW),
+        .DEPTH        (D_STG_FIFO_DEPTH),
+        .FALL_THROUGH (1'b1)
     ) u_d_req_fifo(
         .clk     (clk),
         .rst_n   (rst_n),
@@ -403,7 +421,7 @@ module mmu #(
         .slot_wr_ctx   (i_ost_slot_wr_ctx),
         .slot_vld      (i_ost_slot_vld),
         .slot_ctx_flat (i_ost_slot_ctx_flat),
-        .empty         (),
+        .empty         (i_ost_empty),
         .full          ()
     );
 
@@ -426,7 +444,7 @@ module mmu #(
         .slot_wr_ctx   (d_ost_slot_wr_ctx),
         .slot_vld      (d_ost_slot_vld),
         .slot_ctx_flat (d_ost_slot_ctx_flat),
-        .empty         (),
+        .empty         (d_ost_empty),
         .full          ()
     );
 
@@ -513,10 +531,11 @@ module mmu #(
 
     always_comb begin
         new_d_bare_issue = d_fifo_rd_vld && !d_translate && !walk_busy &&
-            !pend_pa_vld && d_ost_alloc_rdy && pa_d_req_mst.rdy;
+            !pend_pa_vld && !lookup_vld_q && d_ost_alloc_rdy &&
+            pa_d_req_mst.rdy;
         new_i_bare_issue = i_fifo_rd_vld && !i_translate && !walk_busy &&
-            !pend_pa_vld && !new_d_bare_issue && i_ost_alloc_rdy &&
-            pa_i_req_mst.rdy;
+            !pend_pa_vld && !lookup_vld_q && !new_d_bare_issue &&
+            i_ost_alloc_rdy && pa_i_req_mst.rdy;
         new_d_lookup_issue = d_fifo_rd_vld && d_translate && !walk_busy &&
             !pend_pa_vld && !lookup_vld_q && d_ost_alloc_rdy;
         new_i_lookup_issue = i_fifo_rd_vld && i_translate && !walk_busy &&
@@ -527,11 +546,46 @@ module mmu #(
     assign itlb_lookup_vld = new_i_lookup_issue;
     assign dtlb_lookup_vld = new_d_lookup_issue;
 
+    assign lookup_rsp_vld = lookup_vld_q &&
+        ((lookup_is_inst_q && itlb_rsp_vld) ||
+        (!lookup_is_inst_q && dtlb_rsp_vld));
+    assign lookup_rsp_hit = lookup_is_inst_q ? itlb_hit : dtlb_hit;
+    assign lookup_rsp_pte = lookup_is_inst_q ? itlb_pte : dtlb_pte;
+    assign lookup_rsp_level = lookup_is_inst_q ? itlb_level : dtlb_level;
+    assign lookup_rsp_fault = lookup_rsp_hit &&
+        (!pte_permits(lookup_rsp_pte, lookup_is_inst_q, lookup_req_q.cmd,
+            lookup_priv_q, lookup_sum_q, lookup_mxr_q) ||
+        !leaf_pa_ok(lookup_rsp_pte, lookup_rsp_level));
+    assign walk_alloc = walk_state == WALK_WAIT_OST_DRAIN &&
+        i_ost_empty && d_ost_empty &&
+        (walk_is_inst ? i_ost_alloc_rdy : d_ost_alloc_rdy);
+
     always_comb begin
-        i_ost_alloc_vld = new_i_bare_issue || new_i_lookup_issue;
-        i_ost_alloc_ctx = make_ctx(1'b1, i_req_pkt, new_i_bare_issue);
-        d_ost_alloc_vld = new_d_bare_issue || new_d_lookup_issue;
-        d_ost_alloc_ctx = make_ctx(1'b0, d_req_pkt, new_d_bare_issue);
+        i_ost_alloc_vld = new_i_bare_issue ||
+            (lookup_rsp_vld && lookup_is_inst_q && lookup_rsp_hit) ||
+            (walk_alloc && walk_is_inst);
+        i_ost_alloc_ctx = make_ctx(1'b1,
+            walk_alloc && walk_is_inst ? walk_req :
+            lookup_rsp_vld && lookup_is_inst_q ? lookup_req_q : i_req_pkt,
+            new_i_bare_issue);
+        if (lookup_rsp_vld && lookup_is_inst_q && lookup_rsp_fault) begin
+            i_ost_alloc_ctx = complete_fault(i_ost_alloc_ctx,
+                lookup_fault_cause_q, lookup_priv_q, lookup_pc_q,
+                lookup_va_q);
+        end
+
+        d_ost_alloc_vld = new_d_bare_issue ||
+            (lookup_rsp_vld && !lookup_is_inst_q && lookup_rsp_hit) ||
+            (walk_alloc && !walk_is_inst);
+        d_ost_alloc_ctx = make_ctx(1'b0,
+            walk_alloc && !walk_is_inst ? walk_req :
+            lookup_rsp_vld && !lookup_is_inst_q ? lookup_req_q : d_req_pkt,
+            new_d_bare_issue);
+        if (lookup_rsp_vld && !lookup_is_inst_q && lookup_rsp_fault) begin
+            d_ost_alloc_ctx = complete_fault(d_ost_alloc_ctx,
+                lookup_fault_cause_q, lookup_priv_q, lookup_pc_q,
+                lookup_va_q);
+        end
     end
 
     assign i_fifo_rd_rdy = new_i_bare_issue || new_i_lookup_issue;
@@ -539,15 +593,15 @@ module mmu #(
 
     always_comb begin
         pa_i_from_walk = walk_state == WALK_SEND_FINAL && walk_is_inst;
-        pa_d_from_walk_pte = walk_state == WALK_SEND_PTE;
         pa_d_from_walk_final = walk_state == WALK_SEND_FINAL && !walk_is_inst;
-        pa_i_from_pend = pend_pa_vld && pend_pa_is_inst && !pa_i_from_walk;
+        pa_i_from_pend = pend_pa_vld && pend_pa_is_inst &&
+            !pa_i_from_walk && !i_rsp_slot_wr;
         pa_d_from_pend = pend_pa_vld && !pend_pa_is_inst &&
-            !pa_d_from_walk_pte && !pa_d_from_walk_final;
+            !pa_d_from_walk_final && !d_rsp_slot_wr;
         pa_i_from_new_bare = new_i_bare_issue && !pa_i_from_walk &&
             !pa_i_from_pend;
-        pa_d_from_new_bare = new_d_bare_issue && !pa_d_from_walk_pte &&
-            !pa_d_from_walk_final && !pa_d_from_pend;
+        pa_d_from_new_bare = new_d_bare_issue && !pa_d_from_walk_final &&
+            !pa_d_from_pend;
     end
 
     assign pa_i_req_mst.vld = pa_i_from_walk || pa_i_from_pend ||
@@ -556,25 +610,64 @@ module mmu #(
         pa_i_from_walk ? walk_req :
         pa_i_from_pend ? pend_pa_req : i_req_pkt;
 
-    assign pa_d_req_mst.vld = pa_d_from_walk_pte || pa_d_from_walk_final ||
-        pa_d_from_pend || pa_d_from_new_bare;
+    assign pa_d_req_mst.vld = pa_d_from_walk_final || pa_d_from_pend ||
+        pa_d_from_new_bare;
     assign pa_d_req_mst.pkt =
-        pa_d_from_walk_pte ?
-            bti_req_pkt_t'{trans_id:MMU_PTE_TRANS_ID, cmd:BTI_REQ_CMD_READ,
-                addr:pte_addr(walk_root_base, walk_va, walk_level),
-                size:BTI_REQ_SIZE_B4, data:32'h0, strobe:4'hf} :
         pa_d_from_walk_final ? walk_req :
         pa_d_from_pend ? pend_pa_req : d_req_pkt;
 
-    assign pa_i_rsp_slv.rdy = i_wait_found;
-    assign pa_d_rsp_slv.rdy = walk_state == WALK_WAIT_PTE ||
-        walk_state == WALK_WAIT_FINAL || d_wait_found;
+    assign ptw_req_mst.vld = walk_state == WALK_SEND_PTE;
+    assign ptw_req_mst.pkt = bti_req_pkt_t'{
+        trans_id:MMU_PTE_TRANS_ID,
+        cmd:BTI_REQ_CMD_READ,
+        addr:pte_addr(walk_root_base, walk_va, walk_level),
+        size:BTI_REQ_SIZE_B4,
+        data:32'h0,
+        strobe:4'hf
+    };
 
-    assign va_i_rsp_mst.vld = i_ost_head_vld && i_ost_head_ctx.ready &&
-        !i_ost_head_ctx.expt_vld;
-    assign va_i_rsp_mst.pkt = i_ost_head_ctx.rsp;
-    assign va_d_rsp_mst.vld = d_ost_head_vld && d_ost_head_ctx.ready;
-    assign va_d_rsp_mst.pkt = d_ost_head_ctx.rsp;
+    wire walk_rsp_fault = walk_state == WALK_WAIT_PTE && ptw_rsp_hsk &&
+        (!ptw_rsp_slv.pkt.ok || !pte_valid(ptw_rsp_slv.pkt.data) ||
+        (!pte_leaf(ptw_rsp_slv.pkt.data) &&
+            (!walk_level || |ptw_rsp_slv.pkt.data[7:4])) ||
+        (pte_leaf(ptw_rsp_slv.pkt.data) &&
+            (!pte_permits(ptw_rsp_slv.pkt.data, walk_is_inst,
+                walk_req.cmd, walk_priv, walk_sum, walk_mxr) ||
+            !leaf_pa_ok(ptw_rsp_slv.pkt.data, walk_level))));
+
+    assign i_direct_rsp_vld = pa_i_rsp_slv.vld &&
+        walk_state != WALK_WAIT_FINAL && i_wait_found &&
+        i_ost_head_vld && !i_ost_head_ctx.ready &&
+        i_wait_slot == i_ost_head_slot;
+    assign i_direct_rsp_ctx = complete_rsp(i_wait_ctx, pa_i_rsp_slv.pkt);
+    assign i_direct_rsp_hsk = i_direct_rsp_vld && va_i_rsp_mst.rdy;
+    assign i_rsp_slot_wr = pa_i_rsp_hsk &&
+        walk_state != WALK_WAIT_FINAL && i_wait_found && !i_direct_rsp_hsk;
+
+    assign d_direct_rsp_vld = pa_d_rsp_slv.vld &&
+        walk_state != WALK_WAIT_FINAL &&
+        d_wait_found && d_ost_head_vld && !d_ost_head_ctx.ready &&
+        d_wait_slot == d_ost_head_slot;
+    assign d_direct_rsp_ctx = complete_rsp(d_wait_ctx, pa_d_rsp_slv.pkt);
+    assign d_direct_rsp_hsk = d_direct_rsp_vld && va_d_rsp_mst.rdy;
+    assign d_rsp_slot_wr = pa_d_rsp_hsk && walk_state != WALK_WAIT_PTE &&
+        walk_state != WALK_WAIT_FINAL && d_wait_found && !d_direct_rsp_hsk;
+
+    assign pa_i_rsp_slv.rdy = i_wait_found &&
+        (!i_direct_rsp_vld || va_i_rsp_mst.rdy);
+    assign pa_d_rsp_slv.rdy = walk_state == WALK_WAIT_FINAL ||
+        (d_wait_found && (!d_direct_rsp_vld || va_d_rsp_mst.rdy));
+    assign ptw_rsp_slv.rdy = walk_state == WALK_WAIT_PTE;
+
+    assign va_i_rsp_mst.vld =
+        (i_ost_head_vld && i_ost_head_ctx.ready &&
+            !i_ost_head_ctx.expt_vld) || i_direct_rsp_vld;
+    assign va_i_rsp_mst.pkt = i_ost_head_ctx.ready ?
+        i_ost_head_ctx.rsp : i_direct_rsp_ctx.rsp;
+    assign va_d_rsp_mst.vld =
+        (d_ost_head_vld && d_ost_head_ctx.ready) || d_direct_rsp_vld;
+    assign va_d_rsp_mst.pkt = d_ost_head_ctx.ready ?
+        d_ost_head_ctx.rsp : d_direct_rsp_ctx.rsp;
     assign i_ost_free_head = va_i_rsp_hsk ||
         (i_ost_head_vld && i_ost_head_ctx.ready && i_ost_head_ctx.expt_vld);
     assign d_ost_free_head = va_d_rsp_hsk;
@@ -598,12 +691,77 @@ module mmu #(
     assign perf_mst.pkt.d_ost_full = d_fifo_rd_vld && !d_ost_alloc_rdy;
     assign perf_mst.pkt.ptw_busy = walk_busy;
 
+    always_comb begin
+        i_ost_slot_wr_vld = 1'b0;
+        i_ost_slot_wr_idx = '0;
+        i_ost_slot_wr_ctx = '0;
+        d_ost_slot_wr_vld = 1'b0;
+        d_ost_slot_wr_idx = '0;
+        d_ost_slot_wr_ctx = '0;
+
+        if (i_rsp_slot_wr) begin
+            i_ost_slot_wr_vld = 1'b1;
+            i_ost_slot_wr_idx = i_wait_slot;
+            i_ost_slot_wr_ctx = complete_rsp(i_wait_ctx, pa_i_rsp_slv.pkt);
+        end else if (pend_pa_vld && pend_pa_is_inst && pa_i_req_hsk) begin
+            i_ost_slot_wr_vld = 1'b1;
+            i_ost_slot_wr_idx = pend_pa_i_slot;
+            i_ost_slot_wr_ctx = mark_pa_issued(i_slot_ctx[pend_pa_i_slot]);
+        end
+
+        if (d_rsp_slot_wr) begin
+            d_ost_slot_wr_vld = 1'b1;
+            d_ost_slot_wr_idx = d_wait_slot;
+            d_ost_slot_wr_ctx = complete_rsp(d_wait_ctx, pa_d_rsp_slv.pkt);
+        end else if (pend_pa_vld && !pend_pa_is_inst && pa_d_req_hsk) begin
+            d_ost_slot_wr_vld = 1'b1;
+            d_ost_slot_wr_idx = pend_pa_d_slot;
+            d_ost_slot_wr_ctx = mark_pa_issued(d_slot_ctx[pend_pa_d_slot]);
+        end
+
+        if (walk_rsp_fault) begin
+            if (walk_is_inst) begin
+                i_ost_slot_wr_vld = 1'b1;
+                i_ost_slot_wr_idx = walk_i_slot;
+                i_ost_slot_wr_ctx = complete_fault(i_slot_ctx[walk_i_slot],
+                    walk_fault_cause, walk_priv, walk_pc, walk_va);
+            end else begin
+                d_ost_slot_wr_vld = 1'b1;
+                d_ost_slot_wr_idx = walk_d_slot;
+                d_ost_slot_wr_ctx = complete_fault(d_slot_ctx[walk_d_slot],
+                    walk_fault_cause, walk_priv, walk_pc, walk_va);
+            end
+        end else if (walk_state == WALK_SEND_FINAL &&
+            (walk_is_inst ? pa_i_req_hsk : pa_d_req_hsk)) begin
+            if (walk_is_inst) begin
+                i_ost_slot_wr_vld = 1'b1;
+                i_ost_slot_wr_idx = walk_i_slot;
+                i_ost_slot_wr_ctx = mark_pa_issued(i_slot_ctx[walk_i_slot]);
+            end else begin
+                d_ost_slot_wr_vld = 1'b1;
+                d_ost_slot_wr_idx = walk_d_slot;
+                d_ost_slot_wr_ctx = mark_pa_issued(d_slot_ctx[walk_d_slot]);
+            end
+        end else if (walk_state == WALK_WAIT_FINAL &&
+            (walk_is_inst ? pa_i_rsp_hsk : pa_d_rsp_hsk)) begin
+            if (walk_is_inst) begin
+                i_ost_slot_wr_vld = 1'b1;
+                i_ost_slot_wr_idx = walk_i_slot;
+                i_ost_slot_wr_ctx = complete_rsp(i_slot_ctx[walk_i_slot],
+                    pa_i_rsp_slv.pkt);
+            end else begin
+                d_ost_slot_wr_vld = 1'b1;
+                d_ost_slot_wr_idx = walk_d_slot;
+                d_ost_slot_wr_ctx = complete_rsp(d_slot_ctx[walk_d_slot],
+                    pa_d_rsp_slv.pkt);
+            end
+        end
+    end
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             lookup_vld_q <= 1'b0;
             lookup_is_inst_q <= 1'b0;
-            lookup_i_slot_q <= '0;
-            lookup_d_slot_q <= '0;
             lookup_req_q <= '0;
             lookup_va_q <= '0;
             lookup_pc_q <= '0;
@@ -639,43 +797,12 @@ module mmu #(
             fill_tlb_satp_asid <= '0;
             fill_tlb_level <= 1'b0;
             fill_tlb_pte <= '0;
-            i_ost_slot_wr_vld <= 1'b0;
-            i_ost_slot_wr_idx <= '0;
-            i_ost_slot_wr_ctx <= '0;
-            d_ost_slot_wr_vld <= 1'b0;
-            d_ost_slot_wr_idx <= '0;
-            d_ost_slot_wr_ctx <= '0;
         end else begin
             fill_tlb_vld <= 1'b0;
-            i_ost_slot_wr_vld <= 1'b0;
-            d_ost_slot_wr_vld <= 1'b0;
-
-            if (pa_i_rsp_hsk && walk_state != WALK_WAIT_FINAL &&
-                i_wait_found) begin
-                i_ost_slot_wr_vld <= 1'b1;
-                i_ost_slot_wr_idx <= i_wait_slot;
-                i_ost_slot_wr_ctx <= complete_rsp(i_wait_ctx, pa_i_rsp_slv.pkt);
-            end else if (pend_pa_vld && pend_pa_is_inst && pa_i_req_hsk) begin
-                i_ost_slot_wr_vld <= 1'b1;
-                i_ost_slot_wr_idx <= pend_pa_i_slot;
-                i_ost_slot_wr_ctx <= mark_pa_issued(i_slot_ctx[pend_pa_i_slot]);
-            end
-
-            if (pa_d_rsp_hsk && walk_state != WALK_WAIT_PTE &&
-                walk_state != WALK_WAIT_FINAL && d_wait_found) begin
-                d_ost_slot_wr_vld <= 1'b1;
-                d_ost_slot_wr_idx <= d_wait_slot;
-                d_ost_slot_wr_ctx <= complete_rsp(d_wait_ctx, pa_d_rsp_slv.pkt);
-            end else if (pend_pa_vld && !pend_pa_is_inst && pa_d_req_hsk) begin
-                d_ost_slot_wr_vld <= 1'b1;
-                d_ost_slot_wr_idx <= pend_pa_d_slot;
-                d_ost_slot_wr_ctx <= mark_pa_issued(d_slot_ctx[pend_pa_d_slot]);
-            end
 
             if (new_d_lookup_issue) begin
                 lookup_vld_q <= 1'b1;
                 lookup_is_inst_q <= 1'b0;
-                lookup_d_slot_q <= d_ost_alloc_slot;
                 lookup_req_q <= d_req_pkt;
                 lookup_va_q <= d_req_pkt.addr;
                 lookup_pc_q <= exu_state_slv.pkt.pc;
@@ -686,7 +813,6 @@ module mmu #(
             end else if (new_i_lookup_issue) begin
                 lookup_vld_q <= 1'b1;
                 lookup_is_inst_q <= 1'b1;
-                lookup_i_slot_q <= i_ost_alloc_slot;
                 lookup_req_q <= i_req_pkt;
                 lookup_va_q <= i_req_pkt.addr;
                 lookup_pc_q <= i_req_pkt.addr;
@@ -697,43 +823,19 @@ module mmu #(
             end else if ((lookup_is_inst_q && itlb_rsp_vld) ||
                 (!lookup_is_inst_q && dtlb_rsp_vld)) begin
                 lookup_vld_q <= 1'b0;
-                if (lookup_is_inst_q ? itlb_hit : dtlb_hit) begin
-                    logic [31:0] hit_pte;
-                    logic hit_level;
-                    ost_ctx_t ctx;
-                    hit_pte = lookup_is_inst_q ? itlb_pte : dtlb_pte;
-                    hit_level = lookup_is_inst_q ? itlb_level : dtlb_level;
-                    if (!pte_permits(hit_pte, lookup_is_inst_q, lookup_req_q.cmd,
-                        lookup_priv_q, lookup_sum_q, lookup_mxr_q) ||
-                        !leaf_pa_ok(hit_pte, hit_level)) begin
-                        if (lookup_is_inst_q) begin
-                            ctx = complete_fault(i_slot_ctx[lookup_i_slot_q],
-                                lookup_fault_cause_q, lookup_priv_q,
-                                lookup_pc_q, lookup_va_q);
-                            i_ost_slot_wr_vld <= 1'b1;
-                            i_ost_slot_wr_idx <= lookup_i_slot_q;
-                            i_ost_slot_wr_ctx <= ctx;
-                        end else begin
-                            ctx = complete_fault(d_slot_ctx[lookup_d_slot_q],
-                                lookup_fault_cause_q, lookup_priv_q,
-                                lookup_pc_q, lookup_va_q);
-                            d_ost_slot_wr_vld <= 1'b1;
-                            d_ost_slot_wr_idx <= lookup_d_slot_q;
-                            d_ost_slot_wr_ctx <= ctx;
-                        end
-                    end else begin
+                if (lookup_rsp_hit) begin
+                    if (!lookup_rsp_fault) begin
                         pend_pa_vld <= 1'b1;
                         pend_pa_is_inst <= lookup_is_inst_q;
-                        pend_pa_i_slot <= lookup_i_slot_q;
-                        pend_pa_d_slot <= lookup_d_slot_q;
+                        pend_pa_i_slot <= i_ost_alloc_slot;
+                        pend_pa_d_slot <= d_ost_alloc_slot;
                         pend_pa_req <= lookup_req_q;
-                        pend_pa_req.addr <= leaf_pa(hit_pte, lookup_va_q, hit_level);
+                        pend_pa_req.addr <= leaf_pa(lookup_rsp_pte, lookup_va_q,
+                            lookup_rsp_level);
                     end
                 end else begin
                     walk_state <= WALK_WAIT_OST_DRAIN;
                     walk_is_inst <= lookup_is_inst_q;
-                    walk_i_slot <= lookup_i_slot_q;
-                    walk_d_slot <= lookup_d_slot_q;
                     walk_req <= lookup_req_q;
                     walk_va <= lookup_va_q;
                     walk_pc <= lookup_pc_q;
@@ -757,69 +859,35 @@ module mmu #(
             unique case (walk_state)
             WALK_IDLE: ;
             WALK_WAIT_OST_DRAIN: begin
-                if ((walk_is_inst && i_ost_head_vld &&
-                    i_ost_head_slot == walk_i_slot && !(|d_ost_slot_vld)) ||
-                    (!walk_is_inst && d_ost_head_vld &&
-                    d_ost_head_slot == walk_d_slot && !(|i_ost_slot_vld))) begin
+                if (walk_alloc) begin
+                    walk_i_slot <= i_ost_alloc_slot;
+                    walk_d_slot <= d_ost_alloc_slot;
                     walk_state <= WALK_SEND_PTE;
                 end
             end
             WALK_SEND_PTE: begin
-                if (pa_d_req_hsk)
+                if (ptw_req_hsk)
                     walk_state <= WALK_WAIT_PTE;
             end
             WALK_WAIT_PTE: begin
-                if (pa_d_rsp_hsk) begin
-                    walk_pte <= pa_d_rsp_slv.pkt.data;
-                    if (!pa_d_rsp_slv.pkt.ok || !pte_valid(pa_d_rsp_slv.pkt.data)) begin
-                        if (walk_is_inst) begin
-                            i_ost_slot_wr_vld <= 1'b1;
-                            i_ost_slot_wr_idx <= walk_i_slot;
-                            i_ost_slot_wr_ctx <= complete_fault(i_slot_ctx[walk_i_slot],
-                                walk_fault_cause, walk_priv, walk_pc, walk_va);
-                        end else begin
-                            d_ost_slot_wr_vld <= 1'b1;
-                            d_ost_slot_wr_idx <= walk_d_slot;
-                            d_ost_slot_wr_ctx <= complete_fault(d_slot_ctx[walk_d_slot],
-                                walk_fault_cause, walk_priv, walk_pc, walk_va);
-                        end
+                if (ptw_rsp_hsk) begin
+                    walk_pte <= ptw_rsp_slv.pkt.data;
+                    if (!ptw_rsp_slv.pkt.ok || !pte_valid(ptw_rsp_slv.pkt.data)) begin
                         walk_state <= WALK_IDLE;
-                    end else if (!pte_leaf(pa_d_rsp_slv.pkt.data)) begin
-                        if (!walk_level || |pa_d_rsp_slv.pkt.data[7:4]) begin
-                            if (walk_is_inst) begin
-                                i_ost_slot_wr_vld <= 1'b1;
-                                i_ost_slot_wr_idx <= walk_i_slot;
-                                i_ost_slot_wr_ctx <= complete_fault(i_slot_ctx[walk_i_slot],
-                                    walk_fault_cause, walk_priv, walk_pc, walk_va);
-                            end else begin
-                                d_ost_slot_wr_vld <= 1'b1;
-                                d_ost_slot_wr_idx <= walk_d_slot;
-                                d_ost_slot_wr_ctx <= complete_fault(d_slot_ctx[walk_d_slot],
-                                    walk_fault_cause, walk_priv, walk_pc, walk_va);
-                            end
+                    end else if (!pte_leaf(ptw_rsp_slv.pkt.data)) begin
+                        if (!walk_level || |ptw_rsp_slv.pkt.data[7:4]) begin
                             walk_state <= WALK_IDLE;
                         end else begin
-                            walk_root_base <= {pa_d_rsp_slv.pkt.data[29:10], 12'b0};
+                            walk_root_base <= {ptw_rsp_slv.pkt.data[29:10], 12'b0};
                             walk_level <= 1'b0;
                             walk_state <= WALK_SEND_PTE;
                         end
-                    end else if (!pte_permits(pa_d_rsp_slv.pkt.data, walk_is_inst,
+                    end else if (!pte_permits(ptw_rsp_slv.pkt.data, walk_is_inst,
                         walk_req.cmd, walk_priv, walk_sum, walk_mxr) ||
-                        !leaf_pa_ok(pa_d_rsp_slv.pkt.data, walk_level)) begin
-                        if (walk_is_inst) begin
-                            i_ost_slot_wr_vld <= 1'b1;
-                            i_ost_slot_wr_idx <= walk_i_slot;
-                            i_ost_slot_wr_ctx <= complete_fault(i_slot_ctx[walk_i_slot],
-                                walk_fault_cause, walk_priv, walk_pc, walk_va);
-                        end else begin
-                            d_ost_slot_wr_vld <= 1'b1;
-                            d_ost_slot_wr_idx <= walk_d_slot;
-                            d_ost_slot_wr_ctx <= complete_fault(d_slot_ctx[walk_d_slot],
-                                walk_fault_cause, walk_priv, walk_pc, walk_va);
-                        end
+                        !leaf_pa_ok(ptw_rsp_slv.pkt.data, walk_level)) begin
                         walk_state <= WALK_IDLE;
                     end else begin
-                        walk_req.addr <= leaf_pa(pa_d_rsp_slv.pkt.data, walk_va,
+                        walk_req.addr <= leaf_pa(ptw_rsp_slv.pkt.data, walk_va,
                             walk_level);
                         fill_tlb_vld <= 1'b1;
                         fill_tlb_is_inst <= walk_is_inst;
@@ -827,38 +895,18 @@ module mmu #(
                         fill_tlb_satp_ppn <= walk_satp_ppn;
                         fill_tlb_satp_asid <= walk_satp_asid;
                         fill_tlb_level <= walk_level;
-                        fill_tlb_pte <= pa_d_rsp_slv.pkt.data;
+                        fill_tlb_pte <= ptw_rsp_slv.pkt.data;
                         walk_state <= WALK_SEND_FINAL;
                     end
                 end
             end
             WALK_SEND_FINAL: begin
                 if (walk_is_inst ? pa_i_req_hsk : pa_d_req_hsk) begin
-                    if (walk_is_inst) begin
-                        i_ost_slot_wr_vld <= 1'b1;
-                        i_ost_slot_wr_idx <= walk_i_slot;
-                        i_ost_slot_wr_ctx <= mark_pa_issued(i_slot_ctx[walk_i_slot]);
-                    end else begin
-                        d_ost_slot_wr_vld <= 1'b1;
-                        d_ost_slot_wr_idx <= walk_d_slot;
-                        d_ost_slot_wr_ctx <= mark_pa_issued(d_slot_ctx[walk_d_slot]);
-                    end
                     walk_state <= WALK_WAIT_FINAL;
                 end
             end
             WALK_WAIT_FINAL: begin
                 if (walk_is_inst ? pa_i_rsp_hsk : pa_d_rsp_hsk) begin
-                    if (walk_is_inst) begin
-                        i_ost_slot_wr_vld <= 1'b1;
-                        i_ost_slot_wr_idx <= walk_i_slot;
-                        i_ost_slot_wr_ctx <= complete_rsp(i_slot_ctx[walk_i_slot],
-                            pa_i_rsp_slv.pkt);
-                    end else begin
-                        d_ost_slot_wr_vld <= 1'b1;
-                        d_ost_slot_wr_idx <= walk_d_slot;
-                        d_ost_slot_wr_ctx <= complete_rsp(d_slot_ctx[walk_d_slot],
-                            pa_d_rsp_slv.pkt);
-                    end
                     walk_state <= WALK_IDLE;
                 end
             end
@@ -867,53 +915,4 @@ module mmu #(
         end
     end
 
-`ifndef SYNTHESIS
-    logic rtl_progress_en;
-    longint unsigned rtl_progress_cycle;
-
-    initial begin
-        rtl_progress_en = $test$plusargs("rtl_mmu_progress");
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            rtl_progress_cycle <= 0;
-        end else if (rtl_progress_en) begin
-            rtl_progress_cycle <= rtl_progress_cycle + 1;
-            if (rtl_progress_cycle[19:0] == 20'h0 ||
-                tlb_flush ||
-                (va_i_req_slv.vld && va_i_req_slv.rdy) ||
-                (va_d_req_slv.vld && va_d_req_slv.rdy) ||
-                va_i_rsp_hsk || va_d_rsp_hsk ||
-                pa_i_req_hsk || pa_d_req_hsk ||
-                pa_i_rsp_hsk || pa_d_rsp_hsk ||
-                fch_expt_mst.vld || ldst_expt_mst.vld) begin
-                $display("[RTL_PROGRESS][%m] cycle=%0d satp=%08x priv=%0d dpriv=%0d walk=%0d wva=%08x wi=%0d pend=%0d/%0d iost=%b dost=%b ih=%0d dh=%0d vi=%0b/%0b:%0b/%0b vd=%0b/%0b:%0b/%0b pi=%0b/%0b:%0b/%0b pd=%0b/%0b:%0b/%0b ex=%0b/%0b",
-                    rtl_progress_cycle,
-                    csr_mmu_state_slv.pkt.satp,
-                    exu_state_slv.pkt.priv,
-                    data_priv,
-                    walk_state,
-                    walk_va,
-                    walk_is_inst,
-                    pend_pa_vld,
-                    pend_pa_is_inst,
-                    i_ost_slot_vld,
-                    d_ost_slot_vld,
-                    i_ost_head_vld,
-                    d_ost_head_vld,
-                    va_i_req_slv.vld, va_i_req_slv.rdy,
-                    va_i_rsp_mst.vld, va_i_rsp_mst.rdy,
-                    va_d_req_slv.vld, va_d_req_slv.rdy,
-                    va_d_rsp_mst.vld, va_d_rsp_mst.rdy,
-                    pa_i_req_mst.vld, pa_i_req_mst.rdy,
-                    pa_i_rsp_slv.vld, pa_i_rsp_slv.rdy,
-                    pa_d_req_mst.vld, pa_d_req_mst.rdy,
-                    pa_d_rsp_slv.vld, pa_d_rsp_slv.rdy,
-                    fch_expt_mst.vld,
-                    ldst_expt_mst.vld);
-            end
-        end
-    end
-`endif
 endmodule
