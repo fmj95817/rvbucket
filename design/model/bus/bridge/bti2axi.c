@@ -107,7 +107,7 @@ static void bti2axi_proc_req(bti2axi_t *br)
         bool alloc_ok = ostk_alloc(&br->rd_ost, ar.id, &ctx, NULL);
         DBG_CHECK(alloc_ok);
         itf_write(br->axi4_ar_mst, &ar);
-    } else {
+    } else if (bti_req.cmd == BTI_REQ_CMD_WRITE) {
         if (ostk_full(&br->wr_ost)) {
             return;
         }
@@ -139,6 +139,17 @@ static void bti2axi_proc_req(bti2axi_t *br)
         DBG_CHECK(alloc_ok);
         itf_write(br->axi4_aw_mst, &aw);
         itf_write(br->axi4_w_mst, &w);
+    } else {
+        if (itf_fifo_full(br->bti_rsp_mst)) {
+            return;
+        }
+        fifo_pop(&br->bti_req_fifo, &bti_req);
+        bti_rsp_if_t rsp = {
+            .trans_id = bti_req.trans_id,
+            .data = 0,
+            .ok = false
+        };
+        itf_write(br->bti_rsp_mst, &rsp);
     }
 }
 

@@ -226,6 +226,10 @@ static void exu_proc_biu_rsp(exu_t *exu)
         ldst_biu_rsp_proc(exu, &ldst_rsp);
     } else if (exu->cur_opcode == OPCODE_AMO) {
         amo_biu_rsp_proc(exu, &ldst_rsp);
+    } else if (exu->cur_opcode == OPCODE_MISC_MEM) {
+        exu->ldst_req_pend = false;
+        exu->irq_defer = false;
+        exu->irq_epc = exu->cur_pc + 4;
     } else {
         DBG_CHECK(0);
     }

@@ -25,12 +25,28 @@ static void bti2apb_proc_req(bti2apb_t *br)
         return;
     }
 
+    bti_req_if_t bti_req;
+    itf_fifo_get_front(br->bti_req_slv, &bti_req);
+
+    if (bti_req.cmd != BTI_REQ_CMD_READ && bti_req.cmd != BTI_REQ_CMD_WRITE) {
+        if (itf_fifo_full(br->bti_rsp_mst)) {
+            return;
+        }
+        itf_fifo_pop_front(br->bti_req_slv);
+        bti_rsp_if_t rsp = {
+            .trans_id = bti_req.trans_id,
+            .data = 0,
+            .ok = false
+        };
+        itf_write(br->bti_rsp_mst, &rsp);
+        return;
+    }
+
     if (itf_fifo_full(br->apb_req_mst)) {
         return;
     }
 
-    bti_req_if_t bti_req;
-    itf_read(br->bti_req_slv, &bti_req);
+    itf_fifo_pop_front(br->bti_req_slv);
 
     apb_req_if_t apb_req = {
         .paddr = bti_req.addr,

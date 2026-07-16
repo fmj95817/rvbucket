@@ -226,7 +226,9 @@ void ldst_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
         return;
     }
 
-    ldst_req_if_t ldst_req = {};
+    ldst_req_if_t ldst_req = {
+        .cmo = LDST_REQ_CMO_NONE
+    };
     if (ex_req->inst.base.opcode == OPCODE_LOAD) {
         CALL_LDST_EX_REQ_HANDLER(load_group, exu, ex_req, &ldst_req);
     } else if (ex_req->inst.base.opcode == OPCODE_STORE) {

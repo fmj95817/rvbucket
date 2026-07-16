@@ -95,7 +95,8 @@ typedef enum rv32g_system_funct3 {
 
 typedef enum rv32g_misc_mem_funct3 {
     MISC_MEM_FUNCT3_FENCE = 0b000,
-    MISC_MEM_FUNCT3_FENCE_I = 0b001
+    MISC_MEM_FUNCT3_FENCE_I = 0b001,
+    MISC_MEM_FUNCT3_CBO = 0b010
 } rv32g_misc_mem_funct3_t;
 
 typedef enum rv32g_amo_funct375 {

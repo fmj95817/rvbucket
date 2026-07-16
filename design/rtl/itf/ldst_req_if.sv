@@ -8,6 +8,7 @@ interface ldst_req_if_t;
     struct packed {
         logic [31:0] addr;
         logic st;
+        ldst_req_cmo_t cmo;
         ldst_req_size_t size;
         logic [31:0] data;
         logic [3:0] strobe;
@@ -17,9 +18,10 @@ interface ldst_req_if_t;
 
     function automatic string __itf_trace_pkt_str;
         __itf_trace_pkt_str = $sformatf(
-            "%08x %01x %01x %08x %01x",
+            "%08x %01x %01x %01x %08x %01x",
             pkt.addr,
             pkt.st,
+            pkt.cmo,
             pkt.size,
             pkt.data,
             pkt.strobe

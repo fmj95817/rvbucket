@@ -3,6 +3,7 @@
 #include "core/l2.h"
 #include "mem/ram.h"
 #include "dbg/vcd.h"
+#include "spec/core/cache.h"
 #include "utils.h"
 
 #define TB_MEM_SIZE 4096u
@@ -112,7 +113,8 @@ static void tb_clock(l2_tb_t *tb)
     dbg_vcd_clock();
 }
 
-static void tb_send_read(l2_tb_t *tb, u32 host, u8 id, u32 addr, u8 len, u8 cache)
+static void tb_send_read_user(l2_tb_t *tb, u32 host, u8 id, u32 addr, u8 len,
+    u8 cache, u32 user)
 {
     axi4_ar_if_t ar = {
         .id = id,
@@ -120,7 +122,27 @@ static void tb_send_read(l2_tb_t *tb, u32 host, u8 id, u32 addr, u8 len, u8 cach
         .len = len,
         .size = AXI4_AR_SIZE_B4,
         .burst = AXI4_AR_BURST_INCR,
-        .cache = cache
+        .cache = cache,
+        .user = user
+    };
+    itf_write(host == 0 ? &tb->h0_axi4_ar_itf : &tb->h1_axi4_ar_itf, &ar);
+}
+
+static void tb_send_read(l2_tb_t *tb, u32 host, u8 id, u32 addr, u8 len, u8 cache)
+{
+    tb_send_read_user(tb, host, id, addr, len, cache, 0);
+}
+
+static void tb_send_cmo(l2_tb_t *tb, u32 host, u8 id, u32 addr, u32 user)
+{
+    axi4_ar_if_t ar = {
+        .id = id,
+        .addr = addr,
+        .len = 0,
+        .size = AXI4_AR_SIZE_B4,
+        .burst = AXI4_AR_BURST_FIXED,
+        .cache = 0xf,
+        .user = user
     };
     itf_write(host == 0 ? &tb->h0_axi4_ar_itf : &tb->h1_axi4_ar_itf, &ar);
 }
@@ -170,6 +192,36 @@ static bool tb_collect_read(l2_tb_t *tb, u32 host, u8 id, u32 addr, u32 beat_num
         }
     }
     return true;
+}
+
+static bool tb_collect_single_r(l2_tb_t *tb, u32 host, u8 id, u32 data)
+{
+    itf_t *r_itf = host == 0 ? &tb->h0_axi4_r_itf : &tb->h1_axi4_r_itf;
+    for (u32 cycle = 0; cycle < TB_TIMEOUT && !tb_read_rsp_ready(tb, host); cycle++) {
+        tb_clock(tb);
+    }
+    if (itf_fifo_empty(r_itf)) {
+        return false;
+    }
+
+    axi4_r_if_t r;
+    itf_read(r_itf, &r);
+    return r.id == id && r.data == data && r.resp == AXI4_R_RESP_OKAY && r.last;
+}
+
+static bool tb_collect_write_b(l2_tb_t *tb, u32 host, u8 id)
+{
+    itf_t *b_itf = host == 0 ? &tb->h0_axi4_b_itf : &tb->h1_axi4_b_itf;
+    for (u32 cycle = 0; cycle < TB_TIMEOUT && !tb_write_rsp_ready(tb, host); cycle++) {
+        tb_clock(tb);
+    }
+    if (itf_fifo_empty(b_itf)) {
+        return false;
+    }
+
+    axi4_b_if_t b;
+    itf_read(b_itf, &b);
+    return b.id == id && b.resp == AXI4_B_RESP_OKAY;
 }
 
 TEST_CASE(l2_tb_t, read_miss_hit_and_arb)
@@ -227,6 +279,85 @@ TEST_CASE(l2_tb_t, writeback_and_bypass)
     TEST_END();
 }
 
+TEST_CASE(l2_tb_t, cmo_clean_writes_back_and_keeps_line)
+{
+    tb_reset(tb);
+    TEST_BEGIN("CMO Clean Writes Back and Keeps Line");
+
+    tb_send_write(tb, 1, 7, 0, 0x55667788u);
+    REQUIRE(tb_collect_write_b(tb, 1, 7), "cached write completes");
+    REQUIRE(((u32 *)tb->ram.data)[0] != 0x55667788u, "dirty data remains in L2");
+
+    tb_send_cmo(tb, 1, 8, 0, AXI4_USER_CMO_CLEAN);
+    REQUIRE(tb_collect_single_r(tb, 1, 8, 0), "cbo.clean response completes");
+    REQUIRE(((u32 *)tb->ram.data)[0] == 0x55667788u, "clean writes back dirty L2 line");
+
+    ((u32 *)tb->ram.data)[0] = 0xaabbccddu;
+    tb_send_read(tb, 1, 9, 0, 0, 0xf);
+    REQUIRE(tb_collect_single_r(tb, 1, 9, 0x55667788u),
+        "clean keeps L2 line valid");
+
+    TEST_END();
+}
+
+TEST_CASE(l2_tb_t, cmo_flush_writes_back_and_invalidates)
+{
+    tb_reset(tb);
+    TEST_BEGIN("CMO Flush Writes Back and Invalidates");
+
+    tb_send_write(tb, 1, 10, 0, 0x01020304u);
+    REQUIRE(tb_collect_write_b(tb, 1, 10), "cached write completes");
+
+    tb_send_cmo(tb, 1, 11, 0, AXI4_USER_CMO_FLUSH);
+    REQUIRE(tb_collect_single_r(tb, 1, 11, 0), "cbo.flush response completes");
+    REQUIRE(((u32 *)tb->ram.data)[0] == 0x01020304u, "flush writes back dirty L2 line");
+
+    ((u32 *)tb->ram.data)[0] = 0x11223344u;
+    tb_send_read(tb, 1, 12, 0, 0, 0xf);
+    REQUIRE(tb_collect_single_r(tb, 1, 12, 0x11223344u),
+        "read after flush refills from memory");
+
+    TEST_END();
+}
+
+TEST_CASE(l2_tb_t, cmo_inval_discards_dirty_line)
+{
+    tb_reset(tb);
+    TEST_BEGIN("CMO Invalidate Discards Dirty Line");
+
+    u32 original = ((u32 *)tb->ram.data)[0];
+    tb_send_write(tb, 1, 13, 0, 0x89abcdefu);
+    REQUIRE(tb_collect_write_b(tb, 1, 13), "cached write completes");
+
+    tb_send_cmo(tb, 1, 14, 0, AXI4_USER_CMO_INVAL);
+    REQUIRE(tb_collect_single_r(tb, 1, 14, 0), "cbo.inval response completes");
+    REQUIRE(((u32 *)tb->ram.data)[0] == original, "invalidate does not write back dirty line");
+
+    tb_send_read(tb, 1, 15, 0, 0, 0xf);
+    REQUIRE(tb_collect_single_r(tb, 1, 15, original),
+        "read after invalidate refills old memory data");
+
+    TEST_END();
+}
+
+TEST_CASE(l2_tb_t, cmo_rsvd_bits_do_not_match)
+{
+    tb_reset(tb);
+    TEST_BEGIN("CMO Reserved Bits Do Not Match");
+
+    u32 addr = 192;
+    u32 expected;
+    u32 user = AXI4_USER_CMO_CLEAN | (1u << 8);
+    memcpy(&expected, tb->ram.data + addr, sizeof(expected));
+
+    REQUIRE(!axi4_user_is_cmo(user), "non-zero reserved bits are not CMO");
+    tb_send_read_user(tb, 1, 16, addr, 0, 0xf, user);
+    REQUIRE(tb_collect_single_r(tb, 1, 16, expected),
+        "request with reserved user bits is handled as a normal read");
+
+    TEST_END();
+}
+
 TEST_CASE(l2_tb_t, other_port_hit_under_miss)
 {
     tb_reset(tb);
@@ -261,6 +392,10 @@ int main(void)
     tb_construct(&tb, "l2_tb");
     TEST_RUN(read_miss_hit_and_arb);
     TEST_RUN(writeback_and_bypass);
+    TEST_RUN(cmo_clean_writes_back_and_keeps_line);
+    TEST_RUN(cmo_flush_writes_back_and_invalidates);
+    TEST_RUN(cmo_inval_discards_dirty_line);
+    TEST_RUN(cmo_rsvd_bits_do_not_match);
     ut_sbd_summary(&tb.sbd);
     int ret = ut_sbd_ret(&tb.sbd);
     tb_free(&tb);

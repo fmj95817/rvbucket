@@ -50,7 +50,10 @@
 
 typedef enum bti_req_cmd {
     BTI_REQ_CMD_READ = 0,
-    BTI_REQ_CMD_WRITE = 1
+    BTI_REQ_CMD_WRITE = 1,
+    BTI_REQ_CMD_CBO_INVAL = 2,
+    BTI_REQ_CMD_CBO_CLEAN = 3,
+    BTI_REQ_CMD_CBO_FLUSH = 4
 } bti_req_cmd_t;
 
 typedef enum bti_req_size {
@@ -78,7 +81,7 @@ static inline void bti_req_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
 {
     const bti_req_if_t *bti_req = (const bti_req_if_t *)pkt;
     dbg_vcd_add_sig("trans_id", type, 16, &bti_req->trans_id);
-    dbg_vcd_add_sig("cmd", type, 1, &bti_req->cmd);
+    dbg_vcd_add_sig("cmd", type, 3, &bti_req->cmd);
     dbg_vcd_add_sig("addr", type, 32, &bti_req->addr);
     dbg_vcd_add_sig("size", type, 2, &bti_req->size);
     dbg_vcd_add_sig("data", type, 32, &bti_req->data);

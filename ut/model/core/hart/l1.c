@@ -22,6 +22,7 @@ typedef struct l1_tb {
     itf_t axi_ar;
     itf_t axi_r;
     itf_t flush;
+    itf_t flush_ack;
 
     l1_t dut;
     u32 mem[TB_MEM_WORDS];
@@ -71,6 +72,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     AXI4_AR_IF_CONSTRUCT(tb, axi_ar, 2);
     AXI4_R_IF_CONSTRUCT(tb, axi_r, 16);
     L1_FLUSH_IF_CONSTRUCT(tb, flush, 1);
+    L1_FLUSH_ACK_IF_CONSTRUCT(tb, flush_ack, 1);
 
     tb->dut.mod.cycle = tb->mod.cycle;
     tb->dut.bti_req_slv = &tb->bti_req;
@@ -81,6 +83,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
     tb->dut.axi4_ar_mst = &tb->axi_ar;
     tb->dut.axi4_r_slv = &tb->axi_r;
     tb->dut.flush_slv = &tb->flush;
+    tb->dut.flush_ack_mst = &tb->flush_ack;
     tb->dut.mod.cycle = tb->mod.cycle;
     l1_construct(&tb->dut, tb->mod.hier_name, "u_dut", conf);
 
@@ -90,6 +93,7 @@ static void tb_construct(l1_tb_t *tb, const char *name, const l1_conf_t *conf)
 static void tb_reset(l1_tb_t *tb)
 {
     l1_reset(&tb->dut);
+    itf_reset(&tb->flush_ack);
     dbg_vcd_reset();
     tb->rd_active = false;
     tb->wr_active = false;
@@ -113,6 +117,7 @@ static void tb_free(l1_tb_t *tb)
     itf_free(&tb->axi_ar);
     itf_free(&tb->axi_r);
     itf_free(&tb->flush);
+    itf_free(&tb->flush_ack);
 }
 
 static void tb_mock_axi(l1_tb_t *tb)
@@ -199,6 +204,7 @@ static void tb_clock(l1_tb_t *tb)
     itf_dbg_clock(&tb->axi_ar);
     itf_dbg_clock(&tb->axi_r);
     itf_dbg_clock(&tb->flush);
+    itf_dbg_clock(&tb->flush_ack);
     (*tb->cycle)++;
     dbg_vcd_clock();
 }
@@ -243,6 +249,19 @@ static void tb_bti_write_size(l1_tb_t *tb, u16 trans_id, u32 addr, u32 data,
 static void tb_bti_write(l1_tb_t *tb, u16 trans_id, u32 addr, u32 data, u8 strobe)
 {
     tb_bti_write_size(tb, trans_id, addr, data, strobe, BTI_REQ_SIZE_B4);
+}
+
+static void tb_bti_cbo(l1_tb_t *tb, u16 trans_id, u32 addr, bti_req_cmd_t cmd)
+{
+    bti_req_if_t req = {
+        .trans_id = trans_id,
+        .cmd = cmd,
+        .addr = addr,
+        .size = BTI_REQ_SIZE_B4,
+        .data = 0,
+        .strobe = 0
+    };
+    itf_write(&tb->bti_req, &req);
 }
 
 static u32 tb_read_bytes(const l1_tb_t *tb, u32 addr, u32 size)
@@ -458,6 +477,95 @@ TEST_CASE(l1_tb_t, flush_invalidates)
     TEST_END();
 }
 
+TEST_CASE(l1_tb_t, cbo_clean_writes_back_and_keeps_line)
+{
+    tb_reset(tb);
+    TEST_BEGIN("CBO Clean Writes Back and Keeps Line");
+
+    tb_bti_read(tb, 1, 0x00);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb->mem[0], true), "line filled");
+
+    tb_bti_write(tb, 2, 0x04, 0x55667788, 0xf);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, 0, true), "dirty write accepted");
+    REQUIRE(tb->mem[1] != 0x55667788, "dirty line not yet written to memory");
+
+    u32 aw_before = tb->aw_count;
+    tb_bti_cbo(tb, 3, 0x04, BTI_REQ_CMD_CBO_CLEAN);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, 0, true), "cbo.clean completes");
+    REQUIRE(tb->aw_count == aw_before + 1, "cbo.clean writes back dirty L1 line");
+    REQUIRE(tb->mem[1] == 0x55667788, "memory sees cleaned dirty data");
+
+    u32 ar_after_clean = tb->ar_count;
+    tb->mem[1] = 0xaabbccddu;
+    tb_bti_read(tb, 4, 0x04);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 4, 0x55667788, true), "clean keeps line valid in L1");
+    REQUIRE(tb->ar_count == ar_after_clean, "read after clean hits without refill");
+
+    TEST_END();
+}
+
+TEST_CASE(l1_tb_t, cbo_flush_writes_back_and_invalidates)
+{
+    tb_reset(tb);
+    TEST_BEGIN("CBO Flush Writes Back and Invalidates");
+
+    tb_bti_read(tb, 1, 0x00);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb->mem[0], true), "line filled");
+
+    tb_bti_write(tb, 2, 0x04, 0x01020304, 0xf);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, 0, true), "dirty write accepted");
+
+    tb_bti_cbo(tb, 3, 0x04, BTI_REQ_CMD_CBO_FLUSH);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, 0, true), "cbo.flush completes");
+    REQUIRE(tb->mem[1] == 0x01020304, "flush writes dirty data to memory");
+
+    u32 ar_after_flush = tb->ar_count;
+    tb->mem[1] = 0x11223344u;
+    tb_bti_read(tb, 4, 0x04);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 4, 0x11223344, true),
+        "read after flush refills from memory");
+    REQUIRE(tb->ar_count == ar_after_flush + 1, "flush invalidates L1 line");
+
+    TEST_END();
+}
+
+TEST_CASE(l1_tb_t, cbo_inval_discards_dirty_line)
+{
+    tb_reset(tb);
+    TEST_BEGIN("CBO Invalidate Discards Dirty Line");
+
+    u32 original = tb->mem[1];
+    tb_bti_read(tb, 1, 0x00);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb->mem[0], true), "line filled");
+
+    tb_bti_write(tb, 2, 0x04, 0x89abcdef, 0xf);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 2, 0, true), "dirty write accepted");
+
+    tb_bti_cbo(tb, 3, 0x04, BTI_REQ_CMD_CBO_INVAL);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 3, 0, true), "cbo.inval completes");
+    REQUIRE(tb->mem[1] == original, "invalidate does not write back dirty data");
+
+    u32 ar_after_inval = tb->ar_count;
+    tb_bti_read(tb, 4, 0x04);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 4, original, true),
+        "read after invalidate refills old memory data");
+    REQUIRE(tb->ar_count == ar_after_inval + 1, "invalidate drops L1 line");
+
+    TEST_END();
+}
+
 TEST_CASE(l1_tb_t, hit_under_miss_uses_ost)
 {
     tb_reset(tb);
@@ -508,6 +616,9 @@ int main(void)
     TEST_RUN(unaligned_reads);
     TEST_RUN(cross_line_read_write);
     TEST_RUN(flush_invalidates);
+    TEST_RUN(cbo_clean_writes_back_and_keeps_line);
+    TEST_RUN(cbo_flush_writes_back_and_invalidates);
+    TEST_RUN(cbo_inval_discards_dirty_line);
     int ret = ut_sbd_ret(&tb.sbd);
     ut_sbd_summary(&tb.sbd);
     tb_free(&tb);

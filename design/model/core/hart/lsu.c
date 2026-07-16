@@ -32,6 +32,7 @@ static ldst_req_if_t lsu_make_byte_req(const ldst_req_if_t *src, u32 byte_idx)
     ldst_req_if_t req = {
         .addr = src->addr + byte_idx,
         .st = src->st,
+        .cmo = LDST_REQ_CMO_NONE,
         .size = LDST_REQ_SIZE_B1,
         .data = byte,
         .strobe = src->st && (src->strobe & (1u << byte_idx)) ? 0x1 : 0x0
@@ -70,7 +71,8 @@ static void lsu_alloc_req(lsu_t *lsu)
     ldst_req_if_t req;
     fifo_pop(&lsu->req_fifo, &req);
 
-    bool split = lsu_translation_enabled(lsu) && lsu_cross_page(&req);
+    bool split = req.cmo == LDST_REQ_CMO_NONE &&
+        lsu_translation_enabled(lsu) && lsu_cross_page(&req);
     lsu_ost_ctx_t ctx = {
         .req = req,
         .split = split,
