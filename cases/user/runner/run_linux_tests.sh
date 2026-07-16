@@ -30,6 +30,7 @@ file_mmap|0|file_mmap: PASS
 time_uname|0|time_uname: PASS
 mount_stability.sh|0|mount_stability: PASS
 shell_smoke.sh|0|shell_smoke: PASS
+sdspi_ext4.sh|0|sdspi_ext4: PASS
 '
 
 PASS=0

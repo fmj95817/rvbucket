@@ -171,13 +171,7 @@ function build_linux_rootfs {
     cp -a "${BUSYBOX_DIR}/_install"/* "${BUSYBOX_DIR}/rootfs/"
     build_user_tests
     cp -a "${LINUX_USER_BIN_DIR}"/* "${BUSYBOX_DIR}/rootfs/bin/"
-
-    echo "#!/bin/sh" > "${BUSYBOX_DIR}/rootfs/init"
-    echo "mount -t proc none /proc" >> "${BUSYBOX_DIR}/rootfs/init"
-    echo "mount -t sysfs none /sys" >> "${BUSYBOX_DIR}/rootfs/init"
-    echo 'echo -e "\nWelcome to RISC-V 32-bit Linux!\n"' >> "${BUSYBOX_DIR}/rootfs/init"
-    echo "exec /bin/sh" >> "${BUSYBOX_DIR}/rootfs/init"
-    chmod +x "${BUSYBOX_DIR}/rootfs/init"
+    ln -sfn /bin/init "${BUSYBOX_DIR}/rootfs/init"
 
     cd "${BUSYBOX_DIR}/rootfs"
     find . | cpio -H newc -o > ../rootfs.cpio
@@ -193,13 +187,16 @@ function build_user_tests {
     for case_dir in "${case_dirs[@]}"; do
         local case_name="$(basename "${case_dir}")"
         local out="${LINUX_USER_BIN_DIR}/${case_name}"
-        local scripts=($(find "${case_dir}" -maxdepth 1 -name '*.sh' -type f | sort))
+        local scripts=($(find "${case_dir}" -maxdepth 1 -type f \
+            \( -name '*.sh' -o -name "${case_name}" \) | sort))
         local srcs=($(find "${case_dir}" -name '*.c' | sort))
 
         if [ ${#scripts[@]} -ne 0 ]; then
             echo "  packing user/${case_name} ..."
             cp -a "${case_dir}"/* "${LINUX_USER_BIN_DIR}/"
-            chmod +x "${LINUX_USER_BIN_DIR}"/*.sh
+            for script in "${scripts[@]}"; do
+                chmod +x "${LINUX_USER_BIN_DIR}/$(basename "${script}")"
+            done
         elif [ ${#srcs[@]} -ne 0 ]; then
             echo "  compiling user/${case_name} ..."
             ${LINUX_CC} ${LINUX_USER_CFLAGS[@]} -o "${out}" "${srcs[@]}"
@@ -296,6 +293,7 @@ function build_sw_case {
     local hex="${output_dir}/${case_name}.hex"
 
     local src_dirs=("${case_dir}")
+    local extra_srcs=()
     local ld_flags=()
     local cc_flags=("${CROSS_CFLAGS[@]}")
     if [ "${profile}" = "sim" ]; then
@@ -306,9 +304,15 @@ function build_sw_case {
         ld_flags+=(-T "${CRT_DIR}/soc.lds")
     else
         ld_flags+=(-T "${lds}")
+        if [ "${case_name}" = "boot" ]; then
+            extra_srcs+=("${DRIVERS_DIR}/sdspi/sdspi.c")
+            cc_flags+=(-ffunction-sections -fdata-sections)
+            ld_flags+=(-Wl,--gc-sections)
+        fi
     fi
 
-    local srcs=("$(find ${src_dirs[@]} -name *.S -o -name *.c)")
+    local srcs=($(find ${src_dirs[@]} -name *.S -o -name *.c))
+    srcs+=("${extra_srcs[@]}")
     local objs=()
     for src in ${srcs[@]}; do
         local obj="${output_dir}/$(basename ${src}).o"
@@ -351,6 +355,7 @@ function build_model {
         -pthread \
         -I./base/model \
         -I./design/model \
+        -I./sim/model/vip \
         -o build/hw/model/sim_top \
         $(find base/model -name *.c) \
         $(find design/model -name *.c) \
@@ -396,12 +401,14 @@ function build_ut {
             -pthread \
             -I./base/model \
             -I./design/model \
+            -I./sim/model/vip \
             -I./ut/model \
             -o "${ut_bin}" \
             "${ut_src}" \
             ut/model/utils.c \
             $(find base/model -name *.c) \
-            $(find design/model -name *.c)
+            $(find design/model -name *.c) \
+            $(find sim/model/vip -name *.c)
     done
     echo "build_ut: ${#ut_srcs[@]} UT(s) built."
 }

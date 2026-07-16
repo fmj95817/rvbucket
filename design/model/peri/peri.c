@@ -3,7 +3,8 @@
 #include "dbg/chk.h"
 #include "dbg/vcd.h"
 
-void peri_construct(peri_t *peri, const char *parent, const char *name, u32 base, u32 size)
+void peri_construct(peri_t *peri, const char *parent, const char *name,
+    u32 base, u32 size)
 {
     mod_construct(&peri->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
@@ -27,8 +28,9 @@ void peri_construct(peri_t *peri, const char *parent, const char *name, u32 base
     APB_MST_ARR_CONNECT(&peri->apb_demux, gst_, 2, peri, gtimer_);
     APB_MST_ARR_CONNECT(&peri->apb_demux, gst_, 3, peri, pcm_);
     const u32 gst_bases[] = { uart_base, gpio_base, gtimer_base, pcm_base };
-    const u32 gst_sizes[] = { PERI_UART_SIZE, PERI_GPIO_SIZE, PERI_GTIMER_SIZE,
-        PERI_PCM_SIZE };
+    const u32 gst_sizes[] = {
+        PERI_UART_SIZE, PERI_GPIO_SIZE, PERI_GTIMER_SIZE, PERI_PCM_SIZE
+    };
     peri->apb_demux.mod.cycle = peri->mod.cycle;
     apb_demux_construct(&peri->apb_demux, peri->mod.hier_name,
         "u_peri_apb_demux", 4, gst_bases, gst_sizes);
@@ -58,6 +60,7 @@ void peri_construct(peri_t *peri, const char *parent, const char *name, u32 base
     peri->pcm.mod.cycle = peri->mod.cycle;
     pcm_construct(&peri->pcm, peri->mod.hier_name, "u_pcm", pcm_base,
         PERI_PCM_SIZE);
+
 }
 
 void peri_reset(peri_t *peri)

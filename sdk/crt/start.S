@@ -74,11 +74,14 @@ trap_handler:
     beq a0, t0, 5f
     li t0, 3
     beq a0, t0, 6f
+    li t0, 4
+    beq a0, t0, 7f
     j 3f
 
 4:  call uart_irq_handler;  j 3f
 5:  call gpio_irq_handler;  j 3f
 6:  call gtimer_irq_handler; j 3f
+7:  call sdspi_irq_handler;   j 3f
 
 3:  li t0, 0x31300004
     sw a0, 0(t0)            /* complete */
@@ -113,6 +116,12 @@ gpio_irq_handler:
     .globl gtimer_irq_handler
     .type gtimer_irq_handler,@function
 gtimer_irq_handler:
+    ret
+
+    .weak sdspi_irq_handler
+    .globl sdspi_irq_handler
+    .type sdspi_irq_handler,@function
+sdspi_irq_handler:
     ret
 
     .section .init
@@ -177,15 +186,16 @@ _start:
     li t0, (1 << 3)
     csrs mstatus, t0
 
-    /* configure PLIC: priority=1, enable, threshold=0 for sources 1..3 */
+    /* configure PLIC: priority=1, enable, threshold=0 for sources 1..4 */
     li t0, 0x31100000
     li t1, 1
     sw t1, 4(t0)          /* source 1 (UART)  priority = 1 */
     sw t1, 8(t0)          /* source 2 (GPIO)  priority = 1 */
     sw t1, 12(t0)         /* source 3 (timer) priority = 1 */
-    li t1, 0xE
+    sw t1, 16(t0)         /* source 4 (SD-SPI) priority = 1 */
+    li t1, 0x1E
     li t2, 0x31102000
-    sw t1, 0(t2)          /* enable bits 1..3 */
+    sw t1, 0(t2)          /* enable bits 1..4 */
     li t2, 0x31300000
     sw x0, 0(t2)          /* threshold = 0 */
 

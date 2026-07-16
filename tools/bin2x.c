@@ -8,17 +8,21 @@ static void to_c_array(const void *data, size_t size)
 {
     printf("#include \"base/types.h\"\n\n");
     printf("u32 g_boot_code_size = 0x%lx;\n", size);
-    printf("u8 g_boot_code[] = {\n    ");
+    printf("u8 g_boot_code[] = {\n");
 
     uint8_t *bytes = (uint8_t *)data;
-    for (int i = 0; i < size; i++) {
-        if (i == size - 1) {
-            printf("0x%02x\n", bytes[i]);
-            break;
+    for (size_t i = 0; i < size; i++) {
+        if ((i % 8u) == 0u) {
+            printf("    ");
         }
-        printf("0x%02x, ", bytes[i]);
-        if (((i + 1) % 8) == 0) {
-            printf("\n    ");
+        printf("0x%02x", bytes[i]);
+        if (i + 1u != size) {
+            printf(",");
+        }
+        if (((i + 1u) % 8u) == 0u || i + 1u == size) {
+            printf("\n");
+        } else {
+            printf(" ");
         }
     }
 

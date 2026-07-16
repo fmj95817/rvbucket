@@ -398,6 +398,58 @@
              ]
         },
 
+        "sdspi_cmd": {
+            "type": "vld-rdy",
+            "enums": {
+                "kind": {
+                    "command": 0,
+                    "write_data": 1,
+                    "reset": 2,
+                    "config": 3
+                }
+            },
+            "payloads": [
+                { "name": "kind", "type": "kind" },
+                { "name": "enable", "width": 1 },
+                { "name": "clock_div", "width": 32 },
+                { "name": "opcode", "width": 6 },
+                { "name": "arg", "width": 32 },
+                { "name": "rsp_type", "width": 3 },
+                { "name": "data_present", "width": 1 },
+                { "name": "write", "width": 1 },
+                { "name": "block_size", "width": 32 },
+                { "name": "block_count", "width": 32 },
+                { "name": "data_len", "width": 32 },
+                { "name": "data", "width": 32 },
+                { "name": "last", "width": 1 }
+            ]
+        },
+
+        "sdspi_data": {
+            "type": "vld-rdy",
+            "enums": {
+                "kind": {
+                    "status": 0,
+                    "response": 1,
+                    "read_data": 2,
+                    "write_done": 3
+                }
+            },
+            "payloads": [
+                { "name": "kind", "type": "kind" },
+                { "name": "card_present", "width": 1 },
+                { "name": "read_only", "width": 1 },
+                { "name": "card_idle", "width": 1 },
+                { "name": "resp0", "width": 32 },
+                { "name": "resp1", "width": 32 },
+                { "name": "data", "width": 32 },
+                { "name": "last", "width": 1 },
+                { "name": "error", "width": 1 },
+                { "name": "cmd_error", "width": 32 },
+                { "name": "data_error", "width": 32 }
+            ]
+        },
+
         "core_timer": {
             "type": "none",
             "payloads": [

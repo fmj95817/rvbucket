@@ -23,6 +23,8 @@ typedef struct cbi_conf {
     u32 cfg_size;
     u32 peri_base;
     u32 peri_size;
+    u32 io_base;
+    u32 io_size;
     u32 aclint_base;
     u32 aclint_size;
     u32 plic_base;
@@ -36,6 +38,7 @@ typedef struct cbi {
     AXI4_MST_DECL(mm_i_);
     AXI4_MST_DECL(mm_d_);
     APB_MST_DECL(peri_);
+    APB_MST_DECL(io_);
     BTI_MST_DECL(boot_rom_);
     APB_MST_DECL(aclint_cfg_);
     APB_MST_DECL(plic_cfg_);

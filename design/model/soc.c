@@ -3,32 +3,40 @@
 #include "spec/core/core.h"
 #include "spec/core/hart.h"
 #include "spec/soc.h"
+#include "dbg/chk.h"
 #include "dbg/pcm.h"
 #include "dbg/vcd.h"
 
 void soc_construct(soc_t *soc, const char *parent, const char *name,
-    bool perf_sim, bool smp_opt)
+    const soc_conf_t *conf)
 {
     mod_construct(&soc->mod, parent, name);
     DBG_VCD_MODULE_SCOPE(name);
     soc->perf_cycle = dbg_pcm_reg_perf_cnt(soc->mod.hier_name, "cycle");
 
-    u32 hart_l1_latency = perf_sim ? HART_L1_LATENCY : 0u;
-    u32 l2_latency = perf_sim ? L2_LATENCY : 0u;
+    DBG_CHECK(conf != NULL);
+    u32 hart_l1_latency = conf->perf_sim ? HART_L1_LATENCY : 0u;
+    u32 l2_latency = conf->perf_sim ? L2_LATENCY : 0u;
 
     AXI4_IF_CONSTRUCT(soc, mm_, 2);
+    AXI4_IF_CONSTRUCT(soc, cpu_ddr_, SOC_BUS_STG_FIFO_DEPTH);
+    AXI4_IF_CONSTRUCT(soc, io_dma_, SOC_BUS_STG_FIFO_DEPTH);
     APB_IF_CONSTRUCT(soc, peri_, 1);
+    APB_IF_CONSTRUCT(soc, io_, 1);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_uart_irq_itf, false, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_gpio_irq_itf, false, false);
     EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, peri_gtimer_irq_itf, false, false);
+    EXT_IRQ_SIGNAL_IF_CONSTRUCT(soc, io_sdspi_irq_itf, false, false);
 
     soc->cpu.mod.cycle = soc->mod.cycle;
     AXI4_MST_CONNECT(&soc->cpu, mm_, soc, mm_);
     APB_MST_CONNECT(&soc->cpu, peri_, soc, peri_);
+    APB_MST_CONNECT(&soc->cpu, io_, soc, io_);
     soc->cpu.ext_irq_ins[0] = &soc->peri_uart_irq_itf;
     soc->cpu.ext_irq_ins[1] = &soc->peri_gpio_irq_itf;
     soc->cpu.ext_irq_ins[2] = &soc->peri_gtimer_irq_itf;
-    for (u32 i = 3; i < PLIC_MAX_IRQ_NUM; i++) {
+    soc->cpu.ext_irq_ins[3] = &soc->io_sdspi_irq_itf;
+    for (u32 i = 4; i < PLIC_MAX_IRQ_NUM; i++) {
         soc->cpu.ext_irq_ins[i] = soc->ext_irq_ins[i];
     }
     rv32g_conf_t rv32g_conf = {
@@ -40,6 +48,8 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
         .cfg_size = CFG_SIZE,
         .peri_base = PERI_BASE,
         .peri_size = PERI_SIZE,
+        .io_base = IO_SUBSYS_BASE,
+        .io_size = IO_SUBSYS_SIZE,
         .aclint_base = ACLINT_BASE,
         .aclint_size = ACLINT_SIZE,
         .aclint_mtimer_base = ACLINT_MTIMER_BASE,
@@ -74,7 +84,7 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
         .l2_latency = l2_latency,
         .l2_stg_fifo_depth = CORE_L2_STG_FIFO_DEPTH,
         .l2_bypass_ost_depth = CORE_L2_BYPASS_OST_DEPTH,
-        .smp_opt = smp_opt
+        .smp_opt = conf->smp_opt
     };
     rv32g_construct(&soc->cpu, soc->mod.hier_name, "u_rv32g_cpu", &rv32g_conf);
 
@@ -86,10 +96,23 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
     soc->peri.uart_irq_out = &soc->peri_uart_irq_itf;
     soc->peri.gpio_irq_out = &soc->peri_gpio_irq_itf;
     soc->peri.gtimer_irq_out = &soc->peri_gtimer_irq_itf;
-    peri_construct(&soc->peri, soc->mod.hier_name, "u_peri", PERI_BASE, PERI_SIZE);
+    peri_construct(&soc->peri, soc->mod.hier_name, "u_peri", PERI_BASE,
+        PERI_SIZE);
+
+    soc->io.mod.cycle = soc->mod.cycle;
+    APB_SLV_CONNECT(&soc->io, , soc, io_);
+    AXI4_MST_CONNECT(&soc->io, dma_, soc, io_dma_);
+    soc->io.sdspi_irq_out = &soc->io_sdspi_irq_itf;
+    soc->io.sdspi_cmd_mst = soc->sdspi_cmd_mst;
+    soc->io.sdspi_data_slv = soc->sdspi_data_slv;
+    io_conf_t io_conf = {
+        .base = IO_SUBSYS_BASE,
+        .size = IO_SUBSYS_SIZE
+    };
+    io_construct(&soc->io, soc->mod.hier_name, "u_io", &io_conf);
 
     AXI4_SLV_CONNECT(&soc->mm_axi_demux, host_, soc, mm_);
-    AXI4_MST_ARR_IMPORT(&soc->mm_axi_demux, gst_, 0, soc, ddr_);
+    AXI4_MST_ARR_CONNECT(&soc->mm_axi_demux, gst_, 0, soc, cpu_ddr_);
     AXI4_MST_ARR_IMPORT(&soc->mm_axi_demux, gst_, 1, soc, flash_);
     const u32 mm_axi_gst_bases[] = { DDR_BASE, FLASH_BASE };
     const u32 mm_axi_gst_sizes[] = { DDR_SIZE, FLASH_SIZE };
@@ -103,6 +126,18 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
     };
     axi_demux_construct(&soc->mm_axi_demux, soc->mod.hier_name,
         "u_mm_axi_demux", &mm_axi_demux_conf);
+
+    AXI4_SLV_ARR_CONNECT(&soc->ddr_axi_mux, host_, 0, soc, cpu_ddr_);
+    AXI4_SLV_ARR_CONNECT(&soc->ddr_axi_mux, host_, 1, soc, io_dma_);
+    AXI4_MST_IMPORT(&soc->ddr_axi_mux, gst_, soc, ddr_);
+    soc->ddr_axi_mux.mod.cycle = soc->mod.cycle;
+    axi_mux_conf_t ddr_axi_mux_conf = {
+        .host_num = 2,
+        .stg_fifo_depth = SOC_BUS_STG_FIFO_DEPTH,
+        .ost_depth = SOC_BUS_OST_DEPTH
+    };
+    axi_mux_construct(&soc->ddr_axi_mux, soc->mod.hier_name,
+        "u_ddr_axi_mux", &ddr_axi_mux_conf);
 }
 
 void soc_reset(soc_t *soc)
@@ -110,13 +145,19 @@ void soc_reset(soc_t *soc)
     mod_reset(&soc->mod);
     rv32g_reset(&soc->cpu);
     peri_reset(&soc->peri);
+    io_reset(&soc->io);
     axi_demux_reset(&soc->mm_axi_demux);
+    axi_mux_reset(&soc->ddr_axi_mux);
 
     AXI4_IF_RESET(soc, mm_);
+    AXI4_IF_RESET(soc, cpu_ddr_);
+    AXI4_IF_RESET(soc, io_dma_);
     APB_IF_RESET(soc, peri_);
+    APB_IF_RESET(soc, io_);
     itf_reset(&soc->peri_uart_irq_itf);
     itf_reset(&soc->peri_gpio_irq_itf);
     itf_reset(&soc->peri_gtimer_irq_itf);
+    itf_reset(&soc->io_sdspi_irq_itf);
 }
 
 void soc_clock(soc_t *soc)
@@ -126,13 +167,19 @@ void soc_clock(soc_t *soc)
     
     rv32g_clock(&soc->cpu);
     peri_clock(&soc->peri);
+    io_clock(&soc->io);
     axi_demux_clock(&soc->mm_axi_demux);
+    axi_mux_clock(&soc->ddr_axi_mux);
 
     AXI4_IF_DBG_CLOCK(soc, mm_);
+    AXI4_IF_DBG_CLOCK(soc, cpu_ddr_);
+    AXI4_IF_DBG_CLOCK(soc, io_dma_);
     APB_IF_DBG_CLOCK(soc, peri_);
+    APB_IF_DBG_CLOCK(soc, io_);
     itf_dbg_clock(&soc->peri_uart_irq_itf);
     itf_dbg_clock(&soc->peri_gpio_irq_itf);
     itf_dbg_clock(&soc->peri_gtimer_irq_itf);
+    itf_dbg_clock(&soc->io_sdspi_irq_itf);
 }
 
 void soc_free(soc_t *soc)
@@ -140,11 +187,17 @@ void soc_free(soc_t *soc)
     mod_free(&soc->mod);
     rv32g_free(&soc->cpu);
     peri_free(&soc->peri);
+    io_free(&soc->io);
     axi_demux_free(&soc->mm_axi_demux);
+    axi_mux_free(&soc->ddr_axi_mux);
 
     AXI4_IF_FREE(soc, mm_);
+    AXI4_IF_FREE(soc, cpu_ddr_);
+    AXI4_IF_FREE(soc, io_dma_);
     APB_IF_FREE(soc, peri_);
+    APB_IF_FREE(soc, io_);
     itf_free(&soc->peri_uart_irq_itf);
     itf_free(&soc->peri_gpio_irq_itf);
     itf_free(&soc->peri_gtimer_irq_itf);
+    itf_free(&soc->io_sdspi_irq_itf);
 }

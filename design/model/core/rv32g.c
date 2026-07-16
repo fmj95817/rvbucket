@@ -56,6 +56,7 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
     AXI4_MST_CONNECT(&s->cbi, mm_i_, s, cbi_mm_i_);
     AXI4_MST_CONNECT(&s->cbi, mm_d_, s, cbi_mm_d_);
     APB_MST_IMPORT(&s->cbi, peri_, s, peri_);
+    APB_MST_IMPORT(&s->cbi, io_, s, io_);
     BTI_MST_CONNECT(&s->cbi, boot_rom_, s, boot_rom_);
     APB_MST_CONNECT(&s->cbi, aclint_cfg_, s, aclint_cfg_);
     APB_MST_CONNECT(&s->cbi, plic_cfg_, s, plic_cfg_);
@@ -70,6 +71,8 @@ void rv32g_construct(rv32g_t *s, const char *parent, const char *name, const rv3
         .cfg_size = conf->cfg_size,
         .peri_base = conf->peri_base,
         .peri_size = conf->peri_size,
+        .io_base = conf->io_base,
+        .io_size = conf->io_size,
         .aclint_base = conf->aclint_base,
         .aclint_size = conf->aclint_size,
         .plic_base = conf->plic_base,

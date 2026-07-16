@@ -93,13 +93,18 @@ void cbi_construct(cbi_t *cbi, const char *parent, const char *name, const cbi_c
 
     APB_SLV_CONNECT(&cbi->cfg_apb_demux, host_, cbi, cfg_);
     APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 0, cbi, peri_);
-    APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 1, cbi, aclint_cfg_);
-    APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 2, cbi, plic_cfg_);
-    const u32 cfg_apb_gst_bases[] = { conf->peri_base, conf->aclint_base, conf->plic_base };
-    const u32 cfg_apb_gst_sizes[] = { conf->peri_size, conf->aclint_size, conf->plic_size };
+    APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 1, cbi, io_);
+    APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 2, cbi, aclint_cfg_);
+    APB_MST_ARR_IMPORT(&cbi->cfg_apb_demux, gst_, 3, cbi, plic_cfg_);
+    const u32 cfg_apb_gst_bases[] = {
+        conf->peri_base, conf->io_base, conf->aclint_base, conf->plic_base
+    };
+    const u32 cfg_apb_gst_sizes[] = {
+        conf->peri_size, conf->io_size, conf->aclint_size, conf->plic_size
+    };
     cbi->cfg_apb_demux.mod.cycle = cbi->mod.cycle;
     apb_demux_construct(&cbi->cfg_apb_demux, cbi->mod.hier_name,
-        "u_cfg_apb_demux", 3, cfg_apb_gst_bases, cfg_apb_gst_sizes);
+        "u_cfg_apb_demux", 4, cfg_apb_gst_bases, cfg_apb_gst_sizes);
 }
 
 void cbi_reset(cbi_t *cbi)

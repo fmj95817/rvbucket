@@ -14,14 +14,16 @@
 #define CORE_L2_BYPASS_OST_DEPTH 4u
 
 #define BOOT_ROM_BASE  0x00000000u
-#define BOOT_ROM_SIZE  (2u * KiB)
+#define BOOT_ROM_SIZE  (4u * KiB)
 #define MM_BASE        0x40000000u
 #define MM_SIZE        (2u * GiB)
 #define CFG_BASE       0x30000000u
 #define CFG_SIZE       (32u * MiB)
 
 #define PERI_BASE      0x30000000u
-#define PERI_SIZE      (16u * MiB)
+#define PERI_SIZE      (1u * MiB)
+#define IO_SUBSYS_BASE 0x30100000u
+#define IO_SUBSYS_SIZE (1u * MiB)
 #define ACLINT_BASE    0x31000000u
 #define ACLINT_SIZE    (1u * MiB)
 #define PLIC_BASE      0x31100000u
