@@ -5,7 +5,6 @@
 #include "base/mod.h"
 #include "base/itf.h"
 #include "mem/rom.h"
-#include "mem/ram.h"
 #include "hart/hart.h"
 #include "l2.h"
 #include "cbi.h"
@@ -15,10 +14,6 @@
 typedef struct rv32g_conf {
     u32 boot_rom_base;
     u32 boot_rom_size;
-    u32 itcm_base;
-    u32 itcm_size;
-    u32 dtcm_base;
-    u32 dtcm_size;
     u32 mm_base;
     u32 mm_size;
     u32 cfg_base;
@@ -59,8 +54,6 @@ typedef struct rv32g_conf {
     u32 l2_latency;
     u32 l2_stg_fifo_depth;
     u32 l2_bypass_ost_depth;
-    u32 itcm_latency;
-    u32 dtcm_latency;
     bool smp_opt;
 } rv32g_conf_t;
 
@@ -73,16 +66,11 @@ typedef struct rv32g {
     hart_t hart;
     cbi_t cbi;
     rom_t boot_rom;
-    ram_t itcm;
-    ram_t dtcm;
     aclint_t aclint;
     plic_t plic;
     l2_t l2;
 
     BTI_IF_DECL(boot_rom_);
-    BTI_IF_DECL(itcm_i_);
-    BTI_IF_DECL(itcm_d_);
-    BTI_IF_DECL(dtcm_);
     APB_IF_DECL(aclint_cfg_);
     APB_IF_DECL(plic_cfg_);
     itf_t core_timer_sig_itf;

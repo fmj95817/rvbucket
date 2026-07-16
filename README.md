@@ -10,8 +10,6 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 - **L1 Cache**: Configurable set-associative L1 I-Cache and L1 D-Cache with write-back support in ASM; RTL cache optimization is in progress
 - **Boot ROM**: 2 KB
 - **Flash**: 32 MB
-- **ITCM (Instruction Tightly Coupled Memory)**: 128 KB
-- **DTCM (Data Tightly Coupled Memory)**: 64 KB
 - **DDR**: Configurable size, supports preloading Linux payloads
 - **UART**: basic TX/RX function
 - **GPIO**: 24-bit bidirectional GPIO with output/input/interrupt modes, Web UI buttons & switches
@@ -27,7 +25,7 @@ This is an open-source 32-bit RISC-V processor, featuring a 2-stage pipelined RV
 - **MMU with Sv32 Paging**: ASM and RTL both support TLB and page table walker; RTL can run Linux smoke.
 - **L1 Cache**: Configurable set-associative L1 I-Cache and D-Cache with bypass support in ASM; RTL cache optimization is planned.
 - **Trap Handling**: Machine/Supervisor mode traps, interrupts, delegations.
-- **Simple SoC System**: Boot ROM, Flash, ITCM/DTCM, DDR, UART, GPIO, GTimer, ACLINT, PLIC.
+- **Simple SoC System**: Boot ROM, Flash, DDR, UART, GPIO, GTimer, ACLINT, PLIC.
 - **ASM (Architecture Simulation Model)**: Cycle-accurate simulation with VCD waveform dumps and interface transaction traces.
 - **Dual UI**: Web UI Dashboard (xterm.js terminal + GPIO panel + reset) and Terminal UI (vim-style cmd mode).
 - **RTL**: SystemVerilog implementation with auto-generated interfaces (`itfgen.py`), supports VCS/Verilator/FPGA.

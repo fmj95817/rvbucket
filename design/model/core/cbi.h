@@ -17,10 +17,6 @@
 typedef struct cbi_conf {
     u32 boot_rom_base;
     u32 boot_rom_size;
-    u32 itcm_base;
-    u32 itcm_size;
-    u32 dtcm_base;
-    u32 dtcm_size;
     u32 mm_base;
     u32 mm_size;
     u32 cfg_base;
@@ -41,9 +37,6 @@ typedef struct cbi {
     AXI4_MST_DECL(mm_d_);
     APB_MST_DECL(peri_);
     BTI_MST_DECL(boot_rom_);
-    BTI_MST_DECL(itcm_i_);
-    BTI_MST_DECL(itcm_d_);
-    BTI_MST_DECL(dtcm_);
     APB_MST_DECL(aclint_cfg_);
     APB_MST_DECL(plic_cfg_);
     AXI4_SLV_DECL(hart_i_);
@@ -54,9 +47,6 @@ typedef struct cbi {
     axi2bti_t boot_rom_i_axi2bti;
     axi2bti_t boot_rom_d_axi2bti;
     bti_mux_t boot_rom_bti_mux;
-    axi2bti_t itcm_i_axi2bti;
-    axi2bti_t itcm_d_axi2bti;
-    axi2bti_t dtcm_axi2bti;
     axi2bti_t cfg_axi2bti;
     bti2apb_t cfg_bti2apb;
     apb_demux_t cfg_apb_demux;
@@ -65,9 +55,6 @@ typedef struct cbi {
     AXI4_IF_DECL(boot_rom_d_);
     BTI_IF_DECL(boot_rom_i_);
     BTI_IF_DECL(boot_rom_d_);
-    AXI4_IF_DECL(itcm_i_);
-    AXI4_IF_DECL(itcm_d_);
-    AXI4_IF_DECL(dtcm_);
     AXI4_IF_DECL(cfg_);
     BTI_IF_DECL(cfg_);
     APB_IF_DECL(cfg_);

@@ -10,22 +10,18 @@ void cbi_construct(cbi_t *cbi, const char *parent, const char *name, const cbi_c
     AXI4_IF_CONSTRUCT(cbi, boot_rom_d_, 1);
     BTI_IF_CONSTRUCT(cbi, boot_rom_i_, 1);
     BTI_IF_CONSTRUCT(cbi, boot_rom_d_, 1);
-    AXI4_IF_CONSTRUCT(cbi, itcm_i_, 1);
-    AXI4_IF_CONSTRUCT(cbi, itcm_d_, 1);
-    AXI4_IF_CONSTRUCT(cbi, dtcm_, 1);
     AXI4_IF_CONSTRUCT(cbi, cfg_, 1);
     BTI_IF_CONSTRUCT(cbi, cfg_, 1);
     APB_IF_CONSTRUCT(cbi, cfg_, 1);
 
     AXI4_SLV_IMPORT(&cbi->i_axi_demux, host_, cbi, hart_i_);
     AXI4_MST_ARR_CONNECT(&cbi->i_axi_demux, gst_, 0, cbi, boot_rom_i_);
-    AXI4_MST_ARR_CONNECT(&cbi->i_axi_demux, gst_, 1, cbi, itcm_i_);
-    AXI4_MST_ARR_IMPORT(&cbi->i_axi_demux, gst_, 2, cbi, mm_i_);
-    const u32 i_axi_gst_bases[] = { conf->boot_rom_base, conf->itcm_base, conf->mm_base };
-    const u32 i_axi_gst_sizes[] = { conf->boot_rom_size, conf->itcm_size, conf->mm_size };
+    AXI4_MST_ARR_IMPORT(&cbi->i_axi_demux, gst_, 1, cbi, mm_i_);
+    const u32 i_axi_gst_bases[] = { conf->boot_rom_base, conf->mm_base };
+    const u32 i_axi_gst_sizes[] = { conf->boot_rom_size, conf->mm_size };
     cbi->i_axi_demux.mod.cycle = cbi->mod.cycle;
     axi_demux_conf_t i_axi_demux_conf = {
-        .gst_num = 3,
+        .gst_num = 2,
         .gst_bases = i_axi_gst_bases,
         .gst_sizes = i_axi_gst_sizes,
         .stg_fifo_depth = conf->bus_stg_fifo_depth,
@@ -36,15 +32,17 @@ void cbi_construct(cbi_t *cbi, const char *parent, const char *name, const cbi_c
 
     AXI4_SLV_IMPORT(&cbi->d_axi_demux, host_, cbi, hart_d_);
     AXI4_MST_ARR_CONNECT(&cbi->d_axi_demux, gst_, 0, cbi, boot_rom_d_);
-    AXI4_MST_ARR_CONNECT(&cbi->d_axi_demux, gst_, 1, cbi, itcm_d_);
-    AXI4_MST_ARR_CONNECT(&cbi->d_axi_demux, gst_, 2, cbi, dtcm_);
-    AXI4_MST_ARR_IMPORT(&cbi->d_axi_demux, gst_, 3, cbi, mm_d_);
-    AXI4_MST_ARR_CONNECT(&cbi->d_axi_demux, gst_, 4, cbi, cfg_);
-    const u32 d_axi_gst_bases[] = { conf->boot_rom_base, conf->itcm_base, conf->dtcm_base, conf->mm_base, conf->cfg_base };
-    const u32 d_axi_gst_sizes[] = { conf->boot_rom_size, conf->itcm_size, conf->dtcm_size, conf->mm_size, conf->cfg_size };
+    AXI4_MST_ARR_IMPORT(&cbi->d_axi_demux, gst_, 1, cbi, mm_d_);
+    AXI4_MST_ARR_CONNECT(&cbi->d_axi_demux, gst_, 2, cbi, cfg_);
+    const u32 d_axi_gst_bases[] = {
+        conf->boot_rom_base, conf->mm_base, conf->cfg_base
+    };
+    const u32 d_axi_gst_sizes[] = {
+        conf->boot_rom_size, conf->mm_size, conf->cfg_size
+    };
     cbi->d_axi_demux.mod.cycle = cbi->mod.cycle;
     axi_demux_conf_t d_axi_demux_conf = {
-        .gst_num = 5,
+        .gst_num = 3,
         .gst_bases = d_axi_gst_bases,
         .gst_sizes = d_axi_gst_sizes,
         .stg_fifo_depth = conf->bus_stg_fifo_depth,
@@ -82,24 +80,6 @@ void cbi_construct(cbi_t *cbi, const char *parent, const char *name, const cbi_c
     bti_mux_construct(&cbi->boot_rom_bti_mux, cbi->mod.hier_name,
         "u_boot_rom_bti_mux", &boot_rom_bti_mux_conf);
 
-    AXI4_SLV_CONNECT(&cbi->itcm_i_axi2bti, , cbi, itcm_i_);
-    BTI_MST_IMPORT(&cbi->itcm_i_axi2bti, , cbi, itcm_i_);
-    cbi->itcm_i_axi2bti.mod.cycle = cbi->mod.cycle;
-    axi2bti_construct(&cbi->itcm_i_axi2bti, cbi->mod.hier_name,
-        "u_itcm_i_axi2bti", &axi2bti_conf);
-
-    AXI4_SLV_CONNECT(&cbi->itcm_d_axi2bti, , cbi, itcm_d_);
-    BTI_MST_IMPORT(&cbi->itcm_d_axi2bti, , cbi, itcm_d_);
-    cbi->itcm_d_axi2bti.mod.cycle = cbi->mod.cycle;
-    axi2bti_construct(&cbi->itcm_d_axi2bti, cbi->mod.hier_name,
-        "u_itcm_d_axi2bti", &axi2bti_conf);
-
-    AXI4_SLV_CONNECT(&cbi->dtcm_axi2bti, , cbi, dtcm_);
-    BTI_MST_IMPORT(&cbi->dtcm_axi2bti, , cbi, dtcm_);
-    cbi->dtcm_axi2bti.mod.cycle = cbi->mod.cycle;
-    axi2bti_construct(&cbi->dtcm_axi2bti, cbi->mod.hier_name,
-        "u_dtcm_axi2bti", &axi2bti_conf);
-
     AXI4_SLV_CONNECT(&cbi->cfg_axi2bti, , cbi, cfg_);
     BTI_MST_CONNECT(&cbi->cfg_axi2bti, , cbi, cfg_);
     cbi->cfg_axi2bti.mod.cycle = cbi->mod.cycle;
@@ -130,9 +110,6 @@ void cbi_reset(cbi_t *cbi)
     axi2bti_reset(&cbi->boot_rom_i_axi2bti);
     axi2bti_reset(&cbi->boot_rom_d_axi2bti);
     bti_mux_reset(&cbi->boot_rom_bti_mux);
-    axi2bti_reset(&cbi->itcm_i_axi2bti);
-    axi2bti_reset(&cbi->itcm_d_axi2bti);
-    axi2bti_reset(&cbi->dtcm_axi2bti);
     axi2bti_reset(&cbi->cfg_axi2bti);
     bti2apb_reset(&cbi->cfg_bti2apb);
     apb_demux_reset(&cbi->cfg_apb_demux);
@@ -141,9 +118,6 @@ void cbi_reset(cbi_t *cbi)
     AXI4_IF_RESET(cbi, boot_rom_d_);
     BTI_IF_RESET(cbi, boot_rom_i_);
     BTI_IF_RESET(cbi, boot_rom_d_);
-    AXI4_IF_RESET(cbi, itcm_i_);
-    AXI4_IF_RESET(cbi, itcm_d_);
-    AXI4_IF_RESET(cbi, dtcm_);
     AXI4_IF_RESET(cbi, cfg_);
     BTI_IF_RESET(cbi, cfg_);
     APB_IF_RESET(cbi, cfg_);
@@ -157,9 +131,6 @@ void cbi_free(cbi_t *cbi)
     axi2bti_free(&cbi->boot_rom_i_axi2bti);
     axi2bti_free(&cbi->boot_rom_d_axi2bti);
     bti_mux_free(&cbi->boot_rom_bti_mux);
-    axi2bti_free(&cbi->itcm_i_axi2bti);
-    axi2bti_free(&cbi->itcm_d_axi2bti);
-    axi2bti_free(&cbi->dtcm_axi2bti);
     axi2bti_free(&cbi->cfg_axi2bti);
     bti2apb_free(&cbi->cfg_bti2apb);
     apb_demux_free(&cbi->cfg_apb_demux);
@@ -168,9 +139,6 @@ void cbi_free(cbi_t *cbi)
     AXI4_IF_FREE(cbi, boot_rom_d_);
     BTI_IF_FREE(cbi, boot_rom_i_);
     BTI_IF_FREE(cbi, boot_rom_d_);
-    AXI4_IF_FREE(cbi, itcm_i_);
-    AXI4_IF_FREE(cbi, itcm_d_);
-    AXI4_IF_FREE(cbi, dtcm_);
     AXI4_IF_FREE(cbi, cfg_);
     BTI_IF_FREE(cbi, cfg_);
     APB_IF_FREE(cbi, cfg_);
@@ -184,9 +152,6 @@ void cbi_clock(cbi_t *cbi)
     axi2bti_clock(&cbi->boot_rom_i_axi2bti);
     axi2bti_clock(&cbi->boot_rom_d_axi2bti);
     bti_mux_clock(&cbi->boot_rom_bti_mux);
-    axi2bti_clock(&cbi->itcm_i_axi2bti);
-    axi2bti_clock(&cbi->itcm_d_axi2bti);
-    axi2bti_clock(&cbi->dtcm_axi2bti);
     axi2bti_clock(&cbi->cfg_axi2bti);
     bti2apb_clock(&cbi->cfg_bti2apb);
     apb_demux_clock(&cbi->cfg_apb_demux);
@@ -195,9 +160,6 @@ void cbi_clock(cbi_t *cbi)
     AXI4_IF_DBG_CLOCK(cbi, boot_rom_d_);
     BTI_IF_DBG_CLOCK(cbi, boot_rom_i_);
     BTI_IF_DBG_CLOCK(cbi, boot_rom_d_);
-    AXI4_IF_DBG_CLOCK(cbi, itcm_i_);
-    AXI4_IF_DBG_CLOCK(cbi, itcm_d_);
-    AXI4_IF_DBG_CLOCK(cbi, dtcm_);
     AXI4_IF_DBG_CLOCK(cbi, cfg_);
     BTI_IF_DBG_CLOCK(cbi, cfg_);
     APB_IF_DBG_CLOCK(cbi, cfg_);

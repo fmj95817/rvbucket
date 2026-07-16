@@ -15,8 +15,6 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
 
     u32 hart_l1_latency = perf_sim ? HART_L1_LATENCY : 0u;
     u32 l2_latency = perf_sim ? L2_LATENCY : 0u;
-    u32 itcm_latency = perf_sim ? ITCM_LATENCY : 0u;
-    u32 dtcm_latency = perf_sim ? DTCM_LATENCY : 0u;
 
     AXI4_IF_CONSTRUCT(soc, mm_, 2);
     APB_IF_CONSTRUCT(soc, peri_, 1);
@@ -36,10 +34,6 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
     rv32g_conf_t rv32g_conf = {
         .boot_rom_base = BOOT_ROM_BASE,
         .boot_rom_size = BOOT_ROM_SIZE,
-        .itcm_base = ITCM_BASE,
-        .itcm_size = ITCM_SIZE,
-        .dtcm_base = DTCM_BASE,
-        .dtcm_size = DTCM_SIZE,
         .mm_base = MM_BASE,
         .mm_size = MM_SIZE,
         .cfg_base = CFG_BASE,
@@ -80,8 +74,6 @@ void soc_construct(soc_t *soc, const char *parent, const char *name,
         .l2_latency = l2_latency,
         .l2_stg_fifo_depth = CORE_L2_STG_FIFO_DEPTH,
         .l2_bypass_ost_depth = CORE_L2_BYPASS_OST_DEPTH,
-        .itcm_latency = itcm_latency,
-        .dtcm_latency = dtcm_latency,
         .smp_opt = smp_opt
     };
     rv32g_construct(&soc->cpu, soc->mod.hier_name, "u_rv32g_cpu", &rv32g_conf);
