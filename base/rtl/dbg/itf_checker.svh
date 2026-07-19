@@ -15,6 +15,9 @@
 `endif
 
 `define RVB_ITF_VLD_RDY_CHECK(_PAYLOAD) \
+    `RVB_ITF_VLD_RDY_CHECK_CANCEL(_PAYLOAD, 1'b0)
+
+`define RVB_ITF_VLD_RDY_CHECK_CANCEL(_PAYLOAD, _CANCEL) \
     bit __itf_checker_enable; \
     bit __itf_checker_verbose; \
     bit __itf_checker_prev_stalled; \
@@ -43,7 +46,7 @@
             __itf_checker_vld_hold_count <= 0; \
             __itf_checker_payload_stable_count <= 0; \
         end else if (__itf_checker_enable) begin \
-            if (__itf_checker_prev_stalled) begin \
+            if (__itf_checker_prev_stalled && !(_CANCEL)) begin \
                 if (vld !== 1'b1) begin \
                     if (__itf_checker_verbose || \
                         __itf_checker_vld_hold_count == 0) \
@@ -63,7 +66,7 @@
                 end \
             end \
             __itf_checker_prev_stalled <= \
-                (vld === 1'b1) && (rdy === 1'b0); \
+                !(_CANCEL) && (vld === 1'b1) && (rdy === 1'b0); \
             __itf_checker_prev_payload <= _PAYLOAD; \
             __itf_checker_cycle <= __itf_checker_cycle + 1; \
         end \
@@ -78,6 +81,7 @@
     end
 `else
 `define RVB_ITF_VLD_RDY_CHECK(_PAYLOAD)
+`define RVB_ITF_VLD_RDY_CHECK_CANCEL(_PAYLOAD, _CANCEL)
 `endif
 
 `endif

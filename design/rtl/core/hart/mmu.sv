@@ -40,6 +40,14 @@ module mmu #(
     } bti_req_pkt_t;
 
     typedef struct packed {
+        bti_req_pkt_t req;
+        logic [1:0] priv;
+        logic sum;
+        logic mxr;
+        logic [31:0] fault_pc;
+    } req_ctx_t;
+
+    typedef struct packed {
         logic [15:0] trans_id;
         logic [31:0] data;
         logic ok;
@@ -73,17 +81,20 @@ module mmu #(
     } walk_state_t;
 
     localparam int BTI_REQ_DW = $bits(bti_req_pkt_t);
+    localparam int REQ_CTX_DW = $bits(req_ctx_t);
     localparam int OST_CTX_DW = $bits(ost_ctx_t);
 
     logic i_fifo_rd_vld;
     logic i_fifo_rd_rdy;
     logic i_fifo_wr_rdy;
-    logic [BTI_REQ_DW-1:0] i_fifo_rd_data;
+    logic [REQ_CTX_DW-1:0] i_fifo_rd_data;
+    req_ctx_t i_req_ctx;
     bti_req_pkt_t i_req_pkt;
     logic d_fifo_rd_vld;
     logic d_fifo_rd_rdy;
     logic d_fifo_wr_rdy;
-    logic [BTI_REQ_DW-1:0] d_fifo_rd_data;
+    logic [REQ_CTX_DW-1:0] d_fifo_rd_data;
+    req_ctx_t d_req_ctx;
     bti_req_pkt_t d_req_pkt;
 
     logic i_ost_alloc_vld;
@@ -209,9 +220,10 @@ module mmu #(
         exu_state_slv.pkt.priv;
     wire data_sum = csr_mmu_state_slv.pkt.mstatus[18];
     wire data_mxr = csr_mmu_state_slv.pkt.mstatus[19];
-    wire i_translate = exu_state_slv.pkt.priv != 2'b11 &&
+    wire i_translate = i_req_ctx.priv != 2'b11 &&
         csr_mmu_state_slv.pkt.satp[31];
-    wire d_translate = data_priv != 2'b11 && csr_mmu_state_slv.pkt.satp[31];
+    wire d_translate = d_req_ctx.priv != 2'b11 &&
+        csr_mmu_state_slv.pkt.satp[31];
     wire pa_i_req_hsk = pa_i_req_mst.vld && pa_i_req_mst.rdy;
     wire pa_d_req_hsk = pa_d_req_mst.vld && pa_d_req_mst.rdy;
     wire pa_i_rsp_hsk = pa_i_rsp_slv.vld && pa_i_rsp_slv.rdy;
@@ -362,7 +374,7 @@ module mmu #(
     endfunction
 
     fifo #(
-        .DW           (BTI_REQ_DW),
+        .DW           (REQ_CTX_DW),
         .DEPTH        (I_STG_FIFO_DEPTH),
         .FALL_THROUGH (1'b1)
     ) u_i_req_fifo(
@@ -371,7 +383,13 @@ module mmu #(
         .clear   (1'b0),
         .wr_vld  (va_i_req_slv.vld && !tlb_flush),
         .wr_rdy  (i_fifo_wr_rdy),
-        .wr_data (va_i_req_slv.pkt),
+        .wr_data (req_ctx_t'{
+            req:bti_req_pkt_t'(va_i_req_slv.pkt),
+            priv:exu_state_slv.pkt.priv,
+            sum:data_sum,
+            mxr:data_mxr,
+            fault_pc:va_i_req_slv.pkt.addr
+        }),
         .rd_vld  (i_fifo_rd_vld),
         .rd_rdy  (i_fifo_rd_rdy),
         .rd_data (i_fifo_rd_data),
@@ -380,7 +398,7 @@ module mmu #(
     );
 
     fifo #(
-        .DW           (BTI_REQ_DW),
+        .DW           (REQ_CTX_DW),
         .DEPTH        (D_STG_FIFO_DEPTH),
         .FALL_THROUGH (1'b1)
     ) u_d_req_fifo(
@@ -389,7 +407,13 @@ module mmu #(
         .clear   (1'b0),
         .wr_vld  (va_d_req_slv.vld && !tlb_flush),
         .wr_rdy  (d_fifo_wr_rdy),
-        .wr_data (va_d_req_slv.pkt),
+        .wr_data (req_ctx_t'{
+            req:bti_req_pkt_t'(va_d_req_slv.pkt),
+            priv:data_priv,
+            sum:data_sum,
+            mxr:data_mxr,
+            fault_pc:exu_state_slv.pkt.pc
+        }),
         .rd_vld  (d_fifo_rd_vld),
         .rd_rdy  (d_fifo_rd_rdy),
         .rd_data (d_fifo_rd_data),
@@ -397,8 +421,10 @@ module mmu #(
         .full    ()
     );
 
-    assign i_req_pkt = i_fifo_rd_data;
-    assign d_req_pkt = d_fifo_rd_data;
+    assign i_req_ctx = i_fifo_rd_data;
+    assign d_req_ctx = d_fifo_rd_data;
+    assign i_req_pkt = i_req_ctx.req;
+    assign d_req_pkt = d_req_ctx.req;
     assign va_i_req_slv.rdy = !tlb_flush && i_fifo_wr_rdy;
     assign va_d_req_slv.rdy = !tlb_flush && d_fifo_wr_rdy;
 
@@ -805,20 +831,20 @@ module mmu #(
                 lookup_is_inst_q <= 1'b0;
                 lookup_req_q <= d_req_pkt;
                 lookup_va_q <= d_req_pkt.addr;
-                lookup_pc_q <= exu_state_slv.pkt.pc;
-                lookup_priv_q <= data_priv;
-                lookup_sum_q <= data_sum;
-                lookup_mxr_q <= data_mxr;
+                lookup_pc_q <= d_req_ctx.fault_pc;
+                lookup_priv_q <= d_req_ctx.priv;
+                lookup_sum_q <= d_req_ctx.sum;
+                lookup_mxr_q <= d_req_ctx.mxr;
                 lookup_fault_cause_q <= fault_cause_for(1'b0, d_req_pkt.cmd);
             end else if (new_i_lookup_issue) begin
                 lookup_vld_q <= 1'b1;
                 lookup_is_inst_q <= 1'b1;
                 lookup_req_q <= i_req_pkt;
                 lookup_va_q <= i_req_pkt.addr;
-                lookup_pc_q <= i_req_pkt.addr;
-                lookup_priv_q <= exu_state_slv.pkt.priv;
-                lookup_sum_q <= data_sum;
-                lookup_mxr_q <= data_mxr;
+                lookup_pc_q <= i_req_ctx.fault_pc;
+                lookup_priv_q <= i_req_ctx.priv;
+                lookup_sum_q <= i_req_ctx.sum;
+                lookup_mxr_q <= i_req_ctx.mxr;
                 lookup_fault_cause_q <= HART_EXPT_CAUSE_INST_PAGE_FAULT;
             end else if ((lookup_is_inst_q && itlb_rsp_vld) ||
                 (!lookup_is_inst_q && dtlb_rsp_vld)) begin

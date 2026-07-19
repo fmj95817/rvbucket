@@ -246,7 +246,12 @@ def gen_rtl_itf(itf_name, desc):
 
     itf_type = desc.get("type", "vld-rdy")
     payloads = desc.get("payloads", [])
-    ctrl_sigs = desc.get("ctrl", [])
+    ctrl_sigs = list(desc.get("ctrl", []))
+    support_cancel = desc.get("support_cancel", False)
+    if support_cancel:
+        if itf_type != "vld-rdy":
+            raise ValueError("{}: support_cancel requires vld-rdy interface".format(itf_name))
+        ctrl_sigs.append({"name": "cancel", "width": 1})
     enums = desc.get("enums", {})
     inc_rtl = desc.get("include_rtl", [])
 
@@ -449,8 +454,12 @@ def gen_rtl_itf(itf_name, desc):
         if itf_type == "vld-rdy":
             checker_payload = _rtl_checker_payload(has_pkt, ctrl_sigs)
             f.write("\n")
-            f.write("    `RVB_ITF_VLD_RDY_CHECK({})\n".format(
-                checker_payload))
+            if not support_cancel:
+                f.write("    `RVB_ITF_VLD_RDY_CHECK({})\n".format(
+                    checker_payload))
+            else:
+                f.write("    `RVB_ITF_VLD_RDY_CHECK_CANCEL({}, {})\n".format(
+                    checker_payload, "cancel"))
 
         trace_when = _rtl_trace_when(desc, itf_type, payloads, ctrl_sigs)
         if trace_when is not None:

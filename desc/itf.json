@@ -22,6 +22,7 @@
             "type": "vld-rdy",
             "include": ["spec/core/isa.h"],
             "include_rtl": ["spec/core/isa.svh"],
+            "support_cancel": true,
             "payloads": [
                 { "name": "inst", "ext_type": "rv32g_inst_t", "raw": "raw", "width": 32 },
                 { "name": "pc", "width": 32 },

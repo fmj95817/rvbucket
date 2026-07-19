@@ -5,6 +5,7 @@
 interface ex_req_if_t;
     logic vld;
     logic rdy;
+    logic cancel;
 
     struct packed {
         rv32g_inst_t inst;
@@ -27,10 +28,10 @@ interface ex_req_if_t;
         );
     endfunction
 `endif
-    modport mst (output vld, pkt, input rdy);
-    modport slv (input vld, pkt, output rdy);
+    modport mst (output vld, pkt, cancel, input rdy);
+    modport slv (input vld, pkt, cancel, output rdy);
 
-    `RVB_ITF_VLD_RDY_CHECK(pkt)
+    `RVB_ITF_VLD_RDY_CHECK_CANCEL({pkt, cancel}, cancel)
 
     `RVB_ITF_TRACE_WHEN("mst", "slv", vld && rdy)
 endinterface

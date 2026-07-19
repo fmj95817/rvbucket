@@ -437,6 +437,7 @@ module ifu #(
     assign ex_req_mst.vld = issue_vld &&
         (!issue_is_ctrl || ctrlq_wr_rdy) &&
         !trap_req_vld && !control_redirect;
+    assign ex_req_mst.cancel = redirect_flush || rspq_bad;
     assign is_boot_code = issue_pc < 32'h00000800;
     assign ex_req_mst.pkt.inst.raw = issue_ir;
     assign ex_req_mst.pkt.pc = issue_pc;

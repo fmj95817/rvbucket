@@ -99,7 +99,7 @@ module hart(
     ) u_ex_req_reg_slice(
         .clk      (clk),
         .rst_n    (rst_n),
-        .clear    (fl_req_if.vld || tlb_flush_if.vld || l1i_flush_if.vld),
+        .clear    (ifu_ex_req_if.cancel),
         .src_vld  (ifu_ex_req_if.vld),
         .src_rdy  (ifu_ex_req_if.rdy),
         .src_data (ifu_ex_req_if.pkt),
@@ -109,6 +109,7 @@ module hart(
     );
 
     assign exu_ex_req_if.pkt = ex_req_data;
+    assign exu_ex_req_if.cancel = ifu_ex_req_if.cancel;
 
     ifu u_ifu(
         .clk         (clk),

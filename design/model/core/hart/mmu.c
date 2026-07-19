@@ -48,9 +48,9 @@ void mmu_construct(mmu_t *mmu, const char *parent, const char *name, const mmu_c
     DBG_CHECK(conf->ost_depth > 0);
     mmu->exu_state_i = itf_signal_get_src_and_chk(mmu->exu_state_in);
     mmu->csr_state_i = itf_signal_get_src_and_chk(mmu->csr_mmu_state_in);
-    fifo_construct(&mmu->va_i_req_fifo, sizeof(bti_req_if_t),
+    fifo_construct(&mmu->va_i_req_fifo, sizeof(mmu_req_ctx_t),
         conf->i_stg_fifo_depth);
-    fifo_construct(&mmu->va_d_req_fifo, sizeof(bti_req_if_t),
+    fifo_construct(&mmu->va_d_req_fifo, sizeof(mmu_req_ctx_t),
         conf->d_stg_fifo_depth);
     ostq_construct(&mmu->i_ost, sizeof(mmu_ost_ctx_t), conf->ost_depth);
     ostq_construct(&mmu->d_ost, sizeof(mmu_ost_ctx_t), conf->ost_depth);
@@ -146,11 +146,27 @@ static rv32g_priv_t mmu_effective_priv(const mmu_t *mmu, mmu_access_t access)
     return priv;
 }
 
-static bool mmu_translation_enabled(const mmu_t *mmu, mmu_access_t access)
+static bool mmu_req_ctx_translation_enabled(const mmu_t *mmu,
+    const mmu_req_ctx_t *ctx)
 {
-    rv32g_priv_t priv = mmu_effective_priv(mmu, access);
-    return priv != RV32G_PRIV_MACHINE &&
+    return ctx->priv != RV32G_PRIV_MACHINE &&
         mmu_satp(mmu).reg.mode == MMU_SATP_MODE_SV32;
+}
+
+static mmu_req_ctx_t mmu_make_req_ctx(const mmu_t *mmu, bool is_inst,
+    const bti_req_if_t *req)
+{
+    mmu_access_t access = is_inst ? MMU_ACCESS_INST :
+        (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
+    rv32g_csr_mstatus_t mstatus = mmu_mstatus(mmu);
+    mmu_req_ctx_t ctx = {
+        .req = *req,
+        .priv = mmu_effective_priv(mmu, access),
+        .sum = mstatus.reg.sum,
+        .mxr = mstatus.reg.mxr,
+        .fault_pc = is_inst ? req->addr : mmu->exu_state_i->pc
+    };
+    return ctx;
 }
 
 static ostq_t *mmu_ost(mmu_t *mmu, bool is_inst)
@@ -248,21 +264,24 @@ static void mmu_send_pa_req(mmu_t *mmu, itf_t *pa_req_mst, const bti_req_if_t *r
     itf_write(pa_req_mst, req);
 }
 
-static void mmu_start_req(mmu_t *mmu, bool is_inst, const bti_req_if_t *req,
-    u32 slot)
+static void mmu_set_active_req(mmu_t *mmu, bool is_inst,
+    const mmu_req_ctx_t *ctx)
 {
-    mmu_access_t access = is_inst ? MMU_ACCESS_INST :
-        (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
-
-    mmu->busy = true;
     mmu->is_inst = is_inst;
-    mmu->req = *req;
-    mmu->req_priv = mmu_effective_priv(mmu, access);
-    mmu->req_sum = mmu_mstatus(mmu).reg.sum;
-    mmu->req_mxr = mmu_mstatus(mmu).reg.mxr;
-    mmu->fault_pc = is_inst ? req->addr : mmu->exu_state_i->pc;
-    mmu->va = req->addr;
+    mmu->req = ctx->req;
+    mmu->req_priv = ctx->priv;
+    mmu->req_sum = ctx->sum;
+    mmu->req_mxr = ctx->mxr;
+    mmu->fault_pc = ctx->fault_pc;
+    mmu->va = ctx->req.addr;
     mmu->root_base = mmu_satp(mmu).reg.ppn << MMU_PGSHIFT;
+}
+
+static void mmu_start_req_ctx(mmu_t *mmu, bool is_inst,
+    const mmu_req_ctx_t *ctx, u32 slot)
+{
+    mmu->busy = true;
+    mmu_set_active_req(mmu, is_inst, ctx);
     mmu->level = 1;
     mmu->pte_req_pending = false;
     mmu->final_req_pending = false;
@@ -360,7 +379,8 @@ static void mmu_capture_req(mmu_t *mmu)
     } else if (!itf_fifo_empty(mmu->va_i_bti_req_slv)) {
         bti_req_if_t req;
         itf_read(mmu->va_i_bti_req_slv, &req);
-        fifo_push(&mmu->va_i_req_fifo, &req);
+        mmu_req_ctx_t ctx = mmu_make_req_ctx(mmu, true, &req);
+        fifo_push(&mmu->va_i_req_fifo, &ctx);
     }
 
     if (fifo_full(&mmu->va_d_req_fifo)) {
@@ -370,7 +390,8 @@ static void mmu_capture_req(mmu_t *mmu)
     } else if (!itf_fifo_empty(mmu->va_d_bti_req_slv)) {
         bti_req_if_t req;
         itf_read(mmu->va_d_bti_req_slv, &req);
-        fifo_push(&mmu->va_d_req_fifo, &req);
+        mmu_req_ctx_t ctx = mmu_make_req_ctx(mmu, false, &req);
+        fifo_push(&mmu->va_d_req_fifo, &ctx);
     }
 }
 
@@ -394,15 +415,10 @@ static bool mmu_alloc_ost_req(mmu_t *mmu, bool is_inst, const bti_req_if_t *req,
 }
 
 static bool mmu_lookup_tlb_entry(mmu_t *mmu, bool is_inst,
-    const bti_req_if_t *req, mmu_tlb_entry_t **entry_out)
+    const mmu_req_ctx_t *ctx, mmu_tlb_entry_t **entry_out)
 {
     u32 num;
     mmu_tlb_entry_t *entries = mmu_tlb_entries(mmu, is_inst, &num);
-    mmu_access_t access = is_inst ? MMU_ACCESS_INST :
-        (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
-    rv32g_priv_t req_priv = mmu_effective_priv(mmu, access);
-    bool req_sum = mmu_mstatus(mmu).reg.sum;
-    bool req_mxr = mmu_mstatus(mmu).reg.mxr;
     rv32g_csr_satp_t satp = mmu_satp(mmu);
 
     for (u32 i = 0; i < num; i++) {
@@ -412,10 +428,10 @@ static bool mmu_lookup_tlb_entry(mmu_t *mmu, bool is_inst,
         }
         if (entry->satp_ppn != satp.reg.ppn ||
             entry->satp_asid != satp.reg.asid ||
-            entry->priv != req_priv ||
-            entry->sum != req_sum ||
-            entry->mxr != req_mxr ||
-            entry->tag != mmu_tlb_tag(req->addr, entry->level)) {
+            entry->priv != ctx->priv ||
+            entry->sum != ctx->sum ||
+            entry->mxr != ctx->mxr ||
+            entry->tag != mmu_tlb_tag(ctx->req.addr, entry->level)) {
             continue;
         }
         *entry_out = entry;
@@ -425,41 +441,30 @@ static bool mmu_lookup_tlb_entry(mmu_t *mmu, bool is_inst,
 }
 
 static void mmu_accept_tlb_hit(mmu_t *mmu, bool is_inst,
-    const bti_req_if_t *req, u32 slot, mmu_tlb_entry_t *entry)
+    const mmu_req_ctx_t *ctx, u32 slot, mmu_tlb_entry_t *entry)
 {
-    mmu_access_t access = is_inst ? MMU_ACCESS_INST :
-        (req->cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
-    rv32g_priv_t req_priv = mmu_effective_priv(mmu, access);
-    bool req_sum = mmu_mstatus(mmu).reg.sum;
-    bool req_mxr = mmu_mstatus(mmu).reg.mxr;
-
     mmu->busy = true;
-    mmu->is_inst = is_inst;
-    mmu->req = *req;
-    mmu->req_priv = req_priv;
-    mmu->req_sum = req_sum;
-    mmu->req_mxr = req_mxr;
-    mmu->fault_pc = is_inst ? req->addr : mmu->exu_state_i->pc;
-    mmu->va = req->addr;
+    mmu_set_active_req(mmu, is_inst, ctx);
     mmu->pte = entry->pte;
     if (!mmu_pte_permits(mmu, entry->pte) || !mmu_pte_ad_ok(mmu, entry->pte)) {
         hart_expt_cause_t cause = is_inst ?
             HART_EXPT_CAUSE_INST_PAGE_FAULT :
-            (req->cmd == BTI_REQ_CMD_WRITE ?
+            (ctx->req.cmd == BTI_REQ_CMD_WRITE ?
                 HART_EXPT_CAUSE_STORE_AMO_PAGE_FAULT :
                 HART_EXPT_CAUSE_LOAD_PAGE_FAULT);
-        mmu_complete_fault(mmu, is_inst, slot, cause, req_priv,
-            mmu->fault_pc, req->addr);
+        mmu_complete_fault(mmu, is_inst, slot, cause, ctx->priv,
+            ctx->fault_pc, ctx->req.addr);
         mmu->busy = false;
         return;
     }
 
-    bti_req_if_t pa_req = *req;
-    pa_req.addr = entry->pa_base | (req->addr & mmu_tlb_page_mask(entry->level));
-    mmu_ost_ctx_t ctx;
-    ostq_read_slot(mmu_ost(mmu, is_inst), slot, &ctx);
-    ctx.pa_issued = true;
-    ostq_write_slot(mmu_ost(mmu, is_inst), slot, &ctx);
+    bti_req_if_t pa_req = ctx->req;
+    pa_req.addr = entry->pa_base |
+        (ctx->req.addr & mmu_tlb_page_mask(entry->level));
+    mmu_ost_ctx_t ost_ctx;
+    ostq_read_slot(mmu_ost(mmu, is_inst), slot, &ost_ctx);
+    ost_ctx.pa_issued = true;
+    ostq_write_slot(mmu_ost(mmu, is_inst), slot, &ost_ctx);
     mmu_send_pa_req(mmu, is_inst ? mmu->pa_i_bti_req_mst : mmu->pa_d_bti_req_mst,
         &pa_req);
     if (is_inst) {
@@ -483,13 +488,11 @@ static bool mmu_accept_one_req(mmu_t *mmu, bool is_inst)
         return false;
     }
 
-    bti_req_if_t req;
-    fifo_get_front(fifo, &req);
-    mmu_access_t access = is_inst ? MMU_ACCESS_INST :
-        (req.cmd == BTI_REQ_CMD_WRITE ? MMU_ACCESS_STORE : MMU_ACCESS_LOAD);
+    mmu_req_ctx_t req_ctx;
+    fifo_get_front(fifo, &req_ctx);
     itf_t *pa_req_mst = is_inst ? mmu->pa_i_bti_req_mst : mmu->pa_d_bti_req_mst;
 
-    if (!mmu_translation_enabled(mmu, access)) {
+    if (!mmu_req_ctx_translation_enabled(mmu, &req_ctx)) {
         if (itf_fifo_full(pa_req_mst) || ostq_full(mmu_ost(mmu, is_inst))) {
             if (ostq_full(mmu_ost(mmu, is_inst))) {
                 mmu_count_ost_full(mmu, is_inst);
@@ -498,19 +501,19 @@ static bool mmu_accept_one_req(mmu_t *mmu, bool is_inst)
         }
 
         u32 slot;
-        bool alloc_ok = mmu_alloc_ost_req(mmu, is_inst, &req, &slot);
+        bool alloc_ok = mmu_alloc_ost_req(mmu, is_inst, &req_ctx.req, &slot);
         DBG_CHECK(alloc_ok);
         mmu_ost_ctx_t ctx;
         ostq_read_slot(mmu_ost(mmu, is_inst), slot, &ctx);
         ctx.pa_issued = true;
         ostq_write_slot(mmu_ost(mmu, is_inst), slot, &ctx);
-        fifo_pop(fifo, &req);
-        mmu_send_pa_req(mmu, pa_req_mst, &req);
+        fifo_pop(fifo, &req_ctx);
+        mmu_send_pa_req(mmu, pa_req_mst, &req_ctx.req);
         return true;
     }
 
     mmu_tlb_entry_t *entry = NULL;
-    if (mmu_lookup_tlb_entry(mmu, is_inst, &req, &entry)) {
+    if (mmu_lookup_tlb_entry(mmu, is_inst, &req_ctx, &entry)) {
         if (itf_fifo_full(pa_req_mst) || ostq_full(mmu_ost(mmu, is_inst))) {
             if (ostq_full(mmu_ost(mmu, is_inst))) {
                 mmu_count_ost_full(mmu, is_inst);
@@ -518,10 +521,10 @@ static bool mmu_accept_one_req(mmu_t *mmu, bool is_inst)
             return false;
         }
         u32 slot;
-        bool alloc_ok = mmu_alloc_ost_req(mmu, is_inst, &req, &slot);
+        bool alloc_ok = mmu_alloc_ost_req(mmu, is_inst, &req_ctx.req, &slot);
         DBG_CHECK(alloc_ok);
-        fifo_pop(fifo, &req);
-        mmu_accept_tlb_hit(mmu, is_inst, &req, slot, entry);
+        fifo_pop(fifo, &req_ctx);
+        mmu_accept_tlb_hit(mmu, is_inst, &req_ctx, slot, entry);
         return true;
     }
 
@@ -534,15 +537,15 @@ static bool mmu_accept_one_req(mmu_t *mmu, bool is_inst)
     }
 
     u32 slot;
-    bool alloc_ok = mmu_alloc_ost_req(mmu, is_inst, &req, &slot);
+    bool alloc_ok = mmu_alloc_ost_req(mmu, is_inst, &req_ctx.req, &slot);
     DBG_CHECK(alloc_ok);
-    fifo_pop(fifo, &req);
+    fifo_pop(fifo, &req_ctx);
     if (is_inst) {
         (*mmu->perf_itlb_miss)++;
     } else {
         (*mmu->perf_dtlb_miss)++;
     }
-    mmu_start_req(mmu, is_inst, &req, slot);
+    mmu_start_req_ctx(mmu, is_inst, &req_ctx, slot);
     return true;
 }
 
