@@ -61,6 +61,7 @@ module ifu #(
     logic [FCH_OST_PTR_W-1:0] fch_rsp_ptr;
     logic [FCH_OST_PTR_W-1:0] fch_discard_end_ptr;
     logic fch_discard_vld;
+    logic fch_fault;
     logic trap_pend_vld;
     logic [31:0] trap_pend_pc;
 
@@ -132,8 +133,8 @@ module ifu #(
     wire rspq_expt = fch_rspq_rd_vld && fch_rspq_head.expt;
     wire rspq_non_expt_bad = fch_rspq_rd_vld && !fch_rspq_head.ok &&
         !fch_rspq_head.expt;
-    wire rspq_expt_fire = rspq_expt && !ctrlq_rd_vld && !control_redirect &&
-        !frontend_flush;
+    wire rspq_expt_fire = rspq_expt && !issue_vld && !ctrlq_rd_vld &&
+        !control_redirect && !frontend_flush;
     wire rspq_any_bad = fch_rspq_rd_vld &&
         (!fch_rspq_head.ok || fch_rspq_head.expt);
     wire rspq_bad = rspq_non_expt_bad || rspq_expt_fire;
@@ -317,6 +318,7 @@ module ifu #(
             fch_rsp_ptr <= '0;
             fch_discard_end_ptr <= '0;
             fch_discard_vld <= 1'b0;
+            fch_fault <= 1'b0;
             trap_pend_vld <= 1'b0;
             trap_pend_pc <= 32'h00000000;
             issue_vld <= 1'b0;
@@ -355,11 +357,13 @@ module ifu #(
 
             if (redirect_flush) begin
                 fch_pc <= redirect_pc;
+                fch_fault <= 1'b0;
                 issue_vld <= 1'b0;
                 issue_is_ctrl <= 1'b0;
                 issue_pred_taken <= 1'b0;
             end else if (rspq_bad) begin
                 fch_pc <= fch_rspq_head.pc;
+                fch_fault <= rspq_expt_fire;
                 issue_vld <= 1'b0;
                 issue_is_ctrl <= 1'b0;
                 issue_pred_taken <= 1'b0;
@@ -380,6 +384,7 @@ module ifu #(
                     issue_jalr_btb_miss <= bpu_pred_rsp_slv.pkt.jalr_btb_miss;
                     if (pred_taken_flush) begin
                         fch_pc <= pred_next_pc;
+                        fch_fault <= 1'b0;
                     end
                 end else if (issue_pop) begin
                     issue_vld <= 1'b0;
@@ -420,7 +425,7 @@ module ifu #(
         end
     end
 
-    assign fch_req_mst.vld = !trap_req_vld && !redirect_flush &&
+    assign fch_req_mst.vld = !fch_fault && !trap_req_vld && !redirect_flush &&
         !pred_taken_flush && !rspq_bad && fch_ost_alloc_rdy &&
         !fch_ost_rspq_full;
     assign fch_req_mst.pkt.pc = fch_pc;

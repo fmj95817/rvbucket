@@ -451,6 +451,10 @@ static void ifu_prepare_issue(ifu_t *ifu)
     fifo_get_front(&ifu->fch_rspq, &fch);
 
     if (fch.expt) {
+        if (ifu->issue.vld) {
+            return;
+        }
+
         if (!fifo_empty(&ifu->ctrlq)) {
             return;
         }
