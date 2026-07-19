@@ -39,7 +39,10 @@ module axi2apb_tb;
     end
 
     task automatic tick(input int unsigned n = 1);
-        repeat (n) @(posedge clk);
+        repeat (n) begin
+            @(posedge clk);
+            #1;
+        end
     endtask
 
     task automatic send_aw(input logic [7:0] id, input logic [31:0] addr);

@@ -227,6 +227,18 @@ def _rtl_ctrl_width(ctrl_sigs):
     return sum(c["width"] for c in ctrl_sigs)
 
 
+def _rtl_checker_payload(has_pkt, ctrl_sigs):
+    fields = []
+    if has_pkt:
+        fields.append("pkt")
+    fields.extend(c["name"] for c in ctrl_sigs)
+    if not fields:
+        return "1'b0"
+    if len(fields) == 1:
+        return fields[0]
+    return "{{{}}}".format(", ".join(fields))
+
+
 def gen_rtl_itf(itf_name, desc):
     """Generate RTL .sv interface and .svh header for one interface."""
     if desc.get("model_only", False):
@@ -273,6 +285,8 @@ def gen_rtl_itf(itf_name, desc):
             f.write("`include \"{}\"\n".format(inc))
             needs_blank = True
         f.write("`include \"dbg/itf_trace.svh\"\n")
+        if itf_type == "vld-rdy":
+            f.write("`include \"dbg/itf_checker.svh\"\n")
         needs_blank = True
 
         f.write("{}interface {}_if_t;\n".format("\n" if needs_blank else "", itf_name))
@@ -431,6 +445,12 @@ def gen_rtl_itf(itf_name, desc):
             f.write("    modport mst ({});\n".format(mst_ports))
         if slv_ports:
             f.write("    modport slv ({});\n".format(slv_ports))
+
+        if itf_type == "vld-rdy":
+            checker_payload = _rtl_checker_payload(has_pkt, ctrl_sigs)
+            f.write("\n")
+            f.write("    `RVB_ITF_VLD_RDY_CHECK({})\n".format(
+                checker_payload))
 
         trace_when = _rtl_trace_when(desc, itf_type, payloads, ctrl_sigs)
         if trace_when is not None:

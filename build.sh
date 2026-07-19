@@ -361,22 +361,32 @@ function build_ut {
     local target="${1}"
     local name="${2}"
 
-    if [ "${target}" = "rtl" ]; then
-        echo "build_ut: RTL UT not yet implemented"
-        return
+    if [ "${target}" = "model" ] || [ -z "${target}" ]; then
+        build_model_ut "${name}"
+    elif [ "${target}" = "rtl" ]; then
+        build_rtl_ut "${name}"
+    else
+        echo "usage: $0 ut [model|rtl] [name]"
+        exit 1
     fi
+}
+
+function build_model_ut {
+    local name="${1}"
 
     local ut_root="ut/model"
     local find_args=("${ut_root}" -name '*.c' ! -name 'utils.c')
     if [ -n "${name}" ]; then
         if [ -d "${ut_root}/${name}" ]; then
             find_args=("${ut_root}/${name}" -name '*.c' ! -name 'utils.c')
+        elif [ -f "${ut_root}/${name}.c" ]; then
+            find_args=("${ut_root}" -path "${ut_root}/${name}.c" ! -name 'utils.c')
         else
-            find_args=("${ut_root}" -name "${name}.c" ! -name 'utils.c')
+            find_args=("${ut_root}/${name}" -name '*.c' ! -name 'utils.c')
         fi
     fi
 
-    local ut_srcs=($(find "${find_args[@]}"))
+    local ut_srcs=($(find "${find_args[@]}" | sort))
 
     if [ ${#ut_srcs[@]} -eq 0 ]; then
         echo "build_ut: no UT sources found"
@@ -404,6 +414,70 @@ function build_ut {
             $(find design/model -name *.c)
     done
     echo "build_ut: ${#ut_srcs[@]} UT(s) built."
+}
+
+function build_rtl_ut {
+    local name="${1}"
+    local wd="$(pwd)"
+    local ut_root="ut/rtl"
+
+    local find_args=("${ut_root}" -name '*_tb.sv')
+    if [ -n "${name}" ]; then
+        if [ -d "${ut_root}/${name}" ]; then
+            find_args=("${ut_root}/${name}" -name '*_tb.sv')
+        elif [ -f "${ut_root}/${name}_tb.sv" ]; then
+            find_args=("${ut_root}" -path "${ut_root}/${name}_tb.sv")
+        else
+            find_args=("${ut_root}/${name}" -name '*_tb.sv')
+        fi
+    fi
+
+    local ut_srcs=($(find "${find_args[@]}" | sort))
+    if [ ${#ut_srcs[@]} -eq 0 ]; then
+        echo "build_ut: no RTL UT sources found"
+        return
+    fi
+
+    local common_args=(
+        +incdir+${wd}
+        +incdir+${wd}/sim/rtl
+        +incdir+${wd}/base/rtl
+        +incdir+${wd}/design/rtl
+        +incdir+${wd}/design/rtl/core
+    )
+    local rtl_src=(
+        $(find ${wd}/base/rtl -name '*.sv')
+        $(find ${wd}/design/rtl -name '*.sv')
+    )
+
+    for ut_src in ${ut_srcs[@]}; do
+        local rel_path="${ut_src#ut/rtl/}"
+        local ut_name="${rel_path%.sv}"
+        local ut_base="$(basename "${ut_name}")"
+        local top="${ut_base}"
+        local ut_dir="build/hw/rtl/ut/$(dirname "${ut_name}")"
+        local ut_common_args=(
+            "${common_args[@]}"
+            +define+RVB_NO_ITF_TRACE
+            +define+RVB_ITF_CHECKER_TOP=${top}
+        )
+        mkdir -p "${ut_dir}"
+        echo "  compiling rtl/ut/${ut_name} ..."
+
+        (
+            cd "${ut_dir}"
+            vcs \
+                -full64 \
+                -sverilog +v2k \
+                -timescale=1ns/1ps \
+                -o "${ut_base}_ut" \
+                -top "${top}" \
+                "${ut_common_args[@]}" \
+                "${rtl_src[@]}" \
+                "${wd}/${ut_src}"
+        )
+    done
+    echo "build_ut: ${#ut_srcs[@]} RTL UT(s) built."
 }
 
 function build_rtl {

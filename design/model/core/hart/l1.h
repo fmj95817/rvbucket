@@ -61,6 +61,21 @@ typedef struct l1_ost_ctx {
     u32 delay;
 } l1_ost_ctx_t;
 
+typedef struct l1_lookup_pipe {
+    bti_req_if_t req;
+    bool bypass;
+    bool hit;
+    u32 way;
+    u32 line_idx;
+} l1_lookup_pipe_t;
+
+typedef struct l1_hit_pipe {
+    bti_req_if_t req;
+    u32 slot;
+    u32 way;
+    u32 line_idx;
+} l1_hit_pipe_t;
+
 typedef struct l1 {
     mod_t mod;
 
@@ -86,6 +101,13 @@ typedef struct l1 {
 
     fifo_t req_fifo;
     ostq_t ost;
+
+    bool req_pipe_vld;
+    bti_req_if_t req_pipe;
+    bool lookup_pipe_vld;
+    l1_lookup_pipe_t lookup_pipe;
+    bool hit_pipe_vld;
+    l1_hit_pipe_t hit_pipe;
 
     l1_state_t state;
     u32 active_slot;

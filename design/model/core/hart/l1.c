@@ -223,6 +223,9 @@ void l1_reset(l1_t *l1)
     l1->req_byte_idx = 0;
     l1->req_data = 0;
     l1->flush_line_idx = 0;
+    l1->req_pipe_vld = false;
+    l1->lookup_pipe_vld = false;
+    l1->hit_pipe_vld = false;
     fifo_reset(&l1->req_fifo);
     ostq_reset(&l1->ost);
     *l1->perf_hit = 0;
@@ -415,59 +418,57 @@ static bool l1_active_line_conflict(const l1_t *l1, u32 line_idx)
     return l1->state != L1_STATE_IDLE && line_idx == l1->req_line_idx;
 }
 
-static bool l1_try_cached_hit_req(l1_t *l1, const bti_req_if_t *req,
-    u32 *data)
+static bool l1_lookup_fast_hit(l1_t *l1, const bti_req_if_t *req,
+    u32 *way, u32 *line_idx)
 {
+    u32 end_addr = req->addr + l1_req_size_from(req) - 1u;
+    if (l1_req_line_addr(req->addr) != l1_req_line_addr(end_addr)) {
+        return false;
+    }
+
+    return l1_lookup_addr(l1, req->addr, way, line_idx) &&
+        !l1_active_line_conflict(l1, *line_idx);
+}
+
+static bool l1_lookup_pipe_hit_valid(l1_t *l1)
+{
+    if (!l1->lookup_pipe.hit) {
+        return false;
+    }
+
+    const bti_req_if_t *req = &l1->lookup_pipe.req;
+    u32 line_idx = l1->lookup_pipe.line_idx;
+    return l1->valids[line_idx] &&
+        l1->tags[line_idx] == l1_req_tag(l1, req->addr) &&
+        !l1_active_line_conflict(l1, line_idx);
+}
+
+static void l1_proc_hit_pipe(l1_t *l1)
+{
+    if (!l1->hit_pipe_vld) {
+        return;
+    }
+
+    const bti_req_if_t *req = &l1->hit_pipe.req;
     u32 req_size = l1_req_size_from(req);
-    u32 req_byte_idx = 0;
-
-    while (req_byte_idx < req_size) {
-        u32 addr = req->addr + req_byte_idx;
-        u32 way;
-        u32 line_idx;
-        if (!l1_lookup_addr(l1, addr, &way, &line_idx)) {
-            return false;
-        }
-        (void)way;
-        if (l1_active_line_conflict(l1, line_idx)) {
-            return false;
-        }
-
-        u32 line_offset = addr & (L1_LINE_SIZE - 1u);
-        req_byte_idx += MIN(req_size - req_byte_idx,
-            L1_LINE_SIZE - line_offset);
-    }
-
-    *data = 0;
-    req_byte_idx = 0;
-    while (req_byte_idx < req_size) {
-        u32 addr = req->addr + req_byte_idx;
-        u32 way;
-        u32 line_idx;
-        bool hit = l1_lookup_addr(l1, addr, &way, &line_idx);
-        DBG_CHECK(hit);
-        (void)way;
-
-        u32 line_offset = addr & (L1_LINE_SIZE - 1u);
-        u32 byte_num = MIN(req_size - req_byte_idx,
-            L1_LINE_SIZE - line_offset);
-        for (u32 i = 0; i < byte_num; i++) {
-            u32 req_byte = req_byte_idx + i;
-            if (req->cmd == BTI_REQ_CMD_WRITE) {
-                if (req->strobe & (1u << req_byte)) {
-                    l1_write_byte(l1, line_idx, line_offset + i,
-                        (u8)(req->data >> (req_byte * 8u)));
-                    l1->dirtys[line_idx] = true;
-                }
-            } else {
-                *data |= (u32)l1_read_byte(l1, line_idx, line_offset + i)
-                    << (req_byte * 8u);
+    u32 line_offset = req->addr & (L1_LINE_SIZE - 1u);
+    u32 data = 0;
+    for (u32 i = 0; i < req_size; i++) {
+        if (req->cmd == BTI_REQ_CMD_WRITE) {
+            if (req->strobe & (1u << i)) {
+                l1_write_byte(l1, l1->hit_pipe.line_idx, line_offset + i,
+                    (u8)(req->data >> (i * 8u)));
+                l1->dirtys[l1->hit_pipe.line_idx] = true;
             }
+        } else {
+            data |= (u32)l1_read_byte(l1, l1->hit_pipe.line_idx,
+                line_offset + i) << (i * 8u);
         }
-        req_byte_idx += byte_num;
     }
 
-    return true;
+    l1_complete_slot(l1, l1->hit_pipe.slot, true,
+        req->cmd == BTI_REQ_CMD_READ ? data : 0);
+    l1->hit_pipe_vld = false;
 }
 
 static void l1_issue_bypass_read(l1_t *l1, u32 slot, l1_ost_ctx_t *ctx)
@@ -575,13 +576,42 @@ static void l1_capture_req(l1_t *l1)
     fifo_push(&l1->req_fifo, &req);
 }
 
-static void l1_proc_accept_req(l1_t *l1)
+static void l1_fill_req_pipe(l1_t *l1)
 {
-    if (l1_state_is_flush(l1->state)) {
+    if (l1->req_pipe_vld || l1_state_is_flush(l1->state) ||
+        fifo_empty(&l1->req_fifo)) {
         return;
     }
 
-    if (fifo_empty(&l1->req_fifo)) {
+    fifo_pop(&l1->req_fifo, &l1->req_pipe);
+    l1->req_pipe_vld = true;
+}
+
+static void l1_fill_lookup_pipe(l1_t *l1)
+{
+    if (l1->lookup_pipe_vld || !l1->req_pipe_vld ||
+        l1_state_is_flush(l1->state)) {
+        return;
+    }
+
+    bti_req_if_t req = l1->req_pipe;
+    l1->req_pipe_vld = false;
+    l1->lookup_pipe.req = req;
+    l1->lookup_pipe.bypass = l1_bypass(l1, req.addr);
+    l1->lookup_pipe.hit = false;
+    l1->lookup_pipe.way = 0;
+    l1->lookup_pipe.line_idx = 0;
+    if (!l1->lookup_pipe.bypass &&
+        !(l1->conf.ro && req.cmd == BTI_REQ_CMD_WRITE)) {
+        l1->lookup_pipe.hit = l1_lookup_fast_hit(l1, &req,
+            &l1->lookup_pipe.way, &l1->lookup_pipe.line_idx);
+    }
+    l1->lookup_pipe_vld = true;
+}
+
+static void l1_proc_lookup_pipe(l1_t *l1)
+{
+    if (!l1->lookup_pipe_vld || l1_state_is_flush(l1->state)) {
         return;
     }
     if (ostq_full(&l1->ost)) {
@@ -589,13 +619,12 @@ static void l1_proc_accept_req(l1_t *l1)
         return;
     }
 
-    bti_req_if_t req;
-    fifo_get_front(&l1->req_fifo, &req);
+    bti_req_if_t req = l1->lookup_pipe.req;
 
-    if (l1_bypass(l1, req.addr)) {
+    if (l1->lookup_pipe.bypass) {
         (*l1->perf_bypass)++;
         if (l1_try_bypass_req(l1, &req)) {
-            fifo_pop(&l1->req_fifo, &req);
+            l1->lookup_pipe_vld = false;
         }
         return;
     }
@@ -605,21 +634,23 @@ static void l1_proc_accept_req(l1_t *l1)
         if (!l1_alloc_ost(l1, &req, L1_OST_CACHED, &slot)) {
             return;
         }
-        fifo_pop(&l1->req_fifo, &req);
+        l1->lookup_pipe_vld = false;
         l1_complete_slot(l1, slot, false, 0);
         return;
     }
 
-    u32 hit_data;
-    if (l1_try_cached_hit_req(l1, &req, &hit_data)) {
+    if (l1_lookup_pipe_hit_valid(l1)) {
         (*l1->perf_hit)++;
         u32 slot;
         if (!l1_alloc_ost(l1, &req, L1_OST_CACHED, &slot)) {
             return;
         }
-        fifo_pop(&l1->req_fifo, &req);
-        l1_complete_slot(l1, slot, true,
-            req.cmd == BTI_REQ_CMD_READ ? hit_data : 0);
+        l1->lookup_pipe_vld = false;
+        l1->hit_pipe_vld = true;
+        l1->hit_pipe.req = req;
+        l1->hit_pipe.slot = slot;
+        l1->hit_pipe.way = l1->lookup_pipe.way;
+        l1->hit_pipe.line_idx = l1->lookup_pipe.line_idx;
         return;
     }
 
@@ -632,7 +663,7 @@ static void l1_proc_accept_req(l1_t *l1)
     if (!l1_alloc_ost(l1, &req, L1_OST_CACHED, &slot)) {
         return;
     }
-    fifo_pop(&l1->req_fifo, &req);
+    l1->lookup_pipe_vld = false;
     l1->active_slot = slot;
     l1->req = req;
     l1->op_ok = true;
@@ -1038,7 +1069,6 @@ void l1_clock(l1_t *l1)
     mod_clock(&l1->mod);
     ostq_clock(&l1->ost);
     l1_tick_rsp_delay(l1);
-    l1_capture_req(l1);
     if (l1->state == L1_STATE_IDLE) {
         l1_proc_flush(l1);
     }
@@ -1052,10 +1082,14 @@ void l1_clock(l1_t *l1)
     l1_proc_refill_r(l1);
     l1_proc_serve_miss(l1);
     l1_send_ost_rsp(l1);
+    l1_proc_hit_pipe(l1);
     l1_proc_wb_w(l1);
     l1_proc_wb_aw(l1);
     l1_proc_refill_ar(l1);
-    l1_proc_accept_req(l1);
+    l1_proc_lookup_pipe(l1);
+    l1_fill_lookup_pipe(l1);
+    l1_fill_req_pipe(l1);
+    l1_capture_req(l1);
 }
 
 void l1_free(l1_t *l1)

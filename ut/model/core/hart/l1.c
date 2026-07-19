@@ -300,6 +300,121 @@ TEST_CASE(l1_tb_t, read_miss_then_hit)
     TEST_END();
 }
 
+TEST_CASE(l1_tb_t, pipelined_hits)
+{
+    enum { REQ_NUM = 8 };
+
+    tb_reset(tb);
+    TEST_BEGIN("Pipelined Hits");
+
+    tb_bti_read(tb, 1, 0x00);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb->mem[0], true),
+        "initial read fills the cache line");
+
+    u32 req_num = 0;
+    u32 rsp_num = 0;
+    u64 last_rsp_cycle = 0;
+    bool ordered = true;
+    bool data_ok = true;
+    bool contiguous = true;
+    for (u32 cycle = 0; cycle < UT_TIMEOUT && rsp_num < REQ_NUM; cycle++) {
+        if (req_num < REQ_NUM && !itf_fifo_full(&tb->bti_req)) {
+            tb_bti_read(tb, (u16)(2u + req_num), (req_num % 16u) * 4u);
+            req_num++;
+        }
+
+        tb_clock(tb);
+        if (itf_fifo_empty(&tb->bti_rsp)) {
+            continue;
+        }
+
+        bti_rsp_if_t rsp;
+        itf_read(&tb->bti_rsp, &rsp);
+        ordered &= rsp.trans_id == 2u + rsp_num;
+        data_ok &= rsp.ok && rsp.data == tb->mem[rsp_num % 16u];
+        if (rsp_num != 0) {
+            contiguous &= *tb->cycle == last_rsp_cycle + 1u;
+        }
+        last_rsp_cycle = *tb->cycle;
+        rsp_num++;
+    }
+
+    REQUIRE(req_num == REQ_NUM && rsp_num == REQ_NUM,
+        "all pipelined hit requests complete");
+    REQUIRE(ordered, "pipelined hit responses preserve request order");
+    REQUIRE(data_ok, "pipelined hit responses return the expected data");
+    REQUIRE(contiguous, "steady-state hit responses retire every cycle");
+    REQUIRE(tb->ar_count == 1, "pipelined hits do not issue another refill");
+
+    TEST_END();
+}
+
+TEST_CASE(l1_tb_t, pipelined_read_after_write_hits)
+{
+    static const bti_req_cmd_t cmds[] = {
+        BTI_REQ_CMD_WRITE, BTI_REQ_CMD_READ,
+        BTI_REQ_CMD_WRITE, BTI_REQ_CMD_READ,
+        BTI_REQ_CMD_WRITE, BTI_REQ_CMD_READ
+    };
+    static const u32 write_data[] = {
+        0x11223344u, 0,
+        0x55667788u, 0,
+        0xa5a55a5au, 0
+    };
+    static const u32 expected_data[] = {
+        0, 0x11223344u,
+        0, 0x55667788u,
+        0, 0xa5a55a5au
+    };
+    const u32 req_num_max = sizeof(cmds) / sizeof(cmds[0]);
+
+    tb_reset(tb);
+    TEST_BEGIN("Pipelined Read-after-Write Hits");
+
+    tb_bti_read(tb, 1, 0x00);
+    RUN_POLL_UNTIL(tb_cond_bti_rsp, UT_TIMEOUT);
+    REQUIRE(tb_pop_rsp(tb, 1, tb->mem[0], true),
+        "initial read fills the cache line");
+
+    u32 req_num = 0;
+    u32 rsp_num = 0;
+    bool ordered = true;
+    bool data_ok = true;
+    for (u32 cycle = 0; cycle < UT_TIMEOUT && rsp_num < req_num_max;
+        cycle++) {
+        if (req_num < req_num_max && !itf_fifo_full(&tb->bti_req)) {
+            if (cmds[req_num] == BTI_REQ_CMD_WRITE) {
+                tb_bti_write(tb, (u16)(2u + req_num), 0x00,
+                    write_data[req_num], 0xf);
+            } else {
+                tb_bti_read(tb, (u16)(2u + req_num), 0x00);
+            }
+            req_num++;
+        }
+
+        tb_clock(tb);
+        if (itf_fifo_empty(&tb->bti_rsp)) {
+            continue;
+        }
+
+        bti_rsp_if_t rsp;
+        itf_read(&tb->bti_rsp, &rsp);
+        ordered &= rsp.trans_id == 2u + rsp_num;
+        data_ok &= rsp.ok && rsp.data == expected_data[rsp_num];
+        rsp_num++;
+    }
+
+    REQUIRE(req_num == req_num_max && rsp_num == req_num_max,
+        "all pipelined read-after-write requests complete");
+    REQUIRE(ordered, "read-after-write responses preserve request order");
+    REQUIRE(data_ok, "each read observes the immediately preceding write");
+    REQUIRE(tb->ar_count == 1,
+        "pipelined read-after-write hits do not refill");
+
+    TEST_END();
+}
+
 TEST_CASE(l1_tb_t, writeback_on_dirty_evict)
 {
     tb_reset(tb);
@@ -509,6 +624,8 @@ int main(void)
     l1_tb_t tb;
     tb_setup(&tb, &cached_conf);
     TEST_RUN(read_miss_then_hit);
+    TEST_RUN(pipelined_hits);
+    TEST_RUN(pipelined_read_after_write_hits);
     TEST_RUN(writeback_on_dirty_evict);
     TEST_RUN(unaligned_reads);
     TEST_RUN(cross_line_read_write);

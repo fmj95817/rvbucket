@@ -55,46 +55,34 @@ module rdy_reg_slice #(
     input logic           dst_rdy,
     output logic [DW-1:0] dst_data
 );
-    logic [1:0] entry_count;
-    logic [DW-1:0] entry0;
-    logic [DW-1:0] entry1;
+    logic [DW-1:0] data;
+    logic data_en;
+    logic full_en;
+    logic full;
 
-    wire src_hsk = src_vld && src_rdy;
-    wire dst_hsk = dst_vld && dst_rdy;
-    wire bypass_hsk = entry_count == 2'd0 && src_hsk && dst_hsk;
-
-    assign src_rdy = entry_count != 2'd2;
-    assign dst_vld = entry_count != 2'd0 || src_vld;
-    assign dst_data = entry_count != 2'd0 ? entry0 : src_data;
+    assign data_en = src_vld && !full && !dst_rdy;
 
     always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            entry_count <= 2'd0;
-        end else if (clear) begin
-            entry_count <= 2'd0;
-        end else if (!bypass_hsk) begin
-            unique case ({src_hsk, dst_hsk})
-            2'b10: begin
-                if (entry_count == 2'd0)
-                    entry0 <= src_data;
-                else
-                    entry1 <= src_data;
-                entry_count <= entry_count + 1'b1;
-            end
-            2'b01: begin
-                if (entry_count == 2'd2)
-                    entry0 <= entry1;
-                entry_count <= entry_count - 1'b1;
-            end
-            2'b11: begin
-                if (entry_count == 2'd1)
-                    entry0 <= src_data;
-            end
-            default: begin
-            end
-            endcase
-        end
+        if (!rst_n)
+            data <= '0;
+        else if (data_en)
+            data <= src_data;
     end
+
+    assign full_en = data_en || dst_rdy;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            full <= 1'b0;
+        else if (clear)
+            full <= 1'b0;
+        else if (full_en)
+            full <= data_en;
+    end
+
+    assign src_rdy = !full;
+    assign dst_vld = src_vld || full;
+    assign dst_data = full ? data : src_data;
 endmodule
 
 module bidir_reg_slice #(

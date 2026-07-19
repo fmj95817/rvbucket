@@ -19,6 +19,7 @@ module axi_demux_tb;
     axi4_b_if_t gst_b[GST_NUM]();
     axi4_ar_if_t gst_ar[GST_NUM]();
     axi4_r_if_t gst_r[GST_NUM]();
+    perf_axi_demux_if_t perf();
 
     logic [7:0] gst1_aw_id;
     logic gst1_aw_seen;
@@ -44,7 +45,8 @@ module axi_demux_tb;
         .gst_axi4_w_msts  (gst_w),
         .gst_axi4_b_slvs  (gst_b),
         .gst_axi4_ar_msts (gst_ar),
-        .gst_axi4_r_slvs  (gst_r)
+        .gst_axi4_r_slvs  (gst_r),
+        .perf_mst         (perf)
     );
 
     initial begin
@@ -53,7 +55,10 @@ module axi_demux_tb;
     end
 
     task automatic tick(input int unsigned n = 1);
-        repeat (n) @(posedge clk);
+        repeat (n) begin
+            @(posedge clk);
+            #1;
+        end
     endtask
 
     task automatic send_aw(input logic [7:0] id, input logic [31:0] addr);
@@ -135,9 +140,6 @@ module axi_demux_tb;
         gst_b[0].vld = 1'b0;
         gst_b[0].pkt.id = '0;
         gst_b[0].pkt.resp = AXI4_B_RESP_OKAY;
-        gst_b[1].vld = 1'b0;
-        gst_b[1].pkt.id = '0;
-        gst_b[1].pkt.resp = AXI4_B_RESP_OKAY;
         gst_b[2].vld = 1'b0;
         gst_b[2].pkt.id = '0;
         gst_b[2].pkt.resp = AXI4_B_RESP_OKAY;

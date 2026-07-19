@@ -1,9 +1,11 @@
 `ifndef RVB_ITF_TRACE_SVH
 `define RVB_ITF_TRACE_SVH
 
+`ifndef RVB_NO_ITF_TRACE
 `ifndef VERILATOR
 `ifndef SYNTHESIS
 `define RVB_ITF_TRACE_ENABLED
+`endif
 `endif
 `endif
 
