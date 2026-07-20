@@ -231,6 +231,11 @@ module l1 #(
     logic rd_issue_found;
     logic [OST_SLOT_W-1:0] rd_issue_slot;
     ost_ctx_t rd_issue_ctx;
+    logic rd_issue_stage_vld;
+    logic rd_issue_stage_rdy;
+    logic rd_issue_stage_hsk;
+    logic [OST_SLOT_W-1:0] rd_issue_stage_slot;
+    ost_ctx_t rd_issue_stage_ctx;
     logic wr_load_found;
     logic [OST_SLOT_W-1:0] wr_load_slot;
     ost_ctx_t wr_load_ctx;
@@ -630,6 +635,7 @@ module l1 #(
                 has_bypass_ost = 1'b1;
             if (!rd_issue_found && ost_slot_vld[idx] &&
                 ost_slot_ctx[idx].kind == OST_BYPASS_RD &&
+                !(rd_issue_stage_vld && idx == rd_issue_stage_slot) &&
                 !ost_slot_ctx[idx].rsp_vld &&
                 ost_slot_ctx[idx].req_idx == ost_slot_ctx[idx].rsp_idx &&
                 ost_slot_ctx[idx].req_idx <
@@ -679,13 +685,14 @@ module l1 #(
     end
 
     assign slot_pre_busy = miss_complete_req || bypass_r_candidate ||
-        bypass_b_candidate || wr_issue_complete || hit_pipe_vld;
+        bypass_b_candidate || wr_issue_complete || hit_pipe_vld ||
+        rd_issue_stage_vld;
     assign hit_pipe_write_blocked = hit_pipe_vld &&
         hit_pipe.cmd == BTI_REQ_CMD_WRITE &&
         ((miss_state == M_REFILL_R && r_hsk) ||
             miss_state == M_SERVE_WRITE);
     assign ar_sel_rd_issue = miss_state == M_IDLE && rd_issue_found &&
-        !slot_pre_busy;
+        !slot_pre_busy && rd_issue_stage_rdy;
     assign ar_sel_front_bypass = miss_state == M_IDLE && stg_rd_vld &&
         front_is_bypass && front_is_read && ost_alloc_rdy &&
         !rd_issue_found && !slot_pre_busy && !flush_pending;
@@ -725,6 +732,7 @@ module l1 #(
         accept_bypass_rd || accept_bypass_wr;
     assign stg_rd_rdy = accept_req;
     assign ost_alloc_vld = accept_req;
+    assign rd_issue_stage_rdy = !rd_issue_stage_vld;
 
     always_comb begin
         ost_alloc_ctx = '0;
@@ -833,15 +841,13 @@ module l1 #(
             slot_writer_busy = 1'b1;
         end
 
-        if (!slot_writer_busy && ar_sel_rd_issue) begin
-            rd_issue_update = ar_hsk;
-            if (rd_issue_update) begin
-                ost_slot_wr_vld = 1'b1;
-                ost_slot_wr_idx = rd_issue_slot;
-                ost_slot_wr_ctx = rd_issue_ctx;
-                ost_slot_wr_ctx.req_idx = rd_issue_ctx.req_idx + 1'b1;
-                slot_writer_busy = 1'b1;
-            end
+        if (!slot_writer_busy && rd_issue_stage_hsk) begin
+            rd_issue_update = 1'b1;
+            ost_slot_wr_vld = 1'b1;
+            ost_slot_wr_idx = rd_issue_stage_slot;
+            ost_slot_wr_ctx = rd_issue_stage_ctx;
+            ost_slot_wr_ctx.req_idx = rd_issue_stage_ctx.req_idx + 1'b1;
+            slot_writer_busy = 1'b1;
         end
     end
 
@@ -1001,16 +1007,19 @@ module l1 #(
             mem_axi4_ar_mst.pkt.addr = active_line_addr;
             mem_axi4_ar_mst.pkt.len = AXI_LINE_LEN;
             mem_axi4_ar_mst.pkt.cache = 4'hf;
-        end else if (ar_sel_rd_issue) begin
+        end else if (rd_issue_stage_vld && miss_state == M_IDLE) begin
             mem_axi4_ar_mst.vld = 1'b1;
-            mem_axi4_ar_mst.pkt.id = 8'(rd_issue_slot);
-            mem_axi4_ar_mst.pkt.addr = bypass_beat_addr(rd_issue_ctx);
+            mem_axi4_ar_mst.pkt.id = 8'(rd_issue_stage_slot);
+            mem_axi4_ar_mst.pkt.addr = bypass_beat_addr(rd_issue_stage_ctx);
         end else if (ar_sel_front_bypass) begin
             mem_axi4_ar_mst.vld = 1'b1;
             mem_axi4_ar_mst.pkt.id = 8'(ost_alloc_slot);
             mem_axi4_ar_mst.pkt.addr = {stg_req.addr[31:2], 2'b00};
         end
     end
+
+    assign rd_issue_stage_hsk = rd_issue_stage_vld &&
+        miss_state == M_IDLE && ar_hsk;
 
     always_comb begin
         mem_axi4_aw_mst.vld = 1'b0;
@@ -1075,6 +1084,9 @@ module l1 #(
             flush_pending <= 1'b0;
             hit_pipe_vld <= 1'b0;
             hit_pipe <= '0;
+            rd_issue_stage_vld <= 1'b0;
+            rd_issue_stage_slot <= '0;
+            rd_issue_stage_ctx <= '0;
             wr_issue_vld <= 1'b0;
             wr_issue_slot <= '0;
             wr_issue_ctx <= '0;
@@ -1095,6 +1107,15 @@ module l1 #(
 
             if (hit_pipe_update)
                 hit_pipe_vld <= 1'b0;
+
+            if (rd_issue_stage_hsk)
+                rd_issue_stage_vld <= 1'b0;
+            if (ar_sel_rd_issue) begin
+                rd_issue_stage_vld <= 1'b1;
+                rd_issue_stage_slot <= rd_issue_slot;
+                rd_issue_stage_ctx <= rd_issue_ctx;
+            end
+
             if (accept_fast) begin
                 hit_pipe_vld <= 1'b1;
                 hit_pipe.slot <= ost_alloc_slot;

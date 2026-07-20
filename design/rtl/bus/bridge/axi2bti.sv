@@ -85,7 +85,17 @@ module axi2bti #(
     typedef struct packed {
         beat_kind_t kind;
         logic [OST_SLOT_W-1:0] slot;
+        logic wr_last;
     } beat_ctx_t;
+
+    typedef struct packed {
+        logic [15:0] trans_id;
+        bti_req_cmd_t cmd;
+        logic [31:0] addr;
+        bti_req_size_t size;
+        logic [31:0] data;
+        logic [3:0] strobe;
+    } bti_req_pkt_t;
 
     localparam int AR_DW = $bits(axi4_ar_pkt_t);
     localparam int AW_DW = $bits(axi4_aw_pkt_t);
@@ -119,6 +129,11 @@ module axi2bti #(
     logic [OST_DEPTH-1:0] rd_out_older_same_id[OST_DEPTH];
     logic rd_out_select_vld;
     logic [OST_SLOT_W-1:0] rd_out_select_slot;
+    logic rd_out_stage_vld;
+    logic rd_out_stage_rdy;
+    logic rd_out_stage_fill_hsk;
+    logic [OST_SLOT_W-1:0] rd_out_stage_slot;
+    rd_ctx_t rd_out_stage_ctx;
 
     logic wr_ost_alloc_rdy;
     logic [OST_SLOT_W-1:0] wr_ost_alloc_slot;
@@ -138,6 +153,11 @@ module axi2bti #(
     logic [15:0] next_bti_trans_id;
     logic issue_sel_rd;
     logic issue_sel_wr;
+    logic issue_stage_vld;
+    logic issue_stage_rdy;
+    logic issue_stage_fill_hsk;
+    bti_req_pkt_t issue_stage_pkt;
+    beat_ctx_t issue_stage_ctx;
     logic [OST_SLOT_W-1:0] issue_rd_slot;
     logic [OST_SLOT_W-1:0] issue_wr_slot;
     logic issue_rd_found;
@@ -299,10 +319,8 @@ module axi2bti #(
         .rst_n        (rst_n),
         .alloc_vld    (bti_req_hsk),
         .alloc_rdy    (beat_ost_alloc_rdy),
-        .alloc_key    (issue_trans_id),
-        .alloc_ctx    (issue_sel_rd ?
-            beat_ctx_t'{kind:BEAT_READ, slot:issue_rd_slot} :
-            beat_ctx_t'{kind:BEAT_WRITE, slot:issue_wr_slot}),
+        .alloc_key    (issue_stage_pkt.trans_id),
+        .alloc_ctx    (issue_stage_ctx),
         .alloc_slot   (beat_ost_alloc_slot),
         .lookup_key   (bti_rsp_slv.pkt.trans_id),
         .lookup_vld   (beat_ost_lookup_vld),
@@ -335,7 +353,8 @@ module axi2bti #(
         end
 
         assign rd_out_candidate_vld[i] = rd_ost_slot_vld[i] &&
-            rd_ctx_mem[i].rsp_valid && !(|rd_out_older_same_id[i]);
+            rd_ctx_mem[i].rsp_valid && !(|rd_out_older_same_id[i]) &&
+            !(rd_out_stage_vld && rd_out_stage_slot == slot_idx(i));
     end
 
     oldest_select #(
@@ -406,9 +425,11 @@ module axi2bti #(
         end
     end
 
-    assign rd_out_found = rd_out_select_vld;
-    assign rd_out_slot = rd_out_select_slot;
-    assign rd_out_ctx = rd_ctx_mem[rd_out_select_slot];
+    assign rd_out_stage_rdy = !rd_out_stage_vld;
+    assign rd_out_stage_fill_hsk = rd_out_stage_rdy && rd_out_select_vld;
+    assign rd_out_found = rd_out_stage_vld;
+    assign rd_out_slot = rd_out_stage_slot;
+    assign rd_out_ctx = rd_out_stage_ctx;
 
     assign wr_out_vld = wr_ost_head_vld &&
         wr_ctx_mem[wr_ost_head_slot].b_valid;
@@ -417,7 +438,7 @@ module axi2bti #(
     always_comb begin
         issue_sel_rd = 1'b0;
         issue_sel_wr = 1'b0;
-        if (beat_ost_alloc_rdy) begin
+        if (issue_stage_rdy) begin
             if (issue_wr_prio) begin
                 if (issue_wr_found)
                     issue_sel_wr = 1'b1;
@@ -434,6 +455,9 @@ module axi2bti #(
 
     assign issue_trans_id = next_bti_trans_id == 16'h0000 ?
         16'h0001 : next_bti_trans_id;
+    assign issue_stage_rdy = !issue_stage_vld || bti_req_hsk;
+    assign issue_stage_fill_hsk = issue_stage_rdy &&
+        (issue_sel_rd || issue_sel_wr);
     assign bti_req_hsk = bti_req_mst.vld && bti_req_mst.rdy;
     assign bti_rsp_hsk = bti_rsp_slv.vld && bti_rsp_slv.rdy;
     assign r_hsk = axi4_r_mst.vld && axi4_r_mst.rdy && rd_out_found;
@@ -448,19 +472,15 @@ module axi2bti #(
     assign aw_fifo_rd_rdy = aw_wrap ?
         (axi4_b_mst.rdy && !wr_out_vld) :
         wr_ost_alloc_rdy;
-    assign w_fifo_rd_rdy = issue_sel_wr && bti_req_mst.rdy;
+    assign w_fifo_rd_rdy = issue_sel_wr && issue_stage_rdy;
 
-    assign bti_req_mst.vld = issue_sel_rd || issue_sel_wr;
-    assign bti_req_mst.pkt.trans_id = issue_trans_id;
-    assign bti_req_mst.pkt.cmd = issue_sel_wr ?
-        BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
-    assign bti_req_mst.pkt.addr = issue_sel_wr ?
-        issue_wr_ctx.axaddr : issue_rd_ctx.axaddr;
-    assign bti_req_mst.pkt.size = issue_sel_wr ?
-        bti_req_size_t'(issue_wr_ctx.axsize[1:0]) :
-        bti_req_size_t'(issue_rd_ctx.axsize[1:0]);
-    assign bti_req_mst.pkt.data = issue_sel_wr ? w_pkt.data : 32'h0;
-    assign bti_req_mst.pkt.strobe = issue_sel_wr ? w_pkt.strb : 4'h0;
+    assign bti_req_mst.vld = issue_stage_vld && beat_ost_alloc_rdy;
+    assign bti_req_mst.pkt.trans_id = issue_stage_pkt.trans_id;
+    assign bti_req_mst.pkt.cmd = issue_stage_pkt.cmd;
+    assign bti_req_mst.pkt.addr = issue_stage_pkt.addr;
+    assign bti_req_mst.pkt.size = issue_stage_pkt.size;
+    assign bti_req_mst.pkt.data = issue_stage_pkt.data;
+    assign bti_req_mst.pkt.strobe = issue_stage_pkt.strobe;
 
     assign bti_rsp_slv.rdy = beat_ost_lookup_vld;
 
@@ -488,18 +508,52 @@ module axi2bti #(
         if (!rst_n) begin
             issue_wr_prio <= 1'b0;
             next_bti_trans_id <= 16'h0001;
-        end else if (bti_req_hsk) begin
-            issue_wr_prio <= issue_sel_rd;
-            if (issue_trans_id == 16'hffff)
-                next_bti_trans_id <= 16'h0001;
-            else
-                next_bti_trans_id <= issue_trans_id + 16'h0001;
+            issue_stage_vld <= 1'b0;
+            issue_stage_pkt <= '0;
+            issue_stage_ctx <= '0;
+            rd_out_stage_vld <= 1'b0;
+            rd_out_stage_slot <= '0;
+            rd_out_stage_ctx <= '0;
+        end else begin
+            if (r_hsk)
+                rd_out_stage_vld <= 1'b0;
+            if (rd_out_stage_fill_hsk) begin
+                rd_out_stage_vld <= 1'b1;
+                rd_out_stage_slot <= rd_out_select_slot;
+                rd_out_stage_ctx <= rd_ctx_mem[rd_out_select_slot];
+            end
+            if (bti_req_hsk)
+                issue_stage_vld <= 1'b0;
+            if (issue_stage_fill_hsk) begin
+                issue_stage_vld <= 1'b1;
+                issue_stage_pkt.trans_id <= issue_trans_id;
+                issue_stage_pkt.cmd <= issue_sel_wr ?
+                    BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
+                issue_stage_pkt.addr <= issue_sel_wr ?
+                    issue_wr_ctx.axaddr : issue_rd_ctx.axaddr;
+                issue_stage_pkt.size <= issue_sel_wr ?
+                    bti_req_size_t'(issue_wr_ctx.axsize[1:0]) :
+                    bti_req_size_t'(issue_rd_ctx.axsize[1:0]);
+                issue_stage_pkt.data <= issue_sel_wr ? w_pkt.data : 32'h0;
+                issue_stage_pkt.strobe <= issue_sel_wr ? w_pkt.strb : 4'h0;
+                issue_stage_ctx <= issue_sel_wr ?
+                    beat_ctx_t'{kind:BEAT_WRITE, slot:issue_wr_slot,
+                        wr_last:w_pkt.last || issue_wr_ctx.beat_idx ==
+                        issue_wr_ctx.axlen} :
+                    beat_ctx_t'{kind:BEAT_READ, slot:issue_rd_slot,
+                        wr_last:1'b0};
+                issue_wr_prio <= issue_sel_rd;
+                if (issue_trans_id == 16'hffff)
+                    next_bti_trans_id <= 16'h0001;
+                else
+                    next_bti_trans_id <= issue_trans_id + 16'h0001;
+            end
         end
     end
 
     for (genvar i = 0; i < OST_DEPTH; i++) begin : gen_rd_ctx
         wire rd_alloc_hit = ar_alloc_hsk && rd_ost_alloc_slot == slot_idx(i);
-        wire rd_issue_hit = bti_req_hsk && issue_sel_rd &&
+        wire rd_issue_hit = issue_stage_fill_hsk && issue_sel_rd &&
             issue_rd_slot == slot_idx(i);
         wire rd_rsp_hit = bti_rsp_hsk &&
             beat_ost_lookup_ctx.kind == BEAT_READ &&
@@ -546,7 +600,7 @@ module axi2bti #(
 
     for (genvar i = 0; i < OST_DEPTH; i++) begin : gen_wr_ctx
         wire wr_alloc_hit = aw_alloc_hsk && wr_ost_alloc_slot == slot_idx(i);
-        wire wr_issue_hit = bti_req_hsk && issue_sel_wr &&
+        wire wr_issue_hit = issue_stage_fill_hsk && issue_sel_wr &&
             issue_wr_slot == slot_idx(i);
         wire wr_rsp_hit = bti_rsp_hsk &&
             beat_ost_lookup_ctx.kind == BEAT_WRITE &&
