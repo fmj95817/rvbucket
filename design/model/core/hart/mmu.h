@@ -43,6 +43,14 @@ typedef struct mmu_ost_ctx {
     bti_rsp_if_t rsp;
 } mmu_ost_ctx_t;
 
+typedef struct mmu_req_ctx {
+    bti_req_if_t req;
+    rv32g_priv_t priv;
+    bool sum;
+    bool mxr;
+    u32 fault_pc;
+} mmu_req_ctx_t;
+
 typedef struct mmu {
     mod_t mod;
     itf_t *va_i_bti_req_slv;

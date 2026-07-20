@@ -25,23 +25,27 @@ SW_EXCLUDE=(
 )
 
 RTL_SW_TIMEOUT="${RTL_SW_TIMEOUT:-300}"
+RTL_UT_TIMEOUT="${RTL_UT_TIMEOUT:-60}"
 MODEL_SW_TIMEOUT="${MODEL_SW_TIMEOUT:-60}"
-MODEL_SW_PERF_SIM_TIMEOUT="${MODEL_SW_PERF_SIM_TIMEOUT:-300}"
-MODEL_SW_PERF_SIM=false
-MODEL_SW_ST_SIM=false
+MODEL_SIM_ARGS=()
 
 function print_usage {
     cat <<EOF
-usage: $0 [--perf-sim] [--st-sim] [model|rtl <vcs|verilator>] [sw|ut] [<name>]
+usage: $0 [model] [sw|ut] [<name>] [--model-flag ...]
+       $0 [model] [sw|ut] [<name>] -- <sim_top args>
+       $0 rtl <vcs|verilator> [sw] [<name>]
+       $0 rtl ut [<name>]
 
 Options:
-  --perf-sim  Run model SW with sim_top --perf-sim
-  --st-sim    Disable default SMP simulation optimization for model SW
+  -h, --help  Show this help
+
+Any other --argument is passed through to model sim_top for model SW runs.
+Use -- before sim_top arguments that take values.
 
 Environment:
   MODEL_SW_TIMEOUT           Timeout for each model SW case, default 60s
-  MODEL_SW_PERF_SIM_TIMEOUT  Timeout for each model SW case in --perf-sim mode, default 300s
   RTL_SW_TIMEOUT             Timeout for each RTL SW case, default 300s
+  RTL_UT_TIMEOUT             Timeout for each RTL UT, default 60s
 EOF
 }
 
@@ -124,7 +128,6 @@ function run_single_sw {
     local name="${1}"
     local bin="${SIM_SW_DIR}/${name}/${name}.bin"
     local input=""
-    local sim_args=()
 
     if [[ ! -f "${bin}" ]]; then
         echo "error: binary not found: ${bin}"
@@ -133,68 +136,16 @@ function run_single_sw {
 
     local cwd="${BUILD_DIR}/hw/model"
     local rel_bin="../../sw/sim/${name}/${name}.bin"
-    if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
-        sim_args+=(--perf-sim)
-    fi
-    if [[ "${MODEL_SW_ST_SIM}" == true ]]; then
-        sim_args+=(--st-sim)
-    fi
 
-    local sim_cmd="./sim_top"
-    if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
-        sim_cmd+=" --perf-sim"
-    fi
-    if [[ "${MODEL_SW_ST_SIM}" == true ]]; then
-        sim_cmd+=" --st-sim"
-    fi
-
-    echo "  cd ${cwd} && ${sim_cmd} ${rel_bin}"
+    echo "  cd ${cwd} && ./sim_top ${MODEL_SIM_ARGS[*]} ${rel_bin}"
     get_sw_case_input "${name}"
     input="${SW_CASE_INPUT}"
     if [[ -n "${input}" ]]; then
-        cd "${cwd}" && printf '%s' "${input}" | "${cwd}/sim_top" "${sim_args[@]}" "${rel_bin}"
+        cd "${cwd}" && printf '%s' "${input}" |
+            "${cwd}/sim_top" "${MODEL_SIM_ARGS[@]}" "${rel_bin}"
     else
-        cd "${cwd}" && "${cwd}/sim_top" "${sim_args[@]}" "${rel_bin}"
+        cd "${cwd}" && "${cwd}/sim_top" "${MODEL_SIM_ARGS[@]}" "${rel_bin}"
     fi
-}
-
-function run_single_ut {
-    local name="${1}"
-
-    local ut_bin=""
-    while IFS= read -r -d '' bin; do
-        if [[ "${bin##*/}" == "${name}_ut" ]]; then
-            ut_bin="${bin}"
-            break
-        fi
-    done < <(find_ut_bins "${BUILD_DIR}/hw/model/ut")
-
-    if [[ -z "${ut_bin}" ]]; then
-        echo "error: UT binary not found: ${name}_ut"
-        exit 1
-    fi
-
-    local cwd="$(dirname "${ut_bin}")"
-    echo "  cd ${cwd} && ./${name}_ut"
-    cd "${cwd}" && "./${name}_ut"
-}
-
-function run_single_rtl_sw {
-    local simulator="${1}"
-    local name="${2}"
-
-    run_rtl_cases "${simulator}" "${name}"
-}
-
-function run_single_rtl_ut {
-    local simulator="${1}"
-    local name="${2}"
-
-    (void_simulator="${simulator}")
-    (void_name="${name}")
-
-    echo "error: RTL UT not yet implemented"
-    exit 1
 }
 
 # ── batch regression ──────────────────────────────────────────────────────
@@ -202,22 +153,11 @@ function run_single_rtl_ut {
 function run_sw_cases {
     local sw_dir="${SIM_SW_DIR}"
     local sim="${BUILD_DIR}/hw/model/sim_top"
-    local sim_args=()
     local timeout="${MODEL_SW_TIMEOUT}"
 
-    if [[ "${MODEL_SW_PERF_SIM}" == true ]]; then
-        sim_args+=(--perf-sim)
-        timeout="${MODEL_SW_PERF_SIM_TIMEOUT}"
-    fi
-    if [[ "${MODEL_SW_ST_SIM}" == true ]]; then
-        sim_args+=(--st-sim)
-    fi
-
-    if [[ "${MODEL_SW_PERF_SIM}" == true || "${MODEL_SW_ST_SIM}" == true ]]; then
-        local mode_args=()
-        [[ "${MODEL_SW_PERF_SIM}" == true ]] && mode_args+=(--perf-sim)
-        [[ "${MODEL_SW_ST_SIM}" == true ]] && mode_args+=(--st-sim)
-        printf "${CYN}=== bare-metal C cases (%s) ===${RST}\n" "${mode_args[*]}"
+    if [[ ${#MODEL_SIM_ARGS[@]} -ne 0 ]]; then
+        printf "${CYN}=== bare-metal C cases (%s) ===${RST}\n" \
+            "${MODEL_SIM_ARGS[*]}"
     else
         printf "${CYN}=== bare-metal C cases ===${RST}\n"
     fi
@@ -255,13 +195,15 @@ function run_sw_cases {
         input="${SW_CASE_INPUT}"
         if [[ -n "${input}" ]]; then
             if printf '%s' "${input}" |
-                run_with_timeout "${timeout}" "${sim}" "${sim_args[@]}" "${bin}" >/dev/null 2>&1; then
+                run_with_timeout "${timeout}" "${sim}" "${MODEL_SIM_ARGS[@]}" \
+                "${bin}" >/dev/null 2>&1; then
                 status=0
             else
                 status=$?
             fi
         else
-            if run_with_timeout "${timeout}" "${sim}" "${sim_args[@]}" "${bin}" </dev/null >/dev/null 2>&1; then
+            if run_with_timeout "${timeout}" "${sim}" "${MODEL_SIM_ARGS[@]}" \
+                "${bin}" </dev/null >/dev/null 2>&1; then
                 status=0
             else
                 status=$?
@@ -276,14 +218,47 @@ function run_sw_cases {
     done
 }
 
+function find_model_ut_bins {
+    local name="${1}"
+    local ut_dir="${BUILD_DIR}/hw/model/ut"
+    local src_root="${ROOT}/ut/model"
+    local find_root="${ut_dir}"
+    local exact_bin=""
+
+    [[ -d "${ut_dir}" ]] || return 0
+
+    if [[ -n "${name}" ]]; then
+        if [[ -d "${ut_dir}/${name}" ]]; then
+            find_root="${ut_dir}/${name}"
+        elif [[ -x "${ut_dir}/${name}_ut" ]]; then
+            exact_bin="${ut_dir}/${name}_ut"
+        else
+            find_root="${ut_dir}/${name}"
+        fi
+    fi
+
+    if [[ -n "${exact_bin}" ]]; then
+        local rel="${exact_bin#${ut_dir}/}"
+        rel="${rel%_ut}"
+        [[ -f "${src_root}/${rel}.c" ]] && printf '%s\0' "${exact_bin}"
+    elif [[ -d "${find_root}" ]]; then
+        while IFS= read -r -d '' bin; do
+            local rel="${bin#${ut_dir}/}"
+            rel="${rel%_ut}"
+            [[ -f "${src_root}/${rel}.c" ]] && printf '%s\0' "${bin}"
+        done < <(find "${find_root}" -type f -name '*_ut' -perm -111 -print0 2>/dev/null)
+    fi
+}
+
 function run_ut_tests {
+    local name="${1}"
     local ut_dir="${BUILD_DIR}/hw/model/ut"
     printf "${CYN}=== module unit tests ===${RST}\n"
 
     local ut_bins=()
     while IFS= read -r -d '' bin; do
         ut_bins+=("${bin}")
-    done < <(find_ut_bins "${ut_dir}")
+    done < <(find_model_ut_bins "${name}")
 
     if [[ ${#ut_bins[@]} -eq 0 ]]; then
         skip "all UTs" "no UT binaries found (run './build.sh ut model' first)"
@@ -352,6 +327,108 @@ function run_rtl_cases {
     done
 }
 
+function find_rtl_ut_bins {
+    local name="${1}"
+    local ut_dir="${BUILD_DIR}/hw/rtl/ut"
+    local src_root="${ROOT}/ut/rtl"
+    local find_root="${ut_dir}"
+    local exact_bin=""
+
+    [[ -d "${ut_dir}" ]] || return 0
+
+    if [[ -n "${name}" ]]; then
+        if [[ -d "${ut_dir}/${name}" ]]; then
+            find_root="${ut_dir}/${name}"
+        elif [[ -x "${ut_dir}/${name}_tb_ut" ]]; then
+            exact_bin="${ut_dir}/${name}_tb_ut"
+        else
+            find_root="${ut_dir}/${name}"
+        fi
+    fi
+
+    if [[ -n "${exact_bin}" ]]; then
+        local rel="${exact_bin#${ut_dir}/}"
+        rel="${rel%_ut}"
+        [[ -f "${src_root}/${rel}.sv" ]] && printf '%s\0' "${exact_bin}"
+    elif [[ -d "${find_root}" ]]; then
+        while IFS= read -r -d '' bin; do
+            local rel="${bin#${ut_dir}/}"
+            rel="${rel%_ut}"
+            [[ -f "${src_root}/${rel}.sv" ]] && printf '%s\0' "${bin}"
+        done < <(find "${find_root}" -type f -name '*_tb_ut' -perm -111 -print0 2>/dev/null)
+    fi
+}
+
+function run_rtl_ut_tests {
+    local name="${1}"
+
+    printf "${CYN}=== RTL module unit tests ===${RST}\n"
+
+    local ut_bins=()
+    while IFS= read -r -d '' bin; do
+        ut_bins+=("${bin}")
+    done < <(find_rtl_ut_bins "${name}")
+
+    if [[ ${#ut_bins[@]} -eq 0 ]]; then
+        skip "rtl/ut" "no RTL UT binaries found (run './build.sh ut rtl' first)"
+        return
+    fi
+
+    mkdir -p "${BUILD_DIR}/logs/rtl/ut"
+
+    for bin in "${ut_bins[@]}"; do
+        run_one_rtl_ut "${bin}"
+    done
+}
+
+function rtl_ut_label_from_bin {
+    local bin="${1}"
+    local ut_dir="${BUILD_DIR}/hw/rtl/ut"
+    local label="${bin#${ut_dir}/}"
+
+    label="${label%_ut}"
+    label="${label%_tb}"
+    printf '%s' "${label}"
+}
+
+function run_one_rtl_ut {
+    local bin="${1}"
+    local label="$(rtl_ut_label_from_bin "${bin}")"
+    local log="${BUILD_DIR}/logs/rtl/ut/${label}.log"
+    local cwd="$(dirname "${bin}")"
+    local exe="./$(basename "${bin}")"
+    local status=0
+
+    mkdir -p "$(dirname "${log}")"
+
+    if run_with_timeout "${RTL_UT_TIMEOUT}" bash -c "cd \"${cwd}\" && \"${exe}\" +ITF_CHECKER" \
+        >"${log}" 2>&1; then
+        status=0
+    else
+        status=$?
+    fi
+
+    if [[ ${status} -ne 0 ]]; then
+        fail "${label}" "exit=${status} log=${log}"
+        return
+    fi
+
+    if grep -q '^RVB_ITF_CHECKER' "${log}"; then
+        fail "${label}" "interface checker violation log=${log}"
+        return
+    fi
+
+    if grep -q '^PASS:' "${log}"; then
+        pass "${label}"
+    elif grep -q '^FAIL:' "${log}"; then
+        local verdict
+        verdict="$(grep '^FAIL:' "${log}" | tail -1)"
+        fail "${label}" "${verdict} log=${log}"
+    else
+        fail "${label}" "no UT verdict log=${log}"
+    fi
+}
+
 function run_one_rtl_case {
     local simulator="${1}"
     local sim_cmd="${2}"
@@ -418,12 +495,6 @@ function main {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --perf-sim)
-                MODEL_SW_PERF_SIM=true
-                ;;
-            --st-sim)
-                MODEL_SW_ST_SIM=true
-                ;;
             -h|--help)
                 print_usage
                 exit 0
@@ -431,15 +502,13 @@ function main {
             --)
                 shift
                 while [[ $# -gt 0 ]]; do
-                    parsed_args+=("$1")
+                    MODEL_SIM_ARGS+=("$1")
                     shift
                 done
                 break
                 ;;
             --*)
-                echo "error: unknown option: $1"
-                print_usage
-                exit 1
+                MODEL_SIM_ARGS+=("$1")
                 ;;
             *)
                 parsed_args+=("$1")
@@ -459,21 +528,35 @@ function main {
         local simulator="${arg2}"
         local case_name=""
 
+        if [[ ${#MODEL_SIM_ARGS[@]} -ne 0 ]]; then
+            echo "error: model sim_top args are only supported for model SW cases"
+            exit 1
+        fi
+
+        if [[ "${arg2}" == "ut" ]]; then
+            run_rtl_ut_tests "${arg3}"
+
+            local total=$((PASS + FAIL + SKIP))
+            echo
+            printf "${CYN}=== summary ===${RST}\n"
+            printf "  total: %d  |  ${GRN}pass: %d${RST}  |  ${RED}fail: %d${RST}  |  ${YLW}skip: %d${RST}\n" \
+                "${total}" "${PASS}" "${FAIL}" "${SKIP}"
+
+            if [[ ${FAIL} -gt 0 ]]; then
+                echo
+                printf "${RED}FAILURES:${RST}\n%s" "${FAIL_LOG}"
+                exit 1
+            fi
+            return
+        fi
+
         if [[ -z "${simulator}" ]]; then
             print_usage
             exit 1
         fi
 
-        if [[ "${MODEL_SW_PERF_SIM}" == true || "${MODEL_SW_ST_SIM}" == true ]]; then
-            echo "error: --perf-sim/--st-sim is only supported for model SW cases"
-            exit 1
-        fi
-
         if [[ "${arg3}" == "sw" ]]; then
             case_name="${arg4}"
-        elif [[ "${arg3}" == "ut" ]]; then
-            print_usage
-            exit 1
         else
             case_name="${arg3}"
         fi
@@ -498,7 +581,6 @@ function main {
     local suite=""
 
     if [[ -n "${arg4}" ]]; then
-        # rtl vcs sw <name>  or  rtl vcs ut <name>
         suite="${arg3}"
         single_name="${arg4}"
     elif [[ -n "${arg3}" && "${arg3}" != "sw" && "${arg3}" != "ut" ]]; then
@@ -516,17 +598,11 @@ function main {
                 if [[ "${suite}" == "sw" ]]; then
                     run_single_sw "${single_name}"
                 elif [[ "${suite}" == "ut" ]]; then
-                    run_single_ut "${single_name}"
-                else
-                    print_usage
-                    exit 1
-                fi
-                ;;
-            rtl)
-                if [[ "${suite}" == "sw" ]]; then
-                    run_single_rtl_sw "${arg2}" "${single_name}"
-                elif [[ "${suite}" == "ut" ]]; then
-                    run_single_rtl_ut "${arg2}" "${single_name}"
+                    if [[ ${#MODEL_SIM_ARGS[@]} -ne 0 ]]; then
+                        echo "error: model sim_top args are only supported for model SW cases"
+                        exit 1
+                    fi
+                    run_ut_tests "${single_name}"
                 else
                     print_usage
                     exit 1
@@ -537,27 +613,22 @@ function main {
                 exit 1
                 ;;
         esac
+        local total=$((PASS + FAIL + SKIP))
+        echo
+        printf "${CYN}=== summary ===${RST}\n"
+        printf "  total: %d  |  ${GRN}pass: %d${RST}  |  ${RED}fail: %d${RST}  |  ${YLW}skip: %d${RST}\n" \
+            "${total}" "${PASS}" "${FAIL}" "${SKIP}"
+
+        if [[ ${FAIL} -gt 0 ]]; then
+            echo
+            printf "${RED}FAILURES:${RST}\n%s" "${FAIL_LOG}"
+            exit 1
+        fi
         return
     fi
 
-    local simulator=""
-
     case "${target}" in
         model) ;;
-        rtl)
-            simulator="${arg2}"
-            suite="${arg3}"
-
-            if [[ -z "${simulator}" ]]; then
-                print_usage
-                exit 1
-            fi
-
-            if [[ "${MODEL_SW_PERF_SIM}" == true || "${MODEL_SW_ST_SIM}" == true ]]; then
-                echo "error: --perf-sim/--st-sim is only supported for model SW cases"
-                exit 1
-            fi
-            ;;
         *)
             print_usage
             exit 1
@@ -566,6 +637,10 @@ function main {
 
     if [[ "${target}" == "model" ]]; then
         if [[ "${suite}" == "ut" ]]; then
+            if [[ ${#MODEL_SIM_ARGS[@]} -ne 0 ]]; then
+                echo "error: model sim_top args are only supported for model SW cases"
+                exit 1
+            fi
             run_ut_tests
         elif [[ "${suite}" == "sw" ]]; then
             run_sw_cases
@@ -574,8 +649,6 @@ function main {
             echo
             run_ut_tests
         fi
-    elif [[ "${target}" == "rtl" ]]; then
-        run_rtl_cases "${simulator}" "${suite}"
     fi
 
     local total=$((PASS + FAIL + SKIP))

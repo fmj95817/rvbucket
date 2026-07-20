@@ -439,22 +439,18 @@ module fifo_ost_tb;
         tick();
         slice_src_data = 8'h74;
         #1;
-        check(slice_src_rdy && slice_dst_vld && slice_dst_data == 8'h72,
-            "reg slice accepts skid item");
-        tick();
-        slice_src_vld = 1'b0;
-        #1;
         check(!slice_src_rdy && slice_dst_vld && slice_dst_data == 8'h72,
             "reg slice backpressures when full");
         slice_dst_rdy = 1'b1;
         tick();
         #1;
-        check(slice_dst_vld && slice_dst_data == 8'h73,
-            "reg slice exposes second item after pop");
+        check(slice_src_rdy && slice_dst_vld && slice_dst_data == 8'h73,
+            "reg slice exposes skid item and releases backpressure");
         tick();
+        slice_src_vld = 1'b0;
         #1;
         check(slice_dst_vld && slice_dst_data == 8'h74,
-            "reg slice exposes skid item after pop");
+            "reg slice accepts next item after releasing backpressure");
         tick();
         slice_dst_rdy = 1'b0;
         #1;

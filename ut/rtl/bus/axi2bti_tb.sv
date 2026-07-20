@@ -50,7 +50,10 @@ module axi2bti_tb;
     end
 
     task automatic tick(input int unsigned n = 1);
-        repeat (n) @(posedge clk);
+        repeat (n) begin
+            @(posedge clk);
+            #1;
+        end
     endtask
 
     task automatic send_ar(input logic [7:0] id, input logic [31:0] addr);
@@ -80,11 +83,6 @@ module axi2bti_tb;
         axi_b.rdy = 1'b1;
         axi_ar.vld = 1'b0;
         axi_r.rdy = 1'b1;
-        bti_req.rdy = 1'b0;
-        bti_rsp.vld = 1'b0;
-        bti_rsp.pkt.trans_id = '0;
-        bti_rsp.pkt.data = '0;
-        bti_rsp.pkt.ok = 1'b1;
 
         tick(4);
         rst_n = 1'b1;

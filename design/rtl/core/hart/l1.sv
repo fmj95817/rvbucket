@@ -68,6 +68,15 @@ module l1 #(
         logic [3:0] strobe;
     } bti_req_ctx_t;
 
+    typedef struct packed {
+        bti_req_ctx_t req;
+        logic bypass;
+        logic hit;
+        logic [WAY_W-1:0] way;
+        logic [SET_W-1:0] set;
+        logic [TAG_W-1:0] tag;
+    } lookup_pipe_t;
+
     typedef enum logic [1:0] {
         OST_CACHED,
         OST_BYPASS_RD,
@@ -123,6 +132,7 @@ module l1 #(
     } hit_pipe_t;
 
     localparam int STG_DW = $bits(bti_req_ctx_t);
+    localparam int LOOKUP_DW = $bits(lookup_pipe_t);
     localparam int OST_CTX_DW = $bits(ost_ctx_t);
 
     logic [TAG_W-1:0] tag_ram[WAY_NUM][SET_NUM];
@@ -144,12 +154,19 @@ module l1 #(
     logic fifo_rd_vld;
     logic fifo_rd_rdy;
     logic [STG_DW-1:0] fifo_rd_data;
+    logic req_pipe_vld;
+    logic req_pipe_rdy;
+    logic [STG_DW-1:0] req_pipe_data;
     logic stg_rd_vld;
     logic stg_rd_rdy;
-    logic [STG_DW-1:0] stg_rd_data;
+    logic [LOOKUP_DW-1:0] stg_rd_data;
     logic stg_full;
     bti_req_ctx_t stg_wr_req;
+    bti_req_ctx_t req_pipe_req;
     bti_req_ctx_t stg_req;
+    lookup_pipe_t lookup_wr;
+    lookup_pipe_t lookup_rd;
+    logic [LOOKUP_DW-1:0] lookup_wr_data;
 
     logic ost_alloc_vld;
     logic ost_alloc_rdy;
@@ -199,12 +216,9 @@ module l1 #(
     logic wr_issue_aw_done;
     logic wr_issue_w_done;
 
-    logic front_hit0;
-    logic front_hit1;
-    logic [WAY_W-1:0] front_way0;
-    logic [WAY_W-1:0] front_way1;
-    logic front_cross_line;
-    logic front_all_hit;
+    logic lookup_hit;
+    logic [WAY_W-1:0] lookup_way;
+    logic lookup_active_conflict;
     logic front_active_conflict;
     logic active_hit;
     logic [WAY_W-1:0] active_hit_way;
@@ -282,15 +296,14 @@ module l1 #(
     wire ar_hsk = mem_axi4_ar_mst.vld && mem_axi4_ar_mst.rdy;
     wire r_hsk = mem_axi4_r_slv.vld && mem_axi4_r_slv.rdy;
 
-    wire [2:0] front_byte_num = req_byte_num(stg_req.size);
-    wire [31:0] front_end_addr = stg_req.addr +
-        {29'b0, front_byte_num} - 32'd1;
-    wire [31:0] front_line0 = line_addr(stg_req.addr);
-    wire [31:0] front_line1 = line_addr(front_end_addr);
-    wire [SET_W-1:0] front_set0 = req_set(stg_req.addr);
-    wire [SET_W-1:0] front_set1 = req_set(front_end_addr);
-    wire [TAG_W-1:0] front_tag0 = req_tag(stg_req.addr);
-    wire [TAG_W-1:0] front_tag1 = req_tag(front_end_addr);
+    wire [2:0] lookup_byte_num = req_byte_num(req_pipe_req.size);
+    wire [31:0] lookup_end_addr = req_pipe_req.addr +
+        {29'b0, lookup_byte_num} - 32'd1;
+    wire lookup_cross_line = line_addr(req_pipe_req.addr) !=
+        line_addr(lookup_end_addr);
+    wire [SET_W-1:0] lookup_set = req_set(req_pipe_req.addr);
+    wire [TAG_W-1:0] lookup_tag = req_tag(req_pipe_req.addr);
+    wire [SET_W-1:0] front_set0 = lookup_rd.set;
 
     wire [31:0] active_cur_addr = active_req.addr +
         {29'b0, active_byte_idx};
@@ -308,11 +321,13 @@ module l1 #(
     wire active_fragment_last =
         active_byte_idx + active_fragment_bytes >= active_total_bytes;
 
-    wire front_is_bypass = bypass_addr(stg_req.addr);
+    wire front_is_bypass = lookup_rd.bypass;
     wire front_is_write = stg_req.cmd == BTI_REQ_CMD_WRITE;
     wire front_is_read = stg_req.cmd == BTI_REQ_CMD_READ;
-    wire front_fast_hit = front_all_hit && !front_cross_line &&
-        !front_active_conflict;
+    wire front_hit_current = lookup_rd.hit &&
+        valid_ram[lookup_rd.way][lookup_rd.set] &&
+        tag_ram[lookup_rd.way][lookup_rd.set] == lookup_rd.tag;
+    wire front_fast_hit = front_hit_current && !front_active_conflict;
     wire wr_issue_complete = wr_issue_vld &&
         (wr_issue_aw_done || aw_hsk) && (wr_issue_w_done || w_hsk);
 
@@ -428,7 +443,10 @@ module l1 #(
         stg_wr_req.strobe = host_bti_req_slv.pkt.strobe;
     end
     assign stg_wr_data = stg_wr_req;
-    assign stg_req = bti_req_ctx_t'(stg_rd_data);
+    assign req_pipe_req = bti_req_ctx_t'(req_pipe_data);
+    assign lookup_wr_data = lookup_wr;
+    assign lookup_rd = lookup_pipe_t'(stg_rd_data);
+    assign stg_req = lookup_rd.req;
 
     fifo #(
         .DW    (STG_DW),
@@ -456,6 +474,20 @@ module l1 #(
         .src_vld  (fifo_rd_vld),
         .src_rdy  (fifo_rd_rdy),
         .src_data (fifo_rd_data),
+        .dst_vld  (req_pipe_vld),
+        .dst_rdy  (req_pipe_rdy),
+        .dst_data (req_pipe_data)
+    );
+
+    vld_reg_slice #(
+        .DW (LOOKUP_DW)
+    ) u_lookup_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (1'b0),
+        .src_vld  (req_pipe_vld),
+        .src_rdy  (req_pipe_rdy),
+        .src_data (lookup_wr_data),
         .dst_vld  (stg_rd_vld),
         .dst_rdy  (stg_rd_rdy),
         .dst_data (stg_rd_data)
@@ -520,34 +552,42 @@ module l1 #(
     end
 
     always_comb begin
-        front_hit0 = 1'b0;
-        front_hit1 = 1'b0;
-        front_way0 = '0;
-        front_way1 = '0;
+        lookup_hit = 1'b0;
+        lookup_way = '0;
         for (int unsigned i = 0; i < WAY_NUM; i++) begin
-            if (!front_hit0 && valid_ram[i][front_set0] &&
-                tag_ram[i][front_set0] == front_tag0) begin
-                front_hit0 = 1'b1;
-                front_way0 = way_idx(i);
-            end
-            if (!front_hit1 && valid_ram[i][front_set1] &&
-                tag_ram[i][front_set1] == front_tag1) begin
-                front_hit1 = 1'b1;
-                front_way1 = way_idx(i);
+            if (!lookup_hit && valid_ram[i][lookup_set] &&
+                tag_ram[i][lookup_set] == lookup_tag) begin
+                lookup_hit = 1'b1;
+                lookup_way = way_idx(i);
             end
         end
-        front_cross_line = front_line0 != front_line1;
-        front_all_hit = front_hit0 && (!front_cross_line || front_hit1);
+
+        lookup_active_conflict = 1'b0;
+        if (miss_state != M_IDLE && active_way_vld) begin
+            lookup_active_conflict = lookup_hit &&
+                lookup_set == active_set && lookup_way == active_way;
+        end else if (miss_state == M_LOOKUP) begin
+            lookup_active_conflict = lookup_set == active_cur_set;
+        end
+
+        lookup_wr.req = req_pipe_req;
+        lookup_wr.bypass = bypass_addr(req_pipe_req.addr);
+        lookup_wr.hit = !lookup_wr.bypass &&
+            !(RO && req_pipe_req.cmd == BTI_REQ_CMD_WRITE) &&
+            !lookup_cross_line && lookup_hit && !lookup_active_conflict;
+        lookup_wr.way = lookup_way;
+        lookup_wr.set = lookup_set;
+        lookup_wr.tag = lookup_tag;
+    end
+
+    always_comb begin
         front_active_conflict = 1'b0;
         if (miss_state != M_IDLE && active_way_vld) begin
-            front_active_conflict =
-                (front_hit0 && front_set0 == active_set &&
-                    front_way0 == active_way) ||
-                (front_cross_line && front_hit1 &&
-                    front_set1 == active_set && front_way1 == active_way);
+            front_active_conflict = lookup_rd.hit &&
+                lookup_rd.set == active_set &&
+                lookup_rd.way == active_way;
         end else if (miss_state == M_LOOKUP) begin
-            front_active_conflict = front_set0 == active_cur_set ||
-                (front_cross_line && front_set1 == active_cur_set);
+            front_active_conflict = lookup_rd.set == active_cur_set;
         end
     end
 
@@ -675,7 +715,7 @@ module l1 #(
                 !(front_is_write && miss_state == M_REFILL_R && r_hsk)) begin
                 accept_fast = 1'b1;
             end else if (miss_state == M_IDLE && !has_bypass_ost &&
-                (!front_all_hit || front_cross_line)) begin
+                !front_fast_hit) begin
                 accept_active = 1'b1;
             end
         end
@@ -811,7 +851,7 @@ module l1 #(
         read_launch = 1'b0;
         read_all_ways = 1'b1;
         read_word_mode = 1'b0;
-        read_way = front_way0;
+        read_way = lookup_rd.way;
         read_set = front_set0;
         read_word_idx = beat_idx;
         read_addr = stg_req.addr;
@@ -1063,10 +1103,10 @@ module l1 #(
                 hit_pipe.size <= stg_req.size;
                 hit_pipe.data <= stg_req.data;
                 hit_pipe.strobe <= stg_req.strobe;
-                hit_pipe.way <= front_way0;
+                hit_pipe.way <= lookup_rd.way;
                 hit_pipe.ok <= 1'b1;
                 if (front_is_write)
-                    dirty_ram[front_way0][front_set0] <= 1'b1;
+                    dirty_ram[lookup_rd.way][front_set0] <= 1'b1;
             end
 
             if (wr_issue_vld) begin
@@ -1107,7 +1147,7 @@ module l1 #(
                     active_byte_idx <= '0;
                     active_rsp_data <= '0;
                     active_ok <= 1'b1;
-                    active_precounted_hit <= front_all_hit;
+                    active_precounted_hit <= 1'b0;
                     miss_state <= M_LOOKUP;
                 end
             end
@@ -1286,7 +1326,6 @@ module l1 #(
     end
 
     assign perf_mst.pkt.hit = accept_fast ||
-        (accept_active && front_all_hit) ||
         (miss_state == M_LOOKUP && !active_precounted_hit && active_hit);
     assign perf_mst.pkt.miss = miss_state == M_LOOKUP && !active_hit;
     assign perf_mst.pkt.bypass = accept_bypass_rd || accept_bypass_wr ||

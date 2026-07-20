@@ -18,18 +18,8 @@ int main(void)
 {
     printf("gpio_led: spiral start\n");
 
-    /* single-LED sweep */
-    for (int round = 0; round < 3; round++) {
-        for (int i = 0; i < 16; i++) {
-            gpio_write(1u << spiral[i]);
-            printf("  led[%02d] = 0x%04lx\n", spiral[i],
-                   (unsigned long)(1u << spiral[i]));
-            delay_ms(50);
-        }
-    }
-
     /* tail effect */
-    for (int round = 0; round < 3; round++) {
+    for (int round = 0; round < 2; round++) {
         uint32_t val = 0;
         for (int i = 0; i < 16; i++) {
             val |= 1u << spiral[i];
