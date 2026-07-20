@@ -23,7 +23,7 @@
         "DDR_DM_WIDTH": 4,
         "DDR_BA_WIDTH": 3,
         "FLASH_AW": 32,
-        "BOOT_FROM_SDCARD": 1
+        "BOOT_FROM_SDCARD": 0
     },
     "clocks": [
         {

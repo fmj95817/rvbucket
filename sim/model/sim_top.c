@@ -279,9 +279,7 @@ static void sim_top_reset(sim_top_t *sim_top)
     sim_top->gpio_inout_io->val = gpio_val;
 
     sim_top_apply_boot_gpio(sim_top);
-    if (sim_top->boot_prog) {
-        sim_top->ui->gpio_change(sim_top->ui, sim_top->gpio_inout_io->val);
-    }
+    sim_top->ui->gpio_change(sim_top->ui, sim_top->gpio_inout_io->val);
 }
 
 static void sim_top_clock(sim_top_t *sim_top)
@@ -295,6 +293,8 @@ static void sim_top_clock(sim_top_t *sim_top)
             sim_top->gpio_inout_io->val =
                 (sim_top->gpio_inout_io->val & 0xFFFFu) | (gpio_in & 0xFF0000u);
             sim_top_apply_boot_gpio(sim_top);
+            sim_top->ui->gpio_change(sim_top->ui,
+                sim_top->gpio_inout_io->val);
         }
     }
 
