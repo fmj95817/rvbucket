@@ -6,6 +6,8 @@ module rv32g(
     input logic       rst_n,
     apb_req_if_t.mst  peri_apb_req_mst,
     apb_rsp_if_t.slv  peri_apb_rsp_slv,
+    apb_req_if_t.mst  io_apb_req_mst,
+    apb_rsp_if_t.slv  io_apb_rsp_slv,
     axi4_aw_if_t.mst  mm_axi4_aw_mst,
     axi4_w_if_t.mst   mm_axi4_w_mst,
     axi4_b_if_t.slv   mm_axi4_b_slv,
@@ -24,7 +26,8 @@ module rv32g(
     perf_l1_if_t.mst        perf_l1d_mst,
     ext_irq_if_t.slv  uart_irq_slv,
     ext_irq_if_t.slv  gpio_irq_slv,
-    ext_irq_if_t.slv  gtimer_irq_slv
+    ext_irq_if_t.slv  gtimer_irq_slv,
+    ext_irq_if_t.slv  sdspi_irq_slv
 );
     localparam BOOT_ROM_AW = `BOOT_ROM_WORD_AW + 2;
 
@@ -58,10 +61,6 @@ module rv32g(
     axi4_b_if_t mm_d_b();
     axi4_ar_if_t mm_d_ar();
     axi4_r_if_t mm_d_r();
-    apb_req_if_t cfg_req();
-    apb_rsp_if_t cfg_rsp();
-    apb_req_if_t cfg_gst_req[3]();
-    apb_rsp_if_t cfg_gst_rsp[3]();
     apb_req_if_t aclint_req();
     apb_rsp_if_t aclint_rsp();
     apb_req_if_t plic_req();
@@ -144,8 +143,14 @@ module rv32g(
         .hart_d_axi4_r_mst    (cbi_d_r),
         .boot_rom_bti_req_mst (boot_rom_req),
         .boot_rom_bti_rsp_slv (boot_rom_rsp),
-        .cfg_apb_req_mst      (cfg_req),
-        .cfg_apb_rsp_slv      (cfg_rsp),
+        .peri_apb_req_mst     (peri_apb_req_mst),
+        .peri_apb_rsp_slv     (peri_apb_rsp_slv),
+        .io_apb_req_mst       (io_apb_req_mst),
+        .io_apb_rsp_slv       (io_apb_rsp_slv),
+        .aclint_apb_req_mst   (aclint_req),
+        .aclint_apb_rsp_slv   (aclint_rsp),
+        .plic_apb_req_mst     (plic_req),
+        .plic_apb_rsp_slv     (plic_rsp),
         .mm_i_axi4_aw_mst     (mm_i_aw),
         .mm_i_axi4_w_mst      (mm_i_w),
         .mm_i_axi4_b_slv      (mm_i_b),
@@ -159,42 +164,6 @@ module rv32g(
         .perf_i_axi_demux_mst (perf_cbi_i_axi_demux_mst),
         .perf_d_axi_demux_mst (perf_cbi_d_axi_demux_mst)
     );
-
-    apb_demux #(
-        .GST_NUM  (3),
-`ifdef VERILATOR
-        .GST_BASE ('{32'h30000000, 32'h31000000, 32'h31100000,
-            32'h00000000}),
-        .GST_SIZE ('{32'h01000000, 32'h00100000, 32'h00400000,
-            32'h00000000})
-`else
-        .GST_BASE ('{32'h30000000, 32'h31000000, 32'h31100000}),
-        .GST_SIZE ('{32'h01000000, 32'h00100000, 32'h00400000})
-`endif
-    ) u_cfg_apb_demux(
-        .host_apb_req_slv  (cfg_req),
-        .host_apb_rsp_mst  (cfg_rsp),
-        .gst_apb_req_msts  (cfg_gst_req),
-        .gst_apb_rsp_slvs  (cfg_gst_rsp)
-    );
-
-    assign peri_apb_req_mst.psel = cfg_gst_req[0].psel;
-    assign peri_apb_req_mst.penable = cfg_gst_req[0].penable;
-    assign peri_apb_req_mst.pkt = cfg_gst_req[0].pkt;
-    assign cfg_gst_rsp[0].pready = peri_apb_rsp_slv.pready;
-    assign cfg_gst_rsp[0].pkt = peri_apb_rsp_slv.pkt;
-
-    assign aclint_req.psel = cfg_gst_req[1].psel;
-    assign aclint_req.penable = cfg_gst_req[1].penable;
-    assign aclint_req.pkt = cfg_gst_req[1].pkt;
-    assign cfg_gst_rsp[1].pready = aclint_rsp.pready;
-    assign cfg_gst_rsp[1].pkt = aclint_rsp.pkt;
-
-    assign plic_req.psel = cfg_gst_req[2].psel;
-    assign plic_req.penable = cfg_gst_req[2].penable;
-    assign plic_req.pkt = cfg_gst_req[2].pkt;
-    assign cfg_gst_rsp[2].pready = plic_rsp.pready;
-    assign cfg_gst_rsp[2].pkt = plic_rsp.pkt;
 
     aclint u_aclint(
         .clk              (clk),
@@ -213,6 +182,7 @@ module rv32g(
         .uart_irq_slv    (uart_irq_slv),
         .gpio_irq_slv    (gpio_irq_slv),
         .gtimer_irq_slv  (gtimer_irq_slv),
+        .sdspi_irq_slv   (sdspi_irq_slv),
         .core_irq_mst    (ext_irq)
     );
 
@@ -295,5 +265,10 @@ module rv32g(
     assign perf_mst.pkt.l2_d_r_bp = mm_d_r.vld && !mm_d_r.rdy;
 
     assign perf_mst.pkt.cfg_apb_bp =
-        cfg_req.psel && cfg_req.penable && !cfg_rsp.pready;
+        (peri_apb_req_mst.psel && peri_apb_req_mst.penable &&
+            !peri_apb_rsp_slv.pready) ||
+        (io_apb_req_mst.psel && io_apb_req_mst.penable &&
+            !io_apb_rsp_slv.pready) ||
+        (aclint_req.psel && aclint_req.penable && !aclint_rsp.pready) ||
+        (plic_req.psel && plic_req.penable && !plic_rsp.pready);
 endmodule

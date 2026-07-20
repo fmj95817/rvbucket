@@ -4,9 +4,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <string.h>
-
-#define BIN_TYPE_BARE  0u
-#define BIN_TYPE_LINUX 1u
+#include "boot_image.h"
 
 static void *read_bin(const char *bin_path, uint32_t *psize)
 {
@@ -35,11 +33,6 @@ static void *read_bin(const char *bin_path, uint32_t *psize)
 
     *psize = (uint32_t)size;
     return data;
-}
-
-static void write_u32(FILE *fp, uint32_t val)
-{
-    fwrite(&val, sizeof(val), 1, fp);
 }
 
 static void write_blob_aligned(FILE *fp, const void *data, uint32_t size)
@@ -111,28 +104,21 @@ int main(int argc, char *argv[])
         assert(dtb != NULL);
     }
 
-    FILE *bin = fopen(bin_path, "wb");
-    write_u32(bin, linux_image ? BIN_TYPE_LINUX : BIN_TYPE_BARE);
-    write_u32(bin, firmware_size);
-    write_u32(bin, 0);
+    rvb_bin_header_t header = {
+        .type = linux_image ? RVB_BIN_TYPE_LINUX : RVB_BIN_TYPE_BARE,
+        .firmware_size = firmware_size
+    };
     if (linux_image) {
-        write_u32(bin, kernel_size);
-        write_u32(bin, initrd_size);
-        write_u32(bin, dtb_size);
-        write_u32(bin, kernel_load);
-        write_u32(bin, initrd_load);
-        write_u32(bin, dtb_load);
-        write_u32(bin, 0);
-    } else {
-        write_u32(bin, 0);
-        write_u32(bin, 0);
-        write_u32(bin, 0);
-        write_u32(bin, 0);
-        write_u32(bin, 0);
-        write_u32(bin, 0);
-        write_u32(bin, 0);
+        header.kernel_size = kernel_size;
+        header.initrd_size = initrd_size;
+        header.dtb_size = dtb_size;
+        header.kernel_load = kernel_load;
+        header.initrd_load = initrd_load;
+        header.dtb_load = dtb_load;
     }
 
+    FILE *bin = fopen(bin_path, "wb");
+    fwrite(&header, sizeof(header), 1, bin);
     write_blob_aligned(bin, firmware, firmware_size);
     free(firmware);
     if (kernel != NULL) {

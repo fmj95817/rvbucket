@@ -213,7 +213,8 @@ static void ram_fast_proc_axi_r(ram_t *ram)
 
 static void ram_fast_proc_axi_aw(ram_t *ram)
 {
-    if (ram->wr_active || itf_fifo_empty(ram->axi4_aw_slv)) {
+    if (ram->wr_active || ram->wr_b_pending ||
+        itf_fifo_empty(ram->axi4_aw_slv)) {
         return;
     }
 

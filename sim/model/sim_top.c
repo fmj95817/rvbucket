@@ -7,8 +7,11 @@
 #include "itf/axi4_if.h"
 #include "itf/uart_if.h"
 #include "itf/gpio_if.h"
+#include "itf/sdspi_cmd_if.h"
+#include "itf/sdspi_data_if.h"
 #include "mem/ram.h"
 #include "mem/rom.h"
+#include "sdspi_vip.h"
 #include "base/smp_opt.h"
 #include "dbg/chk.h"
 #include "dbg/log.h"
@@ -17,31 +20,35 @@
 #include "dbg/vcd.h"
 #include "spec/soc.h"
 #include "ui_def.h"
+#include "boot_image.h"
 
 #define SIM_END_CHAR 0x10
-#define BIN_TYPE_LINUX 1u
-#define LINUX_BIN_HEADER_SIZE 40u
 #define UART_IN_POLL_INTERVAL 500u
 #define GPIO_IN_POLL_INTERVAL 500u
 #define BOOT_PROG_GPIO_PIN 20u
+#define BOOT_SOURCE_GPIO_PIN 21u
+
+typedef enum sim_boot_source {
+    SIM_BOOT_QSPI,
+    SIM_BOOT_SDCARD
+} sim_boot_source_t;
 
 typedef struct program {
     u32 size;
     u8 *code;
 } program_t;
 
-typedef struct program_header {
-    u32 type;
-    u32 firmware_size;
-    u32 reserved;
-    u32 kernel_size;
-    u32 initrd_size;
-    u32 dtb_size;
-    u32 kernel_load;
-    u32 initrd_load;
-    u32 dtb_load;
-    u32 padding;
-} program_header_t;
+typedef struct sim_top_conf {
+    const char *prog_path;
+    const char *sd_image_path;
+    bool fast_load_linux;
+    bool web_ui;
+    bool no_end_detect;
+    bool boot_prog;
+    sim_boot_source_t boot_source;
+    bool perf_sim;
+    bool smp_opt;
+} sim_top_conf_t;
 
 typedef struct sim_top {
     mod_t mod;
@@ -50,6 +57,8 @@ typedef struct sim_top {
     itf_t uart_tx_itf;
     AXI4_IF_DECL(ddr_);
     AXI4_IF_DECL(flash_);
+    itf_t sdspi_cmd_itf;
+    itf_t sdspi_data_itf;
 
     itf_t gpio_inout_itf;
     gpio_if_t *gpio_inout_io;
@@ -57,6 +66,7 @@ typedef struct sim_top {
     ram_t ddr;
     rom_t flash;
     soc_t soc;
+    sdspi_vip_t sdspi_vip;
 
     bool end_sim;
     int exit_code;
@@ -66,6 +76,7 @@ typedef struct sim_top {
     bool web_ui;
     bool no_end_detect;
     bool boot_prog;
+    sim_boot_source_t boot_source;
     bool perf_sim;
     bool smp_opt;
 
@@ -81,6 +92,17 @@ static void sim_top_gpio_cb(void *args)
     s->ui->gpio_change(s->ui, val);
 }
 
+static void sim_top_apply_boot_gpio(sim_top_t *sim_top)
+{
+    sim_top->gpio_inout_io->val &= ~(1u << BOOT_SOURCE_GPIO_PIN);
+    if (sim_top->boot_source == SIM_BOOT_SDCARD) {
+        sim_top->gpio_inout_io->val |= (1u << BOOT_SOURCE_GPIO_PIN);
+    }
+    if (sim_top->boot_prog) {
+        sim_top->gpio_inout_io->val |= (1u << BOOT_PROG_GPIO_PIN);
+    }
+}
+
 static program_t read_program(const char *path)
 {
     program_t program;
@@ -94,19 +116,14 @@ static program_t read_program(const char *path)
     return program;
 }
 
-static inline u32 align4(u32 val)
-{
-    return (val + 3u) & ~3u;
-}
-
 static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
 {
-    if (program->size < LINUX_BIN_HEADER_SIZE) {
+    if (program->size < RVB_BIN_HEADER_SIZE) {
         return;
     }
 
-    program_header_t *header = (program_header_t *)program->code;
-    if (header->type != BIN_TYPE_LINUX) {
+    rvb_bin_header_t *header = (rvb_bin_header_t *)program->code;
+    if (header->type != RVB_BIN_TYPE_LINUX) {
         return;
     }
 
@@ -118,17 +135,17 @@ static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
     u32 initrd_load = header->initrd_load;
     u32 dtb_load = header->dtb_load;
 
-    u32 off = LINUX_BIN_HEADER_SIZE + align4(firmware_size);
+    u32 off = RVB_BIN_HEADER_SIZE + rvb_bin_align4(firmware_size);
     DBG_CHECK(off <= program->size);
-    DBG_CHECK(off + align4(kernel_size) <= program->size);
+    DBG_CHECK(off + rvb_bin_align4(kernel_size) <= program->size);
     ram_load(&sim_top->ddr, program->code + off, kernel_load - DDR_BASE, kernel_size);
 
-    off += align4(kernel_size);
-    DBG_CHECK(off + align4(initrd_size) <= program->size);
+    off += rvb_bin_align4(kernel_size);
+    DBG_CHECK(off + rvb_bin_align4(initrd_size) <= program->size);
     ram_load(&sim_top->ddr, program->code + off, initrd_load - DDR_BASE, initrd_size);
 
-    off += align4(initrd_size);
-    DBG_CHECK(off + align4(dtb_size) <= program->size);
+    off += rvb_bin_align4(initrd_size);
+    DBG_CHECK(off + rvb_bin_align4(dtb_size) <= program->size);
     ram_load(&sim_top->ddr, program->code + off, dtb_load - DDR_BASE, dtb_size);
 
     header->kernel_size = 0;
@@ -142,6 +159,10 @@ static void sim_top_preload_linux(sim_top_t *sim_top, const program_t *program)
 
 static void sim_top_burn_program(sim_top_t *sim_top)
 {
+    if (sim_top->prog_path == NULL) {
+        return;
+    }
+
     program_t program = read_program(sim_top->prog_path);
     DBG_CHECK(program.code != NULL);
 
@@ -154,9 +175,9 @@ static void sim_top_burn_program(sim_top_t *sim_top)
 }
 
 static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char *name,
-    const char *prog_path, bool fast_load_linux, bool web_ui, bool no_end_detect,
-    bool boot_prog, bool perf_sim, bool smp_opt)
+    const sim_top_conf_t *conf)
 {
+    DBG_CHECK(conf != NULL);
     sim_top->cycle_val = 0;
     sim_top->mod.cycle = &sim_top->cycle_val;
     mod_construct(&sim_top->mod, parent, name);
@@ -167,6 +188,8 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     UART_IF_CONSTRUCT(sim_top, uart_tx_itf, 1);
     AXI4_IF_CONSTRUCT(sim_top, ddr_, 1);
     AXI4_IF_CONSTRUCT(sim_top, flash_, 1);
+    SDSPI_CMD_IF_CONSTRUCT(sim_top, sdspi_cmd_itf, 4);
+    SDSPI_DATA_IF_CONSTRUCT(sim_top, sdspi_data_itf, 4);
     GPIO_SIGNAL_IF_CONSTRUCT(sim_top, gpio_inout_itf, false, false);
 
     sim_top->gpio_inout_io = itf_signal_get_src_and_chk(&sim_top->gpio_inout_itf);
@@ -178,15 +201,29 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     sim_top->soc.uart_tx_mst = &sim_top->uart_rx_itf;
     sim_top->soc.uart_rx_slv = &sim_top->uart_tx_itf;
     sim_top->soc.gpio_inout = &sim_top->gpio_inout_itf;
+    sim_top->soc.sdspi_cmd_mst = &sim_top->sdspi_cmd_itf;
+    sim_top->soc.sdspi_data_slv = &sim_top->sdspi_data_itf;
     for (u32 i = 0; i < PLIC_MAX_IRQ_NUM; i++) {
         sim_top->soc.ext_irq_ins[i] = NULL;
     }
-    soc_construct(&sim_top->soc, sim_top->mod.hier_name, "u_soc",
-        perf_sim, smp_opt);
+    soc_conf_t soc_conf = {
+        .perf_sim = conf->perf_sim,
+        .smp_opt = conf->smp_opt
+    };
+    soc_construct(&sim_top->soc, sim_top->mod.hier_name, "u_soc", &soc_conf);
+
+    sim_top->sdspi_vip.mod.cycle = sim_top->mod.cycle;
+    sim_top->sdspi_vip.cmd_slv = &sim_top->sdspi_cmd_itf;
+    sim_top->sdspi_vip.data_mst = &sim_top->sdspi_data_itf;
+    sdspi_vip_conf_t sdspi_vip_conf = {
+        .image_path = conf->sd_image_path
+    };
+    sdspi_vip_construct(&sim_top->sdspi_vip, sim_top->mod.hier_name,
+        "u_sdspi_vip", &sdspi_vip_conf);
 
     AXI4_SLV_CONNECT(&sim_top->ddr, , sim_top, ddr_);
     sim_top->ddr.mod.cycle = sim_top->mod.cycle;
-    u32 ddr_latency = perf_sim ? DDR_LATENCY : 0u;
+    u32 ddr_latency = conf->perf_sim ? DDR_LATENCY : 0u;
     ram_construct(&sim_top->ddr, sim_top->mod.hier_name, "u_ddr", 1,
         RAM_MODE_AXI, DDR_SIZE, DDR_BASE, ddr_latency);
 
@@ -198,17 +235,18 @@ static void sim_top_construct(sim_top_t *sim_top, const char *parent, const char
     dbg_vcd_set_clk(sim_top->mod.cycle);
     dbg_vcd_add_sig("cycle", DBG_SIG_TYPE_REG, 64, sim_top->mod.cycle);
 
-    sim_top->prog_path = prog_path;
-    sim_top->fast_load_linux = fast_load_linux;
-    sim_top->web_ui = web_ui;
-    sim_top->no_end_detect = no_end_detect;
-    sim_top->boot_prog = boot_prog;
-    sim_top->perf_sim = perf_sim;
-    sim_top->smp_opt = smp_opt;
+    sim_top->prog_path = conf->prog_path;
+    sim_top->fast_load_linux = conf->fast_load_linux;
+    sim_top->web_ui = conf->web_ui;
+    sim_top->no_end_detect = conf->no_end_detect;
+    sim_top->boot_prog = conf->boot_prog;
+    sim_top->boot_source = conf->boot_source;
+    sim_top->perf_sim = conf->perf_sim;
+    sim_top->smp_opt = conf->smp_opt;
 
     sim_top_burn_program(sim_top);
 
-    if (web_ui) {
+    if (conf->web_ui) {
         sim_top->ui = ui_web_create();
     } else {
         sim_top->ui = ui_term_create();
@@ -224,6 +262,7 @@ static void sim_top_reset(sim_top_t *sim_top)
     DBG_CHECK(sim_top->ui != NULL);
     sim_top->ui->reset(sim_top->ui);
     soc_reset(&sim_top->soc);
+    sdspi_vip_reset(&sim_top->sdspi_vip);
     ram_reset(&sim_top->ddr);
     rom_reset(&sim_top->flash);
     dbg_vcd_reset();
@@ -232,15 +271,15 @@ static void sim_top_reset(sim_top_t *sim_top)
     itf_reset(&sim_top->uart_tx_itf);
     AXI4_IF_RESET(sim_top, ddr_);
     AXI4_IF_RESET(sim_top, flash_);
+    itf_reset(&sim_top->sdspi_cmd_itf);
+    itf_reset(&sim_top->sdspi_data_itf);
     itf_reset(&sim_top->gpio_inout_itf);
 
     u32 gpio_val = sim_top->ui->gpio_in_read(sim_top->ui);
     sim_top->gpio_inout_io->val = gpio_val;
 
-    if (sim_top->boot_prog) {
-        sim_top->gpio_inout_io->val |= (1u << BOOT_PROG_GPIO_PIN);
-        sim_top->ui->gpio_change(sim_top->ui, sim_top->gpio_inout_io->val);
-    }
+    sim_top_apply_boot_gpio(sim_top);
+    sim_top->ui->gpio_change(sim_top->ui, sim_top->gpio_inout_io->val);
 }
 
 static void sim_top_clock(sim_top_t *sim_top)
@@ -253,6 +292,9 @@ static void sim_top_clock(sim_top_t *sim_top)
         if (sim_top->ui->gpio_in_poll(sim_top->ui, &gpio_in)) {
             sim_top->gpio_inout_io->val =
                 (sim_top->gpio_inout_io->val & 0xFFFFu) | (gpio_in & 0xFF0000u);
+            sim_top_apply_boot_gpio(sim_top);
+            sim_top->ui->gpio_change(sim_top->ui,
+                sim_top->gpio_inout_io->val);
         }
     }
 
@@ -267,6 +309,7 @@ static void sim_top_clock(sim_top_t *sim_top)
     }
 
     soc_clock(&sim_top->soc);
+    sdspi_vip_clock(&sim_top->sdspi_vip);
     ram_clock(&sim_top->ddr);
     rom_clock(&sim_top->flash);
 
@@ -274,6 +317,8 @@ static void sim_top_clock(sim_top_t *sim_top)
     itf_dbg_clock(&sim_top->uart_tx_itf);
     AXI4_IF_DBG_CLOCK(sim_top, ddr_);
     AXI4_IF_DBG_CLOCK(sim_top, flash_);
+    itf_dbg_clock(&sim_top->sdspi_cmd_itf);
+    itf_dbg_clock(&sim_top->sdspi_data_itf);
     itf_dbg_clock(&sim_top->gpio_inout_itf);
 
     sim_top->cycle_val++;
@@ -312,6 +357,7 @@ static void sim_top_free(sim_top_t *sim_top)
     sim_top->ui->cleanup(sim_top->ui);
 
     soc_free(&sim_top->soc);
+    sdspi_vip_free(&sim_top->sdspi_vip);
     ram_free(&sim_top->ddr);
     rom_free(&sim_top->flash);
 
@@ -319,24 +365,29 @@ static void sim_top_free(sim_top_t *sim_top)
     itf_free(&sim_top->uart_tx_itf);
     AXI4_IF_FREE(sim_top, ddr_);
     AXI4_IF_FREE(sim_top, flash_);
+    itf_free(&sim_top->sdspi_cmd_itf);
+    itf_free(&sim_top->sdspi_data_itf);
     itf_free(&sim_top->gpio_inout_itf);
 }
 
 static void print_usage(const char *prog)
 {
     fprintf(stderr,
-        "Usage: %s [options] <program.bin>\n"
+        "Usage: %s [options] [<program.bin>]\n"
         "\n"
         "Options:\n"
+        "  --boot <source>    Boot source: qspi (default) or sdcard\n"
         "  --fast-load-linux  Preload Linux payloads to DDR via fast path\n"
         "  --web-ui           Use web-based UI instead of terminal\n"
         "  --no-end-detect    Disable test-end detection (0x10 terminator)\n"
         "  --boot-prog        Enable bootloader progress output via UART\n"
         "  --perf-sim         Enable configured memory/cache latency modeling\n"
         "  --st-sim           Disable default SMP simulation optimization\n"
+        "  --sd-image <path>  Attach a raw SD-card image\n"
         "\n"
         "Arguments:\n"
-        "  <program.bin>      Path to the binary program image\n",
+        "  <program.bin>      QSPI image, or linux.bin with --fast-load-linux\n"
+        "                     Optional only with --boot sdcard\n",
         prog);
 }
 
@@ -350,11 +401,27 @@ int main(int argc, char *argv[])
     bool web_ui = false;
     bool no_end_detect = false;
     bool boot_prog = false;
+    sim_boot_source_t boot_source = SIM_BOOT_QSPI;
     bool perf_sim = false;
     bool st_sim = false;
     const char *prog_path = NULL;
+    const char *sd_image_path = NULL;
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--fast-load-linux") == 0) {
+        if (strcmp(argv[i], "--boot") == 0) {
+            if (++i >= argc) {
+                print_usage(argv[0]);
+                return 1;
+            }
+            if (strcmp(argv[i], "qspi") == 0) {
+                boot_source = SIM_BOOT_QSPI;
+            } else if (strcmp(argv[i], "sdcard") == 0) {
+                boot_source = SIM_BOOT_SDCARD;
+            } else {
+                fprintf(stderr, "invalid boot source: %s\n", argv[i]);
+                print_usage(argv[0]);
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--fast-load-linux") == 0) {
             fast_load_linux = true;
         } else if (strcmp(argv[i], "--web-ui") == 0) {
             web_ui = true;
@@ -366,6 +433,12 @@ int main(int argc, char *argv[])
             perf_sim = true;
         } else if (strcmp(argv[i], "--st-sim") == 0) {
             st_sim = true;
+        } else if (strcmp(argv[i], "--sd-image") == 0) {
+            if (++i >= argc) {
+                print_usage(argv[0]);
+                return 1;
+            }
+            sd_image_path = argv[i];
         } else if (!prog_path) {
             prog_path = argv[i];
         } else {
@@ -373,7 +446,18 @@ int main(int argc, char *argv[])
             return 1;
         }
     }
-    if (!prog_path) {
+    if (boot_source == SIM_BOOT_QSPI && !prog_path) {
+        fprintf(stderr, "qspi boot requires program.bin\n");
+        print_usage(argv[0]);
+        return 1;
+    }
+    if (boot_source == SIM_BOOT_SDCARD && !sd_image_path) {
+        fprintf(stderr, "sdcard boot requires --sd-image\n");
+        print_usage(argv[0]);
+        return 1;
+    }
+    if (fast_load_linux && boot_source != SIM_BOOT_QSPI) {
+        fprintf(stderr, "--fast-load-linux requires qspi boot\n");
         print_usage(argv[0]);
         return 1;
     }
@@ -384,10 +468,19 @@ int main(int argc, char *argv[])
         smp_opt = false;
     }
 
+    sim_top_conf_t conf = {
+        .prog_path = prog_path,
+        .sd_image_path = sd_image_path,
+        .fast_load_linux = fast_load_linux,
+        .web_ui = web_ui,
+        .no_end_detect = no_end_detect,
+        .boot_prog = boot_prog,
+        .boot_source = boot_source,
+        .perf_sim = perf_sim,
+        .smp_opt = smp_opt
+    };
     sim_top_t sim_top;
-    sim_top_construct(&sim_top, NULL, "sim_top", prog_path,
-                      fast_load_linux, web_ui, no_end_detect, boot_prog,
-                      perf_sim, smp_opt);
+    sim_top_construct(&sim_top, NULL, "sim_top", &conf);
     sim_top_reset(&sim_top);
 
     while (!sim_top.end_sim) {

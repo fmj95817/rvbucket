@@ -556,6 +556,34 @@ TEST_CASE(ram_tb_t, axi_write_data_progress_under_b_wait)
     TEST_END();
 }
 
+TEST_CASE(ram_tb_t, axi_fast_back_to_back_write_responses)
+{
+    TEST_BEGIN("AXI Fast Back-to-back Write Responses");
+
+    tb_construct_axi_latency(tb, 0);
+    tb_dut_reset(tb);
+
+    tb_axi_write_aw(tb, 0x90, RAM_BASE + 0x900, 0, AXI4_AW_SIZE_B4,
+        AXI4_AW_BURST_INCR);
+    tb_axi_write_aw(tb, 0x91, RAM_BASE + 0x904, 0, AXI4_AW_SIZE_B4,
+        AXI4_AW_BURST_INCR);
+    tb_axi_write_w(tb, 0x11223344, 0x0f, true);
+    tb_axi_write_w(tb, 0x55667788, 0x0f, true);
+
+    bool got_b = RUN_POLL_UNTIL(tb_cond_axi_b_ready, UT_TIMEOUT);
+    REQUIRE(got_b, "first write response received");
+    REQUIRE(tb_axi_check_and_pop_b(tb, 0x90, AXI4_B_RESP_OKAY),
+        "first write response keeps its ID");
+
+    got_b = RUN_POLL_UNTIL(tb_cond_axi_b_ready, UT_TIMEOUT);
+    REQUIRE(got_b, "second write response received");
+    REQUIRE(tb_axi_check_and_pop_b(tb, 0x91, AXI4_B_RESP_OKAY),
+        "second write response keeps its ID");
+
+    tb_free_dut(tb);
+    TEST_END();
+}
+
 int main()
 {
     ram_tb_t tb;
@@ -572,6 +600,7 @@ int main()
     TEST_RUN(axi_write_strobe);
     TEST_RUN(axi_multi_outstanding_read_fifo_order);
     TEST_RUN(axi_write_data_progress_under_b_wait);
+    TEST_RUN(axi_fast_back_to_back_write_responses);
 
     ut_sbd_summary(&tb.sbd);
     int ret = ut_sbd_ret(&tb.sbd);

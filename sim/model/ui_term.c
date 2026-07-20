@@ -11,6 +11,7 @@
 
 #define BUF_SIZE 1024
 #define CMD_BUF_SIZE 16
+#define CMD_MODE_PREFIX 0x1cu
 
 typedef struct {
     sim_ui_t ui;
@@ -20,6 +21,9 @@ typedef struct {
     bool input_thread_stop;
     bool reset_req;
     bool cmd_mode;
+    bool cmd_prefix_pending;
+    bool uart_replay_valid;
+    u8 uart_replay_ch;
     char cmd_buf[CMD_BUF_SIZE];
     int  cmd_len;
     u32  gpio_in_val;
@@ -171,6 +175,8 @@ static void reset(void *ctx)
     ut->wr = 0;
     ut->reset_req = false;
     ut->cmd_mode = false;
+    ut->cmd_prefix_pending = false;
+    ut->uart_replay_valid = false;
     ut->cmd_len = 0;
     ut->gpio_in_dirty = false;
     ut->input_thread_stop = false;
@@ -204,6 +210,12 @@ static bool uart_in(void *ctx, u8 *ch)
 {
     ui_term_t *ut = (ui_term_t *)ctx;
 
+    if (ut->uart_replay_valid) {
+        *ch = ut->uart_replay_ch;
+        ut->uart_replay_valid = false;
+        return true;
+    }
+
     pthread_mutex_lock(&ut->lock);
     if (buf_empty(ut)) {
         pthread_mutex_unlock(&ut->lock);
@@ -214,18 +226,27 @@ static bool uart_in(void *ctx, u8 *ch)
     pthread_cond_signal(&ut->space_cond);
     pthread_mutex_unlock(&ut->lock);
 
-    if (c == 0x1b) {
-        /* ESC: enter cmd mode (vim-style) */
-        if (!ut->cmd_mode) {
-            ut->cmd_mode = true;
-            ut->cmd_len = 0;
-            cmd_prompt();
-        }
+    if (ut->cmd_mode) {
+        cmd_handle_char(ut, c);
         return false;
     }
 
-    if (ut->cmd_mode) {
-        cmd_handle_char(ut, c);
+    if (ut->cmd_prefix_pending) {
+        ut->cmd_prefix_pending = false;
+        if (c == CMD_MODE_PREFIX) {
+            ut->cmd_mode = true;
+            ut->cmd_len = 0;
+            cmd_prompt();
+            return false;
+        }
+        *ch = CMD_MODE_PREFIX;
+        ut->uart_replay_ch = c;
+        ut->uart_replay_valid = true;
+        return true;
+    }
+
+    if (c == CMD_MODE_PREFIX) {
+        ut->cmd_prefix_pending = true;
         return false;
     }
 

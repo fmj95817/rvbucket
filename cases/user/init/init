@@ -1,0 +1,18 @@
+#!/bin/sh
+
+mount -t devtmpfs none /dev 2>/dev/null || true
+mount -t proc none /proc 2>/dev/null || true
+mount -t sysfs none /sys 2>/dev/null || true
+
+if awk '$2 == "/" && $3 == "rootfs" { found = 1 } END { exit !found }' \
+    /proc/mounts; then
+    SWITCH_SDROOT_SOURCE_ONLY=1
+    . /bin/switch_sdroot.sh
+    unset SWITCH_SDROOT_SOURCE_ONLY
+    if ! switch_sdcard_rootfs; then
+        echo "sdcard rootfs unavailable; drop into initramfs shell"
+    fi
+fi
+
+echo -e "\nWelcome to RISC-V 32-bit Linux!\n"
+exec /bin/sh

@@ -46,6 +46,8 @@ module exu_ldst_handler(
     wire is_load = inst.base.opcode == OPCODE_LOAD;
     wire is_store = inst.base.opcode == OPCODE_STORE;
     wire is_amo = inst.base.opcode == OPCODE_AMO;
+    wire is_cbo = inst.base.opcode == OPCODE_MISC_MEM &&
+        inst.i.funct3 == 3'b010;
     wire [4:0] inst_amo_funct5 = inst.r.funct7[6:2];
     wire sc_fail = state == IDLE && sel && is_amo && inst_amo_funct5 == AMO_SC &&
         (!reservation_valid || reservation_addr != gpr_mst.rd1);
@@ -104,7 +106,7 @@ module exu_ldst_handler(
                         end else begin
                             normal_load <= is_load;
                             load_funct3 <= inst.i.funct3;
-                            if (is_store)
+                            if (is_store || is_cbo)
                                 reservation_valid <= 1'b0;
                             state <= WAIT_NORMAL;
                         end
@@ -136,9 +138,10 @@ module exu_ldst_handler(
         if (state == IDLE && sel) begin
             if (is_load) begin
                 gpr_mst.ra1 = inst.i.rs1;
-            end else if (is_store || is_amo) begin
+            end else if (is_store || is_amo || is_cbo) begin
                 gpr_mst.ra1 = inst.r.rs1;
-                gpr_mst.ra2 = inst.r.rs2;
+                if (!is_cbo)
+                    gpr_mst.ra2 = inst.r.rs2;
             end
         end
     end
@@ -147,6 +150,7 @@ module exu_ldst_handler(
         ldst_req_mst.vld = 1'b0;
         ldst_req_mst.pkt.addr = '0;
         ldst_req_mst.pkt.st = 1'b0;
+        ldst_req_mst.pkt.cmo = LDST_REQ_CMO_NONE;
         ldst_req_mst.pkt.size = LDST_REQ_SIZE_B4;
         ldst_req_mst.pkt.data = '0;
         ldst_req_mst.pkt.strobe = 4'b1111;
@@ -170,6 +174,15 @@ module exu_ldst_handler(
                 ldst_req_mst.pkt.addr = gpr_mst.rd1;
                 ldst_req_mst.pkt.st = inst_amo_funct5 == AMO_SC;
                 ldst_req_mst.pkt.data = gpr_mst.rd2;
+            end else if (is_cbo) begin
+                ldst_req_mst.pkt.addr = gpr_mst.rd1;
+                ldst_req_mst.pkt.strobe = 4'b0000;
+                unique case (inst.i.imm_11_0)
+                12'd0: ldst_req_mst.pkt.cmo = LDST_REQ_CMO_INVAL;
+                12'd1: ldst_req_mst.pkt.cmo = LDST_REQ_CMO_CLEAN;
+                12'd2: ldst_req_mst.pkt.cmo = LDST_REQ_CMO_FLUSH;
+                default: ldst_req_mst.pkt.cmo = LDST_REQ_CMO_NONE;
+                endcase
             end
         end else if (state == SEND_AMO_WRITE) begin
             ldst_req_mst.vld = 1'b1;

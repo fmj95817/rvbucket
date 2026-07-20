@@ -26,7 +26,8 @@ typedef enum l2_port_state {
     L2_PORT_STATE_READ,
     L2_PORT_STATE_WRITE,
     L2_PORT_STATE_MISS_WAIT,
-    L2_PORT_STATE_BYPASS_WAIT,
+    L2_PORT_STATE_CMO_WAIT,
+    L2_PORT_STATE_CMO_RSP,
 } l2_port_state_t;
 
 typedef struct l2_port {
@@ -59,9 +60,9 @@ typedef enum l2_mem_state {
     L2_MEM_STATE_WB_B,
     L2_MEM_STATE_REFILL_AR,
     L2_MEM_STATE_REFILL_R,
-    L2_MEM_STATE_BYPASS_R,
-    L2_MEM_STATE_BYPASS_W,
-    L2_MEM_STATE_BYPASS_B,
+    L2_MEM_STATE_CMO_WB_AW,
+    L2_MEM_STATE_CMO_WB_W,
+    L2_MEM_STATE_CMO_WB_B,
 } l2_mem_state_t;
 
 typedef struct l2 {
@@ -109,6 +110,9 @@ typedef struct l2 {
     u32 miss_line_idx;
     u32 wb_line_addr;
     u32 mem_beat_idx;
+    u32 cmo_user;
+    u32 cmo_line_idx;
+    bool cmo_hit;
     bool data_write_used;
 
     u64 *perf_hit;

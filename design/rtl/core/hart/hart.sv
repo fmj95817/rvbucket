@@ -1,4 +1,5 @@
 `include "spec/core/hart.svh"
+`include "boot.svh"
 
 module hart(
     input logic       clk,
@@ -24,6 +25,8 @@ module hart(
     perf_l1_if_t.mst  perf_l1i_mst,
     perf_l1_if_t.mst  perf_l1d_mst
 );
+    localparam logic [31:0] BOOT_ROM_SIZE =
+        32'd1 << (`BOOT_ROM_WORD_AW + 2);
     fch_req_if_t ifu_fch_req_if();
     fch_req_if_t hbi_fch_req_if();
     fch_rsp_if_t fch_rsp_if();
@@ -260,7 +263,7 @@ module hart(
         .STG_FIFO_DEPTH (`HART_L1I_STG_FIFO_DEPTH),
         .OST_DEPTH      (`HART_L1_OST_DEPTH),
         .BYPASS0_BASE (32'h00000000),
-        .BYPASS0_SIZE (32'h00000800)
+        .BYPASS0_SIZE (BOOT_ROM_SIZE)
     ) u_l1i(
         .clk              (clk),
         .rst_n            (rst_n),
@@ -284,7 +287,7 @@ module hart(
         .STG_FIFO_DEPTH (`HART_L1D_STG_FIFO_DEPTH),
         .OST_DEPTH      (`HART_L1_OST_DEPTH),
         .BYPASS0_BASE (32'h00000000),
-        .BYPASS0_SIZE (32'h00000800),
+        .BYPASS0_SIZE (BOOT_ROM_SIZE),
         .BYPASS1_BASE (32'h30000000),
         .BYPASS1_SIZE (32'h02000000)
     ) u_l1d(

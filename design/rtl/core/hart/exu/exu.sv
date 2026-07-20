@@ -55,7 +55,8 @@ module exu(
     assign exu_state_mst.pkt.priv = priv;
     assign exu_state_mst.pkt.pc = ex_req_slv.pkt.pc;
     assign exu_state_mst.pkt.irq_epc = ex_req_fire ? ex_req_next_pc : irq_epc;
-    assign exu_state_mst.pkt.irq_defer = !wfi && !ex_req_slv.rdy;
+    assign exu_state_mst.pkt.trap_defer = !wfi && ex_req_slv.vld &&
+        !ex_req_slv.rdy;
     assign exu_state_mst.pkt.wfi = wfi;
     assign exu_state_mst.pkt.wfi_resume_pc = irq_epc;
     localparam INST_HANDLER_NUM = 5;
@@ -88,14 +89,15 @@ module exu(
     tri is_alu = ex_req_slv.vld & (opcode == OPCODE_ALU);
     tri is_mem = ex_req_slv.vld & (opcode == OPCODE_MISC_MEM);
     tri is_sys = ex_req_slv.vld & (opcode == OPCODE_SYSTEM);
+    tri is_cbo = is_mem && ex_req_slv.pkt.inst.i.funct3 == 3'b010;
 
     tri inst_fire_en = (~flush_active) & (~wfi);
     tri alu_sel = inst_fire_en & (is_alu | is_alui);
     tri branch_sel = inst_fire_en & (is_jal | is_jalr | is_branch);
     tri branch_gpr_sel = branch_sel | ex_rsp_mst.vld;
-    tri ldst_sel = inst_fire_en & (is_load | is_store | is_amo);
+    tri ldst_sel = inst_fire_en & (is_load | is_store | is_amo | is_cbo);
     tri misc_sel = inst_fire_en & (is_lui | is_auipc);
-    tri sys_sel = inst_fire_en & (is_mem | is_sys);
+    tri sys_sel = inst_fire_en & ((is_mem & ~is_cbo) | is_sys);
 
     tri alu_done;
     tri branch_done;
@@ -123,7 +125,7 @@ module exu(
             OPCODE_AMO: ex_req_rdy = ldst_done;
             OPCODE_ALUI: ex_req_rdy = alu_done;
             OPCODE_ALU: ex_req_rdy = alu_done;
-            OPCODE_MISC_MEM: ex_req_rdy = sys_done;
+            OPCODE_MISC_MEM: ex_req_rdy = is_cbo ? ldst_done : sys_done;
             OPCODE_SYSTEM: ex_req_rdy = sys_done;
             default: ex_req_rdy = 1'b0;
         endcase

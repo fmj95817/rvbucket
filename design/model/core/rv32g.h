@@ -20,6 +20,8 @@ typedef struct rv32g_conf {
     u32 cfg_size;
     u32 peri_base;
     u32 peri_size;
+    u32 io_base;
+    u32 io_size;
     u32 aclint_base;
     u32 aclint_size;
     u32 aclint_mtimer_base;
@@ -61,6 +63,7 @@ typedef struct rv32g {
     mod_t mod;
     AXI4_MST_DECL(mm_);
     APB_MST_DECL(peri_);
+    APB_MST_DECL(io_);
     itf_t *ext_irq_ins[PLIC_MAX_IRQ_NUM];
 
     hart_t hart;

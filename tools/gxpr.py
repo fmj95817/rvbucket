@@ -129,6 +129,12 @@ def gen_mig_prj(proj, board, out_dir):
     timing_defaults.update({k: str(v) for k, v in timing.items()})
     timing_attrs = " ".join(f'{k}="{v}"' for k, v in timing_defaults.items())
 
+    ordering = str(ddr_ip.get("ordering", "Normal"))
+    if ordering not in ("Normal", "Strict", "Relaxed"):
+        raise RuntimeError(
+            "DDR MIG ordering must be Normal, Strict, or Relaxed"
+        )
+
     module_name = ddr_ip.get("module_name", "rvbucket_ddr")
     path = out_dir / f"{module_name}.prj"
     text = f'''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
@@ -166,7 +172,7 @@ def gen_mig_prj(proj, board, out_dir):
     <DeepMemory>1</DeepMemory>
     <DataMask>1</DataMask>
     <ECC>Disabled</ECC>
-    <Ordering>Normal</Ordering>
+    <Ordering>{ordering}</Ordering>
     <BankMachineCnt>{ddr_ip.get("bank_machine_count", 4)}</BankMachineCnt>
     <CustomPart>FALSE</CustomPart>
     <NewPartName></NewPartName>

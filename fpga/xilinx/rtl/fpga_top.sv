@@ -4,7 +4,8 @@ module fpga_top #(
     parameter DDR_DQS_WIDTH = 4,
     parameter DDR_DM_WIDTH = 4,
     parameter DDR_BA_WIDTH = 3,
-    parameter FLASH_AW = 32
+    parameter FLASH_AW = 32,
+    parameter BOOT_FROM_SDCARD = 0
 )(
     input logic                         clk,
     input logic                         rst_n,
@@ -32,7 +33,14 @@ module fpga_top #(
     input logic                         flash_dq1,
     output logic                        flash_dq2,
     output logic                        flash_dq3,
-    output logic                        flash_ce_n
+    output logic                        flash_ce_n,
+
+    output logic                        sd_clk,
+    output logic                        sd_cmd,
+    input logic                         sd_data0,
+    inout wire                          sd_data1,
+    inout wire                          sd_data2,
+    output logic                        sd_data3
 );
     logic clk_50m;
     logic ddr_ref_clk;
@@ -60,12 +68,19 @@ module fpga_top #(
     axi4_b_if_t flash_axi4_b();
     axi4_ar_if_t flash_axi4_ar();
     axi4_r_if_t flash_axi4_r();
+    sdspi_cmd_if_t sdspi_cmd();
+    sdspi_data_if_t sdspi_data();
+    logic sdspi_cs_n;
 
-    assign gpio_in = 24'h100000;
+    assign gpio_in = 24'h100000 |
+        (BOOT_FROM_SDCARD ? 24'h200000 : 24'h000000);
     assign ddr_rst_n = ddr_rst_n_pipe[2];
     assign soc_rst_n_gated = soc_rst_n && soc_start_done;
     assign uart_tx = soc_uart_tx;
     assign led = gpio_out[7:0];
+    assign sd_data1 = 1'bz;
+    assign sd_data2 = 1'bz;
+    assign sd_data3 = sdspi_cs_n;
 
     always_ff @(posedge clk_50m or negedge rst_n) begin
         if (!rst_n) begin
@@ -147,7 +162,20 @@ module fpga_top #(
         .flash_axi4_w_mst    (flash_axi4_w),
         .flash_axi4_b_slv    (flash_axi4_b),
         .flash_axi4_ar_mst   (flash_axi4_ar),
-        .flash_axi4_r_slv    (flash_axi4_r)
+        .flash_axi4_r_slv    (flash_axi4_r),
+        .sdspi_cmd_mst       (sdspi_cmd),
+        .sdspi_data_slv      (sdspi_data)
+    );
+
+    sdspi_phy u_sdspi_phy(
+        .clk      (soc_clk),
+        .rst_n    (soc_rst_n_gated),
+        .cmd_slv  (sdspi_cmd),
+        .data_mst (sdspi_data),
+        .spi_clk  (sd_clk),
+        .spi_cs_n (sdspi_cs_n),
+        .spi_mosi (sd_cmd),
+        .spi_miso (sd_data0)
     );
 
     xilinx_axi_qspi #(

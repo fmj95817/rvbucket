@@ -232,6 +232,20 @@ static void tb_bti_write_write_req(bti2axi_tb_t *tb, u16 trans_id, u32 addr,
     itf_write(&tb->bti_req_itf, &req);
 }
 
+static void tb_bti_write_cbo_req(bti2axi_tb_t *tb, u16 trans_id, u32 addr,
+    bti_req_cmd_t cmd)
+{
+    bti_req_if_t req = {
+        .trans_id = trans_id,
+        .cmd = cmd,
+        .addr = addr,
+        .size = BTI_REQ_SIZE_B4,
+        .data = 0,
+        .strobe = 0
+    };
+    itf_write(&tb->bti_req_itf, &req);
+}
+
 static bool tb_cond_bti_rsp_ready(bti2axi_tb_t *tb)
 {
     return !itf_fifo_empty(&tb->bti_rsp_itf);
@@ -529,6 +543,26 @@ TEST_CASE(bti2axi_tb_t, sequential_reads)
     TEST_END();
 }
 
+TEST_CASE(bti2axi_tb_t, unsupported_cmd_does_not_touch_axi)
+{
+    TEST_BEGIN("Unsupported BTI Command Does Not Touch AXI");
+
+    tb->mock_saw_ar = false;
+    tb->mock_saw_aw = false;
+    tb->mock_saw_w = false;
+
+    tb_bti_write_cbo_req(tb, 0x00c0, 0x40000000, BTI_REQ_CMD_CBO_CLEAN);
+
+    bool got_rsp = RUN_POLL_UNTIL(tb_cond_bti_rsp_ready, UT_TIMEOUT);
+    REQUIRE(got_rsp, "unsupported command returns a BTI response");
+    REQUIRE(tb_bti_check_and_pop_rsp(tb, 0x00c0, 0, false),
+        "unsupported command response fails");
+    REQUIRE(!tb->mock_saw_ar && !tb->mock_saw_aw && !tb->mock_saw_w,
+        "unsupported command does not issue AXI read or write");
+
+    TEST_END();
+}
+
 int main()
 {
     bti2axi_tb_t tb;
@@ -545,6 +579,7 @@ int main()
     TEST_RUN(back_to_back_writes);
     TEST_RUN(read_table_full_backpressures);
     TEST_RUN(sequential_reads);
+    TEST_RUN(unsupported_cmd_does_not_touch_axi);
 
     ut_sbd_summary(&tb.sbd);
     int ret = ut_sbd_ret(&tb.sbd);

@@ -112,6 +112,10 @@ function get_sw_case_input {
     esac
 }
 
+function sw_case_uses_sd_image {
+    [[ "$1" == sdspi* ]]
+}
+
 function find_ut_bins {
     local ut_dir="$1"
 
@@ -136,15 +140,21 @@ function run_single_sw {
 
     local cwd="${BUILD_DIR}/hw/model"
     local rel_bin="../../sw/sim/${name}/${name}.bin"
+    local case_sim_args=("${MODEL_SIM_ARGS[@]}")
+    if sw_case_uses_sd_image "${name}"; then
+        local sd_image="${BUILD_DIR}/hw/model/sdspi-bare.img"
+        truncate -s 8M "${sd_image}"
+        case_sim_args+=(--sd-image "${sd_image}")
+    fi
 
-    echo "  cd ${cwd} && ./sim_top ${MODEL_SIM_ARGS[*]} ${rel_bin}"
+    echo "  cd ${cwd} && ./sim_top ${case_sim_args[*]} ${rel_bin}"
     get_sw_case_input "${name}"
     input="${SW_CASE_INPUT}"
     if [[ -n "${input}" ]]; then
         cd "${cwd}" && printf '%s' "${input}" |
-            "${cwd}/sim_top" "${MODEL_SIM_ARGS[@]}" "${rel_bin}"
+            "${cwd}/sim_top" "${case_sim_args[@]}" "${rel_bin}"
     else
-        cd "${cwd}" && "${cwd}/sim_top" "${MODEL_SIM_ARGS[@]}" "${rel_bin}"
+        cd "${cwd}" && "${cwd}/sim_top" "${case_sim_args[@]}" "${rel_bin}"
     fi
 }
 
@@ -190,20 +200,27 @@ function run_sw_cases {
 
         local input=""
         local status=0
+        local case_sim_args=("${MODEL_SIM_ARGS[@]}")
+
+        if sw_case_uses_sd_image "${name}"; then
+            local sd_image="${BUILD_DIR}/hw/model/sdspi-bare.img"
+            truncate -s 8M "${sd_image}"
+            case_sim_args+=(--sd-image "${sd_image}")
+        fi
 
         get_sw_case_input "${name}"
         input="${SW_CASE_INPUT}"
         if [[ -n "${input}" ]]; then
             if printf '%s' "${input}" |
-                run_with_timeout "${timeout}" "${sim}" "${MODEL_SIM_ARGS[@]}" \
-                "${bin}" >/dev/null 2>&1; then
+                run_with_timeout "${timeout}" "${sim}" \
+                "${case_sim_args[@]}" "${bin}" >/dev/null 2>&1; then
                 status=0
             else
                 status=$?
             fi
         else
-            if run_with_timeout "${timeout}" "${sim}" "${MODEL_SIM_ARGS[@]}" \
-                "${bin}" </dev/null >/dev/null 2>&1; then
+            if run_with_timeout "${timeout}" "${sim}" \
+                "${case_sim_args[@]}" "${bin}" </dev/null >/dev/null 2>&1; then
                 status=0
             else
                 status=$?
@@ -445,18 +462,25 @@ function run_one_rtl_case {
     fi
 
     local rel_hex="../../sw/sim/${name}/${name}.hex"
+    local sim_plusargs=("+program=${rel_hex}")
     local input=""
+
+    if sw_case_uses_sd_image "${name}"; then
+        local sd_image="${BUILD_DIR}/hw/sdspi-bare.img"
+        truncate -s 8M "${sd_image}"
+        sim_plusargs+=("+sd_image=../sdspi-bare.img")
+    fi
 
     get_sw_case_input "${name}"
     input="${SW_CASE_INPUT}"
 
     if [[ "${quiet}" != true ]]; then
-        echo "  cd ${cwd} && ${sim_cmd} +program=${rel_hex}"
+        echo "  cd ${cwd} && ${sim_cmd} ${sim_plusargs[*]}"
     fi
 
     if [[ -n "${input}" ]]; then
         if (cd "${cwd}" && printf '%s' "${input}" |
-            run_with_timeout "${RTL_SW_TIMEOUT}" "${sim_cmd}" "+program=${rel_hex}") \
+            run_with_timeout "${RTL_SW_TIMEOUT}" "${sim_cmd}" "${sim_plusargs[@]}") \
             >"${log}" 2>&1; then
             status=0
         else
@@ -464,7 +488,7 @@ function run_one_rtl_case {
         fi
     else
         if (cd "${cwd}" &&
-            run_with_timeout "${RTL_SW_TIMEOUT}" "${sim_cmd}" "+program=${rel_hex}" </dev/null) \
+            run_with_timeout "${RTL_SW_TIMEOUT}" "${sim_cmd}" "${sim_plusargs[@]}" </dev/null) \
             >"${log}" 2>&1; then
             status=0
         else

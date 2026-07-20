@@ -13,7 +13,7 @@ static void exu_publish_state(exu_t *exu)
     exu->state_o->priv = exu->priv;
     exu->state_o->pc = exu->cur_pc;
     exu->state_o->irq_epc = exu->irq_epc;
-    exu->state_o->irq_defer = exu->irq_defer;
+    exu->state_o->trap_defer = exu->trap_defer;
     exu->state_o->wfi = exu->wfi;
     exu->state_o->wfi_resume_pc = exu->wfi_resume_pc;
     itf_signal_write_notify(exu->exu_state_out);
@@ -214,10 +214,10 @@ static void exu_proc_biu_rsp(exu_t *exu)
         if (exu->ldst_req_pend) {
             exu->ldst_req_pend = false;
             exu->ldst_opcode = 0;
-            exu->irq_defer = false;
+            exu->trap_defer = false;
         } else {
             exu->amo_stage = AMO_STAGE_IDLE;
-            exu->irq_defer = false;
+            exu->trap_defer = false;
         }
         return;
     }
@@ -226,6 +226,10 @@ static void exu_proc_biu_rsp(exu_t *exu)
         ldst_biu_rsp_proc(exu, &ldst_rsp);
     } else if (exu->cur_opcode == OPCODE_AMO) {
         amo_biu_rsp_proc(exu, &ldst_rsp);
+    } else if (exu->cur_opcode == OPCODE_MISC_MEM) {
+        exu->ldst_req_pend = false;
+        exu->trap_defer = false;
+        exu->irq_epc = exu->cur_pc + 4;
     } else {
         DBG_CHECK(0);
     }
@@ -250,7 +254,7 @@ void exu_construct(exu_t *exu, const char *parent, const char *name)
     dbg_vcd_add_sig("priv", DBG_SIG_TYPE_REG, 2, &exu->priv);
     dbg_vcd_add_sig("cur_pc", DBG_SIG_TYPE_REG, 32, &exu->cur_pc);
     dbg_vcd_add_sig("irq_epc", DBG_SIG_TYPE_REG, 32, &exu->irq_epc);
-    dbg_vcd_add_sig("irq_defer", DBG_SIG_TYPE_REG, 1, &exu->irq_defer);
+    dbg_vcd_add_sig("trap_defer", DBG_SIG_TYPE_REG, 1, &exu->trap_defer);
     dbg_vcd_add_sig("cur_opcode", DBG_SIG_TYPE_REG, 7, &exu->cur_opcode);
     dbg_vcd_add_sig("ldst_req_pend", DBG_SIG_TYPE_REG, 1, &exu->ldst_req_pend);
     dbg_vcd_add_sig("ldst_opcode", DBG_SIG_TYPE_REG, 7, &exu->ldst_opcode);
@@ -314,7 +318,7 @@ void exu_reset(exu_t *exu)
     exu->wfi = false;
     exu->wfi_resume_pc = 0;
     exu->fence_i_stage = FENCE_I_STAGE_IDLE;
-    exu->irq_defer = false;
+    exu->trap_defer = false;
     *exu->perf.exec_inst = 0;
     exu->priv = RV32G_PRIV_MACHINE;
     exu->cur_pc = 0;

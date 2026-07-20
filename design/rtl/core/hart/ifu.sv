@@ -133,8 +133,8 @@ module ifu #(
     wire rspq_expt = fch_rspq_rd_vld && fch_rspq_head.expt;
     wire rspq_non_expt_bad = fch_rspq_rd_vld && !fch_rspq_head.ok &&
         !fch_rspq_head.expt;
-    wire rspq_expt_fire = rspq_expt && !issue_vld && !ctrlq_rd_vld &&
-        !control_redirect && !frontend_flush;
+    wire rspq_expt_fire = rspq_expt && !exu_state_slv.pkt.trap_defer &&
+        !issue_vld && !ctrlq_rd_vld && !control_redirect && !frontend_flush;
     wire rspq_any_bad = fch_rspq_rd_vld &&
         (!fch_rspq_head.ok || fch_rspq_head.expt);
     wire rspq_bad = rspq_non_expt_bad || rspq_expt_fire;

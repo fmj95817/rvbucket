@@ -1,9 +1,12 @@
 `ifndef BTI_REQ_IF_SVH
 `define BTI_REQ_IF_SVH
 
-typedef enum logic [0:0] {
-    BTI_REQ_CMD_READ = 1'd0,
-    BTI_REQ_CMD_WRITE = 1'd1
+typedef enum logic [2:0] {
+    BTI_REQ_CMD_READ = 3'd0,
+    BTI_REQ_CMD_WRITE = 3'd1,
+    BTI_REQ_CMD_CBO_INVAL = 3'd2,
+    BTI_REQ_CMD_CBO_CLEAN = 3'd3,
+    BTI_REQ_CMD_CBO_FLUSH = 3'd4
 } bti_req_cmd_t;
 
 typedef enum logic [1:0] {

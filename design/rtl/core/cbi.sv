@@ -17,8 +17,14 @@ module cbi(
     axi4_r_if_t.mst   hart_d_axi4_r_mst,
     bti_req_if_t.mst  boot_rom_bti_req_mst,
     bti_rsp_if_t.slv  boot_rom_bti_rsp_slv,
-    apb_req_if_t.mst  cfg_apb_req_mst,
-    apb_rsp_if_t.slv  cfg_apb_rsp_slv,
+    apb_req_if_t.mst  peri_apb_req_mst,
+    apb_rsp_if_t.slv  peri_apb_rsp_slv,
+    apb_req_if_t.mst  io_apb_req_mst,
+    apb_rsp_if_t.slv  io_apb_rsp_slv,
+    apb_req_if_t.mst  aclint_apb_req_mst,
+    apb_rsp_if_t.slv  aclint_apb_rsp_slv,
+    apb_req_if_t.mst  plic_apb_req_mst,
+    apb_rsp_if_t.slv  plic_apb_rsp_slv,
     axi4_aw_if_t.mst  mm_i_axi4_aw_mst,
     axi4_w_if_t.mst   mm_i_axi4_w_mst,
     axi4_b_if_t.slv   mm_i_axi4_b_slv,
@@ -34,6 +40,8 @@ module cbi(
 );
     localparam I_GST_NUM = 2;
     localparam D_GST_NUM = 3;
+    localparam logic [31:0] BOOT_ROM_SIZE =
+        32'd1 << (`BOOT_ROM_WORD_AW + 2);
 
     axi4_aw_if_t i_aw[I_GST_NUM]();
     axi4_w_if_t i_w[I_GST_NUM]();
@@ -56,6 +64,8 @@ module cbi(
     bti_rsp_if_t boot_d_rsp();
     apb_req_if_t cfg_req();
     apb_rsp_if_t cfg_rsp();
+    apb_req_if_t cfg_gst_req[4]();
+    apb_rsp_if_t cfg_gst_rsp[4]();
 
     for (genvar i = 0; i < I_GST_NUM; i++) begin : gen_i_rsp_slice
         axi_rsp_reg_slice u_rsp_slice(
@@ -86,11 +96,11 @@ module cbi(
 `ifdef VERILATOR
         .GST_BASE   ('{32'h00000000, 32'h40000000, 32'h00000000,
             32'h00000000, 32'h00000000}),
-        .GST_SIZE   ('{32'h00000800, 32'h80000000, 32'h00000000,
+        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000, 32'h00000000,
             32'h00000000, 32'h00000000})
 `else
         .GST_BASE   ('{32'h00000000, 32'h40000000}),
-        .GST_SIZE   ('{32'h00000800, 32'h80000000})
+        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000})
 `endif
     ) u_i_axi_demux(
         .clk                (clk),
@@ -115,11 +125,11 @@ module cbi(
 `ifdef VERILATOR
         .GST_BASE   ('{32'h00000000, 32'h40000000, 32'h30000000,
             32'h00000000, 32'h00000000}),
-        .GST_SIZE   ('{32'h00000800, 32'h80000000, 32'h02000000,
+        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000, 32'h02000000,
             32'h00000000, 32'h00000000})
 `else
         .GST_BASE   ('{32'h00000000, 32'h40000000, 32'h30000000}),
-        .GST_SIZE   ('{32'h00000800, 32'h80000000, 32'h02000000})
+        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000, 32'h02000000})
 `endif
     ) u_d_axi_demux(
         .clk                (clk),
@@ -209,6 +219,17 @@ module cbi(
         .apb_rsp_slv  (cfg_rsp)
     );
 
+    apb_demux #(
+        .GST_NUM  (4),
+        .GST_BASE ('{`PERI_BASE, `IO_SUBSYS_BASE, `ACLINT_BASE, `PLIC_BASE}),
+        .GST_SIZE ('{`PERI_SIZE, `IO_SUBSYS_SIZE, `ACLINT_SIZE, `PLIC_SIZE})
+    ) u_cfg_apb_demux(
+        .host_apb_req_slv (cfg_req),
+        .host_apb_rsp_mst (cfg_rsp),
+        .gst_apb_req_msts (cfg_gst_req),
+        .gst_apb_rsp_slvs (cfg_gst_rsp)
+    );
+
     bti_mux2 u_boot_bti_mux(
         .clk           (clk),
         .rst_n         (rst_n),
@@ -220,10 +241,28 @@ module cbi(
         .gst_rsp_slv   (boot_rom_bti_rsp_slv)
     );
 
-    assign cfg_apb_req_mst.psel = cfg_req.psel;
-    assign cfg_apb_req_mst.penable = cfg_req.penable;
-    assign cfg_apb_req_mst.pkt = cfg_req.pkt;
-    assign cfg_rsp.pready = cfg_apb_rsp_slv.pready;
-    assign cfg_rsp.pkt = cfg_apb_rsp_slv.pkt;
+    assign peri_apb_req_mst.psel = cfg_gst_req[0].psel;
+    assign peri_apb_req_mst.penable = cfg_gst_req[0].penable;
+    assign peri_apb_req_mst.pkt = cfg_gst_req[0].pkt;
+    assign cfg_gst_rsp[0].pready = peri_apb_rsp_slv.pready;
+    assign cfg_gst_rsp[0].pkt = peri_apb_rsp_slv.pkt;
+
+    assign io_apb_req_mst.psel = cfg_gst_req[1].psel;
+    assign io_apb_req_mst.penable = cfg_gst_req[1].penable;
+    assign io_apb_req_mst.pkt = cfg_gst_req[1].pkt;
+    assign cfg_gst_rsp[1].pready = io_apb_rsp_slv.pready;
+    assign cfg_gst_rsp[1].pkt = io_apb_rsp_slv.pkt;
+
+    assign aclint_apb_req_mst.psel = cfg_gst_req[2].psel;
+    assign aclint_apb_req_mst.penable = cfg_gst_req[2].penable;
+    assign aclint_apb_req_mst.pkt = cfg_gst_req[2].pkt;
+    assign cfg_gst_rsp[2].pready = aclint_apb_rsp_slv.pready;
+    assign cfg_gst_rsp[2].pkt = aclint_apb_rsp_slv.pkt;
+
+    assign plic_apb_req_mst.psel = cfg_gst_req[3].psel;
+    assign plic_apb_req_mst.penable = cfg_gst_req[3].penable;
+    assign plic_apb_req_mst.pkt = cfg_gst_req[3].pkt;
+    assign cfg_gst_rsp[3].pready = plic_apb_rsp_slv.pready;
+    assign cfg_gst_rsp[3].pkt = plic_apb_rsp_slv.pkt;
 
 endmodule

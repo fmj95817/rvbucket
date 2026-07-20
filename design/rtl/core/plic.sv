@@ -6,10 +6,11 @@ module plic(
     ext_irq_if_t.slv   uart_irq_slv,
     ext_irq_if_t.slv   gpio_irq_slv,
     ext_irq_if_t.slv   gtimer_irq_slv,
+    ext_irq_if_t.slv   sdspi_irq_slv,
     ext_irq_if_t.mst   core_irq_mst
 );
     localparam SOURCE_NUM = 33;
-    localparam ACTIVE_SOURCE_NUM = 4;
+    localparam ACTIVE_SOURCE_NUM = 5;
     localparam BASE = 32'h31100000;
 
     logic [2:0] priorities[0:SOURCE_NUM-1];
@@ -123,6 +124,7 @@ module plic(
             if (uart_irq_slv.pkt.irq && !claimed[1]) pending[1] <= 1'b1;
             if (gpio_irq_slv.pkt.irq && !claimed[2]) pending[2] <= 1'b1;
             if (gtimer_irq_slv.pkt.irq && !claimed[3]) pending[3] <= 1'b1;
+            if (sdspi_irq_slv.pkt.irq && !claimed[4]) pending[4] <= 1'b1;
             if (rsp_hsk) rsp_pending <= 1'b0;
 
             if (req_hsk) begin

@@ -16,12 +16,13 @@ fi
 SDK_DIR="./sdk"
 CRT_DIR="${SDK_DIR}/crt"
 DRIVERS_DIR="${SDK_DIR}/drivers"
+DESC_INCLUDE_DIR="./desc/include"
 BARE_CASES_DIR="./cases/bare"
 USER_CASES_DIR="./cases/user"
 
 CROSS_PREFIX="riscv32-unknown-elf"
 CROSS_CC="${CROSS_PREFIX}-gcc"
-CROSS_CFLAGS=(-Wall -O2 -fPIC -march=rv32ima_zicsr -I${SDK_DIR})
+CROSS_CFLAGS=(-Wall -O2 -fPIC -march=rv32ima_zicsr -I${SDK_DIR} -I${DESC_INCLUDE_DIR})
 CROSS_LDFLAGS=(-nostartfiles)
 CROSS_LD="${CROSS_PREFIX}-gcc"
 CROSS_OBJCOPY="${CROSS_PREFIX}-objcopy"
@@ -48,7 +49,7 @@ LINUX_DTB_LOAD="0x44f00000"
 function build_tools {
     mkdir -p build/tools
     ${HOST_CC} -Wall -O3 -o ${BIN2X} tools/bin2x.c -lm
-    ${HOST_CC} -Wall -O3 -o ${MKBIN} tools/mkbin.c -lm
+    ${HOST_CC} -Wall -O3 -I${DESC_INCLUDE_DIR} -o ${MKBIN} tools/mkbin.c -lm
 }
 
 function build_opensbi_case {
@@ -171,13 +172,7 @@ function build_linux_rootfs {
     cp -a "${BUSYBOX_DIR}/_install"/* "${BUSYBOX_DIR}/rootfs/"
     build_user_tests
     cp -a "${LINUX_USER_BIN_DIR}"/* "${BUSYBOX_DIR}/rootfs/bin/"
-
-    echo "#!/bin/sh" > "${BUSYBOX_DIR}/rootfs/init"
-    echo "mount -t proc none /proc" >> "${BUSYBOX_DIR}/rootfs/init"
-    echo "mount -t sysfs none /sys" >> "${BUSYBOX_DIR}/rootfs/init"
-    echo 'echo -e "\nWelcome to RISC-V 32-bit Linux!\n"' >> "${BUSYBOX_DIR}/rootfs/init"
-    echo "exec /bin/sh" >> "${BUSYBOX_DIR}/rootfs/init"
-    chmod +x "${BUSYBOX_DIR}/rootfs/init"
+    ln -sfn /bin/init "${BUSYBOX_DIR}/rootfs/init"
 
     cd "${BUSYBOX_DIR}/rootfs"
     find . | cpio -H newc -o > ../rootfs.cpio
@@ -193,13 +188,16 @@ function build_user_tests {
     for case_dir in "${case_dirs[@]}"; do
         local case_name="$(basename "${case_dir}")"
         local out="${LINUX_USER_BIN_DIR}/${case_name}"
-        local scripts=($(find "${case_dir}" -maxdepth 1 -name '*.sh' -type f | sort))
+        local scripts=($(find "${case_dir}" -maxdepth 1 -type f \
+            \( -name '*.sh' -o -name "${case_name}" \) | sort))
         local srcs=($(find "${case_dir}" -name '*.c' | sort))
 
         if [ ${#scripts[@]} -ne 0 ]; then
             echo "  packing user/${case_name} ..."
             cp -a "${case_dir}"/* "${LINUX_USER_BIN_DIR}/"
-            chmod +x "${LINUX_USER_BIN_DIR}"/*.sh
+            for script in "${scripts[@]}"; do
+                chmod +x "${LINUX_USER_BIN_DIR}/$(basename "${script}")"
+            done
         elif [ ${#srcs[@]} -ne 0 ]; then
             echo "  compiling user/${case_name} ..."
             ${LINUX_CC} ${LINUX_USER_CFLAGS[@]} -o "${out}" "${srcs[@]}"
@@ -296,6 +294,7 @@ function build_sw_case {
     local hex="${output_dir}/${case_name}.hex"
 
     local src_dirs=("${case_dir}")
+    local extra_srcs=()
     local ld_flags=()
     local cc_flags=("${CROSS_CFLAGS[@]}")
     if [ "${profile}" = "sim" ]; then
@@ -306,9 +305,21 @@ function build_sw_case {
         ld_flags+=(-T "${CRT_DIR}/soc.lds")
     else
         ld_flags+=(-T "${lds}")
+        if [ "${case_name}" = "boot" ]; then
+            extra_srcs+=(
+                "${DRIVERS_DIR}/cache/cache.c"
+                "${DRIVERS_DIR}/gpio/gpio.c"
+                "${DRIVERS_DIR}/pcm/pcm.c"
+                "${DRIVERS_DIR}/sdspi/sdspi.c"
+                "${DRIVERS_DIR}/uart/uart.c"
+            )
+            cc_flags+=(-Os -ffunction-sections -fdata-sections)
+            ld_flags+=(-Wl,--gc-sections)
+        fi
     fi
 
-    local srcs=("$(find ${src_dirs[@]} -name *.S -o -name *.c)")
+    local srcs=($(find ${src_dirs[@]} -name *.S -o -name *.c))
+    srcs+=("${extra_srcs[@]}")
     local objs=()
     for src in ${srcs[@]}; do
         local obj="${output_dir}/$(basename ${src}).o"
@@ -351,6 +362,8 @@ function build_model {
         -pthread \
         -I./base/model \
         -I./design/model \
+        -I./sim/model/vip \
+        -I./desc/include \
         -o build/hw/model/sim_top \
         $(find base/model -name *.c) \
         $(find design/model -name *.c) \
@@ -406,12 +419,14 @@ function build_model_ut {
             -pthread \
             -I./base/model \
             -I./design/model \
+            -I./sim/model/vip \
             -I./ut/model \
             -o "${ut_bin}" \
             "${ut_src}" \
             ut/model/utils.c \
             $(find base/model -name *.c) \
-            $(find design/model -name *.c)
+            $(find design/model -name *.c) \
+            $(find sim/model/vip -name *.c)
     done
     echo "build_ut: ${#ut_srcs[@]} UT(s) built."
 }
@@ -448,6 +463,7 @@ function build_rtl_ut {
     local rtl_src=(
         $(find ${wd}/base/rtl -name '*.sv')
         $(find ${wd}/design/rtl -name '*.sv')
+        $(find ${wd}/sim/rtl/model -name '*.sv')
     )
 
     for ut_src in ${ut_srcs[@]}; do
@@ -497,9 +513,10 @@ function build_rtl {
         $(find ${wd}/design/rtl -name '*.sv') \
         ${wd}/sim/rtl/boot.sv \
         $(find ${wd}/sim/rtl/model -name '*.sv') \
+        $(find ${wd}/sim/rtl/vip -name '*.sv') \
         $(find ${wd}/sim/rtl/${simulator} -name '*.sv') \
     )
-    local rtl_common_c_src=($(find ${wd}/sim/rtl/common -name '*.c'))
+    local rtl_common_c_src=($(find ${wd}/sim/rtl/common -maxdepth 1 -name '*.c'))
 
     mkdir -p "build/hw/${simulator}"
     cd "build/hw/${simulator}";

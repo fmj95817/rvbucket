@@ -22,7 +22,8 @@
         "DDR_DQS_WIDTH": 4,
         "DDR_DM_WIDTH": 4,
         "DDR_BA_WIDTH": 3,
-        "FLASH_AW": 32
+        "FLASH_AW": 32,
+        "BOOT_FROM_SDCARD": 0
     },
     "clocks": [
         {
@@ -74,6 +75,7 @@
             "axi_addr_width": 30,
             "axi_data_width": 32,
             "axi_id_width": 8,
+            "ordering": "Strict",
             "cas_latency": 6,
             "cas_write_latency": 5,
             "timing": {
@@ -109,7 +111,12 @@
         "rst_n": ["PULLUP"],
         "uart_tx": ["PULLUP"],
         "uart_rx": ["PULLUP"],
-        "flash_ce_n": ["PULLUP"]
+        "flash_ce_n": ["PULLUP"],
+        "sd_cmd": ["PULLUP"],
+        "sd_data0": ["PULLUP"],
+        "sd_data1": ["PULLUP"],
+        "sd_data2": ["PULLUP"],
+        "sd_data3": ["PULLUP"]
     },
 
     "board": "fpga/xilinx/boards/k7ecor2p.json"

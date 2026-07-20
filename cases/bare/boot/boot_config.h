@@ -1,0 +1,20 @@
+#ifndef BOOT_CONFIG_H
+#define BOOT_CONFIG_H
+
+#include <stdint.h>
+
+#define BOOT_FLASH_BASE_ADDR       0x80000000u
+#define BOOT_FLASH_SIZE            0x02000000u
+#define BOOT_FIRMWARE_BASE_ADDR    0x40000000u
+#define BOOT_FIRMWARE_WINDOW_SIZE  0x00200000u
+#define BOOT_STACK_SIZE            0x00002000u
+#define BOOT_DDR_BASE_ADDR         0x40000000u
+#define BOOT_DDR_END_ADDR          0x50000000u
+#define BOOT_SD_STAGE_ADDR         0x4fff0000u
+#define BOOT_SD_STAGE_SIZE         0x00010000u
+
+#define BOOT_PROGRESS_GPIO_PIN     20u
+#define BOOT_SOURCE_GPIO_PIN       21u
+#define BOOT_PROGRESS_CHUNK_SIZE   0x00004000u
+
+#endif
