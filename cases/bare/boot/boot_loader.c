@@ -9,6 +9,7 @@ typedef struct boot_section {
     rvb_bin_section_t id;
     uint32_t load_addr;
     uint32_t size;
+    boot_load_result_t read_error;
 } boot_section_t;
 
 static int ranges_overlap(uint32_t addr, uint32_t size, uint32_t reserved_addr,
@@ -39,16 +40,19 @@ static uint32_t build_sections(const rvb_bin_header_t *header,
 {
     sections[RVB_BIN_SECTION_FIRMWARE] = (boot_section_t){
         RVB_BIN_SECTION_FIRMWARE, BOOT_FIRMWARE_BASE_ADDR,
-        header->firmware_size
+        header->firmware_size, BOOT_LOAD_ERR_FIRMWARE_READ
     };
     sections[RVB_BIN_SECTION_KERNEL] = (boot_section_t){
-        RVB_BIN_SECTION_KERNEL, header->kernel_load, header->kernel_size
+        RVB_BIN_SECTION_KERNEL, header->kernel_load, header->kernel_size,
+        BOOT_LOAD_ERR_KERNEL_READ
     };
     sections[RVB_BIN_SECTION_INITRD] = (boot_section_t){
-        RVB_BIN_SECTION_INITRD, header->initrd_load, header->initrd_size
+        RVB_BIN_SECTION_INITRD, header->initrd_load, header->initrd_size,
+        BOOT_LOAD_ERR_INITRD_READ
     };
     sections[RVB_BIN_SECTION_DTB] = (boot_section_t){
-        RVB_BIN_SECTION_DTB, header->dtb_load, header->dtb_size
+        RVB_BIN_SECTION_DTB, header->dtb_load, header->dtb_size,
+        BOOT_LOAD_ERR_DTB_READ
     };
     return header->type == RVB_BIN_TYPE_BARE ? 1u : RVB_BIN_SECTION_COUNT;
 }
@@ -81,8 +85,8 @@ static int header_valid(const rvb_bin_header_t *header, boot_media_t *media,
     return boot_media_range_valid(media, 0u, total);
 }
 
-static int load_section(boot_media_t *media, const boot_section_t *section,
-    uint32_t offset)
+static boot_load_result_t load_section(boot_media_t *media,
+    const boot_section_t *section, uint32_t offset)
 {
     uint32_t loaded = 0u;
 
@@ -93,8 +97,8 @@ static int load_section(boot_media_t *media, const boot_section_t *section,
             chunk = BOOT_PROGRESS_CHUNK_SIZE;
         }
         if (boot_media_read(media, offset + loaded,
-            (void *)(section->load_addr + loaded), chunk) != 0) {
-            return -1;
+            (void *)(section->load_addr + loaded), chunk) != BOOT_MEDIA_OK) {
+            return section->read_error;
         }
         loaded += chunk;
         if (boot_console_enabled()) {
@@ -104,28 +108,31 @@ static int load_section(boot_media_t *media, const boot_section_t *section,
     if (section->size != 0u) {
         cache_clean_range((const void *)section->load_addr, section->size);
     }
-    return 0;
+    return BOOT_LOAD_OK;
 }
 
-int boot_load_image(boot_media_t *media, rvb_bin_header_t *header)
+boot_load_result_t boot_load_image(boot_media_t *media,
+    rvb_bin_header_t *header)
 {
     boot_section_t sections[RVB_BIN_SECTION_COUNT];
     uint32_t offset = RVB_BIN_HEADER_SIZE;
     uint32_t section_count;
 
-    if (boot_media_read(media, 0u, header, sizeof(*header)) != 0) {
-        return -1;
+    if (boot_media_read(media, 0u, header, sizeof(*header)) != BOOT_MEDIA_OK) {
+        return BOOT_LOAD_ERR_HEADER_READ;
     }
     section_count = build_sections(header, sections);
     if (!header_valid(header, media, sections, section_count)) {
-        return -1;
+        return BOOT_LOAD_ERR_HEADER_INVALID;
     }
 
     for (uint32_t i = 0; i < section_count; i++) {
-        if (load_section(media, &sections[i], offset) != 0) {
-            return -1;
+        boot_load_result_t result = load_section(media, &sections[i], offset);
+
+        if (result != BOOT_LOAD_OK) {
+            return result;
         }
         offset += rvb_bin_align4(sections[i].size);
     }
-    return 0;
+    return BOOT_LOAD_OK;
 }

@@ -2,6 +2,7 @@
 `include "itf/axi4_ar_if.svh"
 `include "itf/axi4_b_if.svh"
 `include "itf/axi4_r_if.svh"
+`include "spec/core/cache.svh"
 `include "spec/core/core.svh"
 
 module l2 #(
@@ -59,6 +60,7 @@ module l2 #(
         S_WB_B,
         S_REFILL_AR,
         S_REFILL_R,
+        S_CMO_RSP,
         S_BYPASS_AR,
         S_BYPASS_R,
         S_BYPASS_AW,
@@ -76,6 +78,7 @@ module l2 #(
     logic req_port;
     logic req_write;
     logic req_cacheable;
+    logic req_cmo;
     logic [7:0] req_id;
     logic [31:0] req_addr;
     logic [7:0] req_len;
@@ -163,6 +166,8 @@ module l2 #(
             i_axi4_aw_slv.pkt.cache) != 4'h0) :
         ((idle_sel_port ? d_axi4_ar_slv.pkt.cache :
             i_axi4_ar_slv.pkt.cache) != 4'h0);
+    wire [31:0] idle_sel_ar_user = idle_sel_port ?
+        d_axi4_ar_slv.pkt.user : i_axi4_ar_slv.pkt.user;
 
     wire [SET_W-1:0] cur_set = req_addr[LINE_OFF_W +: SET_W];
     wire [TAG_W-1:0] cur_tag = req_addr[31 -: TAG_W];
@@ -339,6 +344,20 @@ module l2 #(
             meta_cs = 1'b1;
             meta_addr = cur_set;
         end
+        S_LOOKUP: begin
+            if (req_cmo && hit &&
+                (!`AXI4_USER_CMO_CLEANS(req_user) ||
+                    !way_meta_dirty[hit_way])) begin
+                meta_cs = 1'b1;
+                meta_wen = 1'b1;
+                meta_way = hit_way;
+                meta_wdata = {
+                    req_tag,
+                    !`AXI4_USER_CMO_INVALIDATES(req_user),
+                    1'b0
+                };
+            end
+        end
         S_WR_WRITE: begin
             meta_cs = 1'b1;
             meta_wen = 1'b1;
@@ -356,7 +375,17 @@ module l2 #(
             end
         end
         S_WB_B: begin
-            if (b_hsk && !axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
+            if (b_hsk && req_cmo &&
+                axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
+                meta_cs = 1'b1;
+                meta_wen = 1'b1;
+                meta_wdata = {
+                    req_tag,
+                    !`AXI4_USER_CMO_INVALIDATES(req_user),
+                    1'b0
+                };
+            end else if (b_hsk && !req_cmo &&
+                !axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
                 meta_cs = 1'b1;
                 meta_wen = 1'b1;
             end
@@ -408,6 +437,7 @@ module l2 #(
             req_port <= 1'b0;
             req_write <= 1'b0;
             req_cacheable <= 1'b0;
+            req_cmo <= 1'b0;
             req_id <= '0;
             req_addr <= '0;
             req_len <= '0;
@@ -458,6 +488,7 @@ module l2 #(
                     req_write <= idle_sel_write;
                     rr_d <= !idle_sel_port;
                     if (idle_sel_write) begin
+                        req_cmo <= 1'b0;
                         req_cacheable <= (idle_sel_port ?
                             d_axi4_aw_slv.pkt.cache : i_axi4_aw_slv.pkt.cache) != 4'h0;
                         req_id <= idle_sel_port ?
@@ -484,6 +515,7 @@ module l2 #(
                             d_axi4_aw_slv.pkt.cache : i_axi4_aw_slv.pkt.cache) == 4'h0 ?
                             S_BYPASS_AW : S_META_READ;
                     end else begin
+                        req_cmo <= `AXI4_USER_IS_CMO(idle_sel_ar_user);
                         req_cacheable <= (idle_sel_port ?
                             d_axi4_ar_slv.pkt.cache : i_axi4_ar_slv.pkt.cache) != 4'h0;
                         req_id <= idle_sel_port ?
@@ -519,7 +551,21 @@ module l2 #(
                 state <= S_LOOKUP;
             end
             S_LOOKUP: begin
-                if (hit) begin
+                if (req_cmo) begin
+                    if (!hit) begin
+                        state <= S_CMO_RSP;
+                    end else begin
+                        req_way <= hit_way;
+                        if (`AXI4_USER_CMO_CLEANS(req_user) &&
+                            way_meta_dirty[hit_way]) begin
+                            wb_line_addr <= req_line_addr;
+                            beat_idx <= '0;
+                            state <= S_WB_AW;
+                        end else begin
+                            state <= S_CMO_RSP;
+                        end
+                    end
+                end else if (hit) begin
                     req_way <= hit_way;
                     state <= req_write ? S_WR_WAIT_W : S_RD_READ;
                 end else begin
@@ -596,7 +642,14 @@ module l2 #(
             end
             S_WB_B: begin
                 if (b_hsk) begin
-                    if (axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
+                    if (req_cmo) begin
+                        if (axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
+                            state <= S_CMO_RSP;
+                        end else begin
+                            rsp_r_resp <= AXI4_R_RESP_SLVERR;
+                            state <= S_CMO_RSP;
+                        end
+                    end else if (axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
                         beat_idx <= '0;
                         state <= S_REFILL_AR;
                     end else begin
@@ -635,6 +688,10 @@ module l2 #(
                         beat_idx <= beat_idx + 1'b1;
                     end
                 end
+            end
+            S_CMO_RSP: begin
+                if (host_r_hsk)
+                    state <= S_IDLE;
             end
             S_BYPASS_AR: begin
                 if (ar_hsk)
@@ -679,10 +736,10 @@ module l2 #(
         (req_port && state == S_BYPASS_W && mem_axi4_w_mst.rdy);
 
     assign i_axi4_r_mst.vld =
-        (!req_port && state == S_RD_SEND) ||
+        (!req_port && (state == S_RD_SEND || state == S_CMO_RSP)) ||
         (!req_port && state == S_BYPASS_R && mem_axi4_r_slv.vld);
     assign d_axi4_r_mst.vld =
-        (req_port && state == S_RD_SEND) ||
+        (req_port && (state == S_RD_SEND || state == S_CMO_RSP)) ||
         (req_port && state == S_BYPASS_R && mem_axi4_r_slv.vld);
     assign i_axi4_r_mst.pkt.id =
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.id : req_id;
@@ -690,20 +747,24 @@ module l2 #(
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.id : req_id;
     assign i_axi4_r_mst.pkt.data =
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.data :
-            (rsp_r_resp == AXI4_R_RESP_OKAY ? data_rdata : 32'b0);
+            (state == S_CMO_RSP ? 32'b0 :
+                (rsp_r_resp == AXI4_R_RESP_OKAY ? data_rdata : 32'b0));
     assign d_axi4_r_mst.pkt.data =
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.data :
-            (rsp_r_resp == AXI4_R_RESP_OKAY ? data_rdata : 32'b0);
+            (state == S_CMO_RSP ? 32'b0 :
+                (rsp_r_resp == AXI4_R_RESP_OKAY ? data_rdata : 32'b0));
     assign i_axi4_r_mst.pkt.resp =
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.resp : rsp_r_resp;
     assign d_axi4_r_mst.pkt.resp =
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.resp : rsp_r_resp;
     assign i_axi4_r_mst.pkt.last =
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.last :
-            (req_last_beat || rsp_r_resp != AXI4_R_RESP_OKAY);
+            (state == S_CMO_RSP || req_last_beat ||
+                rsp_r_resp != AXI4_R_RESP_OKAY);
     assign d_axi4_r_mst.pkt.last =
         state == S_BYPASS_R ? mem_axi4_r_slv.pkt.last :
-            (req_last_beat || rsp_r_resp != AXI4_R_RESP_OKAY);
+            (state == S_CMO_RSP || req_last_beat ||
+                rsp_r_resp != AXI4_R_RESP_OKAY);
 
     assign i_axi4_b_mst.vld =
         (!req_port && state == S_WR_B) ||
@@ -772,8 +833,10 @@ module l2 #(
         (state == S_BYPASS_B &&
             (req_port ? d_axi4_b_mst.rdy : i_axi4_b_mst.rdy));
 
-    assign perf_mst.pkt.hit = state == S_LOOKUP && req_cacheable && hit;
-    assign perf_mst.pkt.miss = state == S_LOOKUP && req_cacheable && !hit;
+    assign perf_mst.pkt.hit = state == S_LOOKUP && req_cacheable &&
+        !req_cmo && hit;
+    assign perf_mst.pkt.miss = state == S_LOOKUP && req_cacheable &&
+        !req_cmo && !hit;
     assign perf_mst.pkt.bypass = idle_req_hsk && !idle_req_cacheable;
     assign perf_mst.pkt.writeback = state == S_WB_AW && aw_hsk;
     assign perf_mst.pkt.busy =
@@ -814,9 +877,12 @@ module l2 #(
                     assert ((idle_sel_port ? d_axi4_ar_slv.pkt.size :
                         i_axi4_ar_slv.pkt.size) == AXI4_AR_SIZE_B4)
                         else $fatal(1, "L2 cacheable AR size must be B4");
-                    assert ((idle_sel_port ? d_axi4_ar_slv.pkt.burst :
-                        i_axi4_ar_slv.pkt.burst) == AXI4_AR_BURST_INCR)
-                        else $fatal(1, "L2 cacheable AR burst must be INCR");
+                    if (!`AXI4_USER_IS_CMO(idle_sel_ar_user)) begin
+                        assert ((idle_sel_port ? d_axi4_ar_slv.pkt.burst :
+                            i_axi4_ar_slv.pkt.burst) == AXI4_AR_BURST_INCR)
+                            else $fatal(1,
+                                "L2 cacheable AR burst must be INCR");
+                    end
                     assert ((idle_sel_port ? d_axi4_ar_slv.pkt.addr[1:0] :
                         i_axi4_ar_slv.pkt.addr[1:0]) == 2'b00)
                         else $fatal(1, "L2 cacheable AR must be word aligned");

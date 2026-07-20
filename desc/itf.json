@@ -134,7 +134,7 @@
                 { "name": "priv", "width": 2 },
                 { "name": "pc", "width": 32 },
                 { "name": "irq_epc", "width": 32 },
-                { "name": "irq_defer", "width": 1 },
+                { "name": "trap_defer", "width": 1 },
                 { "name": "wfi", "width": 1 },
                 { "name": "wfi_resume_pc", "width": 32 }
             ]

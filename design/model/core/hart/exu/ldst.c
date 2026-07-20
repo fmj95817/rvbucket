@@ -242,7 +242,7 @@ void ldst_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
     exu->ldst_req_pend = true;
     exu->ldst_opcode = ex_req->inst.base.opcode;
     exu->ldst_pc = ex_req->pc;
-    exu->irq_defer = true;
+    exu->trap_defer = true;
 
     if (ex_req->inst.base.opcode == OPCODE_LOAD) {
         exu->ld_rd = ex_req->inst.i.rd;
@@ -263,5 +263,5 @@ void ldst_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
     exu->ldst_pc = 0;
     exu->ld_rd = 0;
     exu->ld_funct3 = 0;
-    exu->irq_defer = false;
+    exu->trap_defer = false;
 }

@@ -65,7 +65,7 @@ typedef struct exu {
     rv32g_priv_t priv;
     u32 cur_pc;
     u32 irq_epc;
-    bool irq_defer;
+    bool trap_defer;
 
     u32 cur_opcode;
 

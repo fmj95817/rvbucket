@@ -289,7 +289,7 @@ void amo_ex_req_proc(exu_t *exu, const ex_req_if_t *ex_req)
 
     exu->cur_opcode = OPCODE_AMO;
     exu->amo_funct375 = funct375;
-    exu->irq_defer = (exu->amo_stage != AMO_STAGE_IDLE);
+    exu->trap_defer = (exu->amo_stage != AMO_STAGE_IDLE);
 }
 
 void amo_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
@@ -326,8 +326,8 @@ void amo_biu_rsp_proc(exu_t *exu, const ldst_rsp_if_t *ldst_rsp)
     if (send_st_req) {
         itf_write(exu->ldst_req_mst, &st_req);
     }
-    exu->irq_defer = (exu->amo_stage != AMO_STAGE_IDLE);
-    if (!exu->irq_defer) {
+    exu->trap_defer = (exu->amo_stage != AMO_STAGE_IDLE);
+    if (!exu->trap_defer) {
         exu->irq_epc = exu->cur_pc + 4;
     }
 }

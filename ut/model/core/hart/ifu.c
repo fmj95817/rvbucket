@@ -203,7 +203,7 @@ static void tb_drain_all(ifu_tb_t *tb)
     tb->exu_state->priv = 3;
     tb->exu_state->pc = 0x80000000;
     tb->exu_state->irq_epc = 0x80000000;
-    tb->exu_state->irq_defer = false;
+    tb->exu_state->trap_defer = false;
     tb->exu_state->wfi = false;
     tb->exu_state->wfi_resume_pc = 0;
 }

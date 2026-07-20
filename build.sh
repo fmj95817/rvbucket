@@ -313,7 +313,7 @@ function build_sw_case {
                 "${DRIVERS_DIR}/sdspi/sdspi.c"
                 "${DRIVERS_DIR}/uart/uart.c"
             )
-            cc_flags+=(-ffunction-sections -fdata-sections)
+            cc_flags+=(-Os -ffunction-sections -fdata-sections)
             ld_flags+=(-Wl,--gc-sections)
         fi
     fi
@@ -463,6 +463,7 @@ function build_rtl_ut {
     local rtl_src=(
         $(find ${wd}/base/rtl -name '*.sv')
         $(find ${wd}/design/rtl -name '*.sv')
+        $(find ${wd}/sim/rtl/model -name '*.sv')
     )
 
     for ut_src in ${ut_srcs[@]}; do
@@ -512,9 +513,10 @@ function build_rtl {
         $(find ${wd}/design/rtl -name '*.sv') \
         ${wd}/sim/rtl/boot.sv \
         $(find ${wd}/sim/rtl/model -name '*.sv') \
+        $(find ${wd}/sim/rtl/vip -name '*.sv') \
         $(find ${wd}/sim/rtl/${simulator} -name '*.sv') \
     )
-    local rtl_common_c_src=($(find ${wd}/sim/rtl/common -name '*.c'))
+    local rtl_common_c_src=($(find ${wd}/sim/rtl/common -maxdepth 1 -name '*.c'))
 
     mkdir -p "build/hw/${simulator}"
     cd "build/hw/${simulator}";

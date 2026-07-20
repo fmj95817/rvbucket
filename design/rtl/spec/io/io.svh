@@ -1,0 +1,7 @@
+`ifndef SPEC_IO_IO_SVH
+`define SPEC_IO_IO_SVH
+
+`define IO_SDSPI_OFFSET 32'h00000000
+`define IO_SDSPI_SIZE   32'h00001000
+
+`endif

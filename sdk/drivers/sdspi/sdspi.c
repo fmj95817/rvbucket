@@ -8,6 +8,7 @@
 
 #define SDSPI_CMD0  0u
 #define SDSPI_CMD8  8u
+#define SDSPI_CMD12 12u
 #define SDSPI_CMD17 17u
 #define SDSPI_CMD18 18u
 #define SDSPI_CMD24 24u
@@ -139,8 +140,12 @@ int sdspi_init(sdspi_dev_t *dev, sdspi_wait_mode_t wait_mode)
 int sdspi_read_blocks_raw(sdspi_dev_t *dev, uint32_t lba, uint32_t count,
     void *buffer)
 {
-    return sdspi_transfer(dev, count == 1 ? SDSPI_CMD17 : SDSPI_CMD18,
+    int ret = sdspi_transfer(dev, count == 1 ? SDSPI_CMD17 : SDSPI_CMD18,
         lba, count, buffer, false);
+    if (ret == 0 && count > 1) {
+        ret = sdspi_cmd(dev, SDSPI_CMD12, 0, SDSPI_RSP_R1B);
+    }
+    return ret;
 }
 
 int sdspi_read_blocks(sdspi_dev_t *dev, uint32_t lba, uint32_t count,

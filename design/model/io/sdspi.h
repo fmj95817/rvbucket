@@ -34,6 +34,8 @@ typedef enum sdspi_dma_state {
     SDSPI_DMA_TO_MEM_AW,
     SDSPI_DMA_TO_MEM_W,
     SDSPI_DMA_TO_MEM_B,
+    SDSPI_DMA_TO_MEM_SYNC_AR,
+    SDSPI_DMA_TO_MEM_SYNC_R,
     SDSPI_DMA_FROM_MEM_AR,
     SDSPI_DMA_FROM_MEM_R
 } sdspi_dma_state_t;
@@ -85,6 +87,7 @@ typedef struct sdspi {
     sdspi_state_t state;
     sdspi_dma_state_t dma_state;
     u32 dma_offset;
+    u32 dma_sync_offset;
     u32 burst_bytes;
     u32 burst_beat;
     u32 burst_beats;

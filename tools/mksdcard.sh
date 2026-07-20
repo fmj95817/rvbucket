@@ -8,7 +8,7 @@ usage()
     exit 1
 }
 
-disk_size_mib=4096
+disk_size_mib=128
 if [[ "${1:-}" == "--size-mib" ]]; then
     [[ $# -ge 2 ]] || usage
     disk_size_mib="$2"

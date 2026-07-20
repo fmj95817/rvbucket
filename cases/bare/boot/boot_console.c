@@ -39,6 +39,15 @@ void boot_console_puts(const char *text)
     }
 }
 
+void boot_console_put_hex32(uint32_t value)
+{
+    static const char hex[] = "0123456789abcdef";
+
+    for (uint32_t shift = 32u; shift != 0u; shift -= 4u) {
+        uart_write(hex[(value >> (shift - 4u)) & 0xfu]);
+    }
+}
+
 void boot_console_progress(rvb_bin_section_t section, uint32_t loaded,
     uint32_t total)
 {

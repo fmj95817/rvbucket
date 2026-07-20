@@ -14,6 +14,16 @@ static boot_media_kind_t selected_media(void)
         BOOT_MEDIA_SDCARD : BOOT_MEDIA_QSPI;
 }
 
+static void print_boot_failure(boot_media_result_t open_result,
+    boot_load_result_t load_result)
+{
+    boot_console_puts("boot: open=");
+    boot_console_put_hex32((uint32_t)open_result);
+    boot_console_puts(" load=");
+    boot_console_put_hex32((uint32_t)load_result);
+    boot_console_puts("\n");
+}
+
 static void boot_jump(const rvb_bin_header_t *header)
     __attribute__((noreturn));
 
@@ -39,6 +49,8 @@ void boot_main(void)
     boot_media_t media;
     rvb_bin_header_t header;
     boot_media_kind_t kind;
+    boot_media_result_t open_result;
+    boot_load_result_t load_result = BOOT_LOAD_NOT_ATTEMPTED;
 
     boot_console_init();
     gpio_set_mode(BOOT_PROGRESS_GPIO_PIN, GPIO_MODE_IN);
@@ -50,8 +62,11 @@ void boot_main(void)
             "boot: SD\n" : "boot: QSPI\n");
         boot_console_puts(">>>>> starting rvbucket bootloader ...\n");
     }
-    if (boot_media_open(&media, kind) == 0 &&
-        boot_load_image(&media, &header) == 0) {
+    open_result = boot_media_open(&media, kind);
+    if (open_result == BOOT_MEDIA_OK) {
+        load_result = boot_load_image(&media, &header);
+    }
+    if (open_result == BOOT_MEDIA_OK && load_result == BOOT_LOAD_OK) {
         if (boot_console_enabled()) {
             boot_console_puts(header.type == RVB_BIN_TYPE_BARE ?
                 ">>>>> bootloader done, jumping to user program ...\n" :
@@ -61,6 +76,7 @@ void boot_main(void)
     }
 
     if (boot_console_enabled()) {
+        print_boot_failure(open_result, load_result);
         boot_console_puts(kind == BOOT_MEDIA_SDCARD ?
             "boot: no valid SD image\n" : "boot: no valid QSPI image\n");
     } else {

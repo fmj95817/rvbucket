@@ -78,7 +78,7 @@ DECL_MISC_HANDLER(cbo)
     itf_write(exu->ldst_req_mst, &ldst_req);
     exu->cur_opcode = OPCODE_MISC_MEM;
     exu->ldst_req_pend = true;
-    exu->irq_defer = true;
+    exu->trap_defer = true;
 
     DBG_LOG(LOG_TRACE, "%s (%s) # 0x%08x\n",
         name, gpr_name(rs1), ldst_req.addr);

@@ -25,6 +25,7 @@ module lsu(
     state_t state_nxt;
     logic [31:0] req_addr;
     logic req_st;
+    ldst_req_cmo_t req_cmo;
     ldst_req_size_t req_size;
     logic [31:0] req_data;
     logic [3:0] req_strobe;
@@ -86,7 +87,8 @@ module lsu(
         S_IDLE: begin
             if (exu_req_hsk) begin
                 capture_req = 1'b1;
-                if (translation_en &&
+                if (exu_ldst_req_slv.pkt.cmo == LDST_REQ_CMO_NONE &&
+                    translation_en &&
                     req_cross_page(exu_ldst_req_slv.pkt.addr,
                     exu_ldst_req_slv.pkt.size))
                     state_nxt = S_SPLIT_REQ;
@@ -133,6 +135,7 @@ module lsu(
             state <= S_IDLE;
             req_addr <= '0;
             req_st <= 1'b0;
+            req_cmo <= LDST_REQ_CMO_NONE;
             req_size <= LDST_REQ_SIZE_B1;
             req_data <= '0;
             req_strobe <= '0;
@@ -148,10 +151,12 @@ module lsu(
             if (capture_req) begin
                 req_addr <= exu_ldst_req_slv.pkt.addr;
                 req_st <= exu_ldst_req_slv.pkt.st;
+                req_cmo <= exu_ldst_req_slv.pkt.cmo;
                 req_size <= exu_ldst_req_slv.pkt.size;
                 req_data <= exu_ldst_req_slv.pkt.data;
                 req_strobe <= exu_ldst_req_slv.pkt.strobe;
-                split_req <= translation_en &&
+                split_req <= exu_ldst_req_slv.pkt.cmo == LDST_REQ_CMO_NONE &&
+                    translation_en &&
                     req_cross_page(exu_ldst_req_slv.pkt.addr,
                     exu_ldst_req_slv.pkt.size);
                 byte_num <= req_byte_num(exu_ldst_req_slv.pkt.size);
@@ -186,6 +191,8 @@ module lsu(
     assign hbi_ldst_req_mst.pkt.addr = split_req ?
         (req_addr + {29'b0, req_byte_idx}) : req_addr;
     assign hbi_ldst_req_mst.pkt.st = req_st;
+    assign hbi_ldst_req_mst.pkt.cmo = split_req ?
+        LDST_REQ_CMO_NONE : req_cmo;
     assign hbi_ldst_req_mst.pkt.size = split_req ?
         LDST_REQ_SIZE_B1 : req_size;
     assign hbi_ldst_req_mst.pkt.data = split_req ?
@@ -205,7 +212,8 @@ module lsu(
         hbi_ldst_req_mst.vld && !hbi_ldst_req_mst.rdy;
     assign perf_mst.pkt.direct_rsp_wait = state == S_DIRECT_RSP &&
         !hbi_ldst_rsp_slv.vld;
-    assign perf_mst.pkt.split_req = exu_req_hsk && translation_en &&
+    assign perf_mst.pkt.split_req = exu_req_hsk &&
+        exu_ldst_req_slv.pkt.cmo == LDST_REQ_CMO_NONE && translation_en &&
         req_cross_page(exu_ldst_req_slv.pkt.addr, exu_ldst_req_slv.pkt.size);
     assign perf_mst.pkt.split_req_bp = state == S_SPLIT_REQ &&
         hbi_ldst_req_mst.vld && !hbi_ldst_req_mst.rdy;

@@ -51,8 +51,8 @@ int boot_media_range_valid(const boot_media_t *media, uint32_t offset,
     return sectors <= media->sectors;
 }
 
-static int sd_read(boot_media_t *media, uint32_t offset, void *dst_ptr,
-    uint32_t size)
+static boot_media_result_t sd_read(boot_media_t *media, uint32_t offset,
+    void *dst_ptr, uint32_t size)
 {
     uint8_t *dst = dst_ptr;
 
@@ -70,51 +70,59 @@ static int sd_read(boot_media_t *media, uint32_t offset, void *dst_ptr,
             sdspi_read_blocks(&media->sdspi,
                 media->start_lba + (offset >> SD_SECTOR_SHIFT), blocks,
                 sd_stage) != 0) {
-            return -1;
+            return BOOT_MEDIA_ERR_IO;
         }
         copy_bytes(sd_stage + sector_offset, dst, copy_size);
         dst += copy_size;
         offset += copy_size;
         size -= copy_size;
     }
-    return 0;
+    return BOOT_MEDIA_OK;
 }
 
-int boot_media_read(boot_media_t *media, uint32_t offset, void *dst,
-    uint32_t size)
+boot_media_result_t boot_media_read(boot_media_t *media, uint32_t offset,
+    void *dst, uint32_t size)
 {
     if (!boot_media_range_valid(media, offset, size)) {
-        return -1;
+        return BOOT_MEDIA_ERR_RANGE;
     }
     if (media->kind == BOOT_MEDIA_QSPI) {
         copy_bytes((const uint8_t *)BOOT_FLASH_BASE_ADDR + offset, dst, size);
-        return 0;
+        return BOOT_MEDIA_OK;
     }
     return sd_read(media, offset, dst, size);
 }
 
-int boot_media_open(boot_media_t *media, boot_media_kind_t kind)
+boot_media_result_t boot_media_open(boot_media_t *media,
+    boot_media_kind_t kind)
 {
     media->kind = kind;
     media->start_lba = 0u;
+    media->sectors = 0u;
     if (kind == BOOT_MEDIA_QSPI) {
         media->sectors = BOOT_FLASH_SIZE / SD_SECTOR_SIZE;
-        return 0;
+        return BOOT_MEDIA_OK;
     }
 
-    if (sdspi_init(&media->sdspi, SDSPI_WAIT_POLL) != 0 ||
-        sdspi_read_blocks(&media->sdspi, 0u, 1u, sd_stage) != 0 ||
-        sd_stage[MBR_SIGNATURE_OFFSET] != 0x55u ||
-        sd_stage[MBR_SIGNATURE_OFFSET + 1u] != 0xaau ||
-        sd_stage[MBR_PART0_TYPE_OFFSET] != SD_PART_TYPE_RAW) {
-        return -1;
+    if (sdspi_init(&media->sdspi, SDSPI_WAIT_POLL) != 0) {
+        return BOOT_MEDIA_ERR_SD_INIT;
+    }
+    if (sdspi_read_blocks(&media->sdspi, 0u, 1u, sd_stage) != 0) {
+        return BOOT_MEDIA_ERR_MBR_READ;
+    }
+    if (sd_stage[MBR_SIGNATURE_OFFSET] != 0x55u ||
+        sd_stage[MBR_SIGNATURE_OFFSET + 1u] != 0xaau) {
+        return BOOT_MEDIA_ERR_MBR_SIGNATURE;
+    }
+    if (sd_stage[MBR_PART0_TYPE_OFFSET] != SD_PART_TYPE_RAW) {
+        return BOOT_MEDIA_ERR_PARTITION_TYPE;
     }
 
     media->start_lba = read_le32(sd_stage + MBR_PART0_LBA_OFFSET);
     media->sectors = read_le32(sd_stage + MBR_PART0_SECTORS_OFFSET);
     if (media->start_lba == 0u || media->sectors == 0u ||
         media->sectors > UINT32_MAX - media->start_lba) {
-        return -1;
+        return BOOT_MEDIA_ERR_PARTITION_RANGE;
     }
-    return 0;
+    return BOOT_MEDIA_OK;
 }

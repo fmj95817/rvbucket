@@ -52,7 +52,7 @@ typedef struct exu_state_if {
     u8 priv; // 2-bit
     u32 pc;
     u32 irq_epc;
-    bool irq_defer;
+    bool trap_defer;
     bool wfi;
     u32 wfi_resume_pc;
 } exu_state_if_t;
@@ -60,7 +60,7 @@ typedef struct exu_state_if {
 static inline void exu_state_if_to_str(const void *pkt, char *str)
 {
     const exu_state_if_t *exu_state = (const exu_state_if_t *)pkt;
-    sprintf(str, "%01x %08x %08x %01x %01x %08x\n", exu_state->priv, exu_state->pc, exu_state->irq_epc, exu_state->irq_defer, exu_state->wfi, exu_state->wfi_resume_pc);
+    sprintf(str, "%01x %08x %08x %01x %01x %08x\n", exu_state->priv, exu_state->pc, exu_state->irq_epc, exu_state->trap_defer, exu_state->wfi, exu_state->wfi_resume_pc);
 }
 
 static inline void exu_state_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
@@ -69,7 +69,7 @@ static inline void exu_state_if_reg_vcd(const void *pkt, dbg_sig_type_t type)
     dbg_vcd_add_sig("priv", type, 2, &exu_state->priv);
     dbg_vcd_add_sig("pc", type, 32, &exu_state->pc);
     dbg_vcd_add_sig("irq_epc", type, 32, &exu_state->irq_epc);
-    dbg_vcd_add_sig("irq_defer", type, 1, &exu_state->irq_defer);
+    dbg_vcd_add_sig("trap_defer", type, 1, &exu_state->trap_defer);
     dbg_vcd_add_sig("wfi", type, 1, &exu_state->wfi);
     dbg_vcd_add_sig("wfi_resume_pc", type, 32, &exu_state->wfi_resume_pc);
 }

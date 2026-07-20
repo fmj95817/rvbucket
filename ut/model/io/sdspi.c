@@ -36,6 +36,7 @@ typedef struct sdspi_tb {
     bool vip_clock_enable;
     bool saw_write_overlap;
     bool saw_read_overlap;
+    bool saw_dma_readback;
 
     ut_sbd_t sbd;
 } sdspi_tb_t;
@@ -103,6 +104,7 @@ static void tb_reset(sdspi_tb_t *tb)
     tb->vip_clock_enable = true;
     tb->saw_write_overlap = false;
     tb->saw_read_overlap = false;
+    tb->saw_dma_readback = false;
     APB_IF_RESET(tb, apb_);
     AXI4_IF_RESET(tb, dma_);
     itf_reset(&tb->cmd_itf);
@@ -132,6 +134,10 @@ static void tb_clock(sdspi_tb_t *tb)
         tb->dut.dma_offset != 0 &&
         tb->dut.protocol_offset < tb->dut.data_len) {
         tb->saw_read_overlap = true;
+    }
+    if (tb->dut.dma_state == SDSPI_DMA_TO_MEM_SYNC_AR ||
+        tb->dut.dma_state == SDSPI_DMA_TO_MEM_SYNC_R) {
+        tb->saw_dma_readback = true;
     }
     APB_IF_DBG_CLOCK(tb, apb_);
     AXI4_IF_DBG_CLOCK(tb, dma_);
@@ -322,6 +328,10 @@ TEST_CASE(sdspi_tb_t, block_read_write)
     REQUIRE(read_ok, "multi-block read crosses a 4 KiB AXI boundary");
     REQUIRE(tb->saw_read_overlap,
         "read data reaches AXI before the protocol transfer completes");
+    REQUIRE(tb->saw_dma_readback,
+        "read DMA completes only after the AXI visibility drain");
+    REQUIRE(tb->dut.dma_sync_offset == 2 * SDSPI_SECTOR_SIZE,
+        "visibility drain covers the complete DMA destination");
 
     u32 write_offset = 0x3000;
     for (u32 i = 0; i < SDSPI_SECTOR_SIZE; i++) {

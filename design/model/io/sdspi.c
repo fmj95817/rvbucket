@@ -106,6 +106,7 @@ static void sdspi_reset_regs(sdspi_t *sdspi)
     sdspi->state = SDSPI_STATE_IDLE;
     sdspi->dma_state = SDSPI_DMA_IDLE;
     sdspi->dma_offset = 0;
+    sdspi->dma_sync_offset = 0;
     sdspi->burst_bytes = 0;
     sdspi->burst_beat = 0;
     sdspi->burst_beats = 0;
@@ -221,6 +222,7 @@ static bool sdspi_start_cmd(sdspi_t *sdspi, u32 cmd_ctrl)
     sdspi->read_input_done = false;
     sdspi->protocol_offset = 0;
     sdspi->dma_offset = 0;
+    sdspi->dma_sync_offset = 0;
     sdspi->dma_state = SDSPI_DMA_IDLE;
     sdspi->state = write ? SDSPI_STATE_WRITE_PREFETCH :
         SDSPI_STATE_SEND_CMD;
@@ -386,11 +388,11 @@ static void sdspi_dma_error(sdspi_t *sdspi)
     sdspi_finish(sdspi, true, true, 0, SDSPI_DATA_STATUS_AXI_ERROR);
 }
 
-static void sdspi_begin_burst(sdspi_t *sdspi, bool to_mem, u32 max_beats)
+static void sdspi_prepare_burst(sdspi_t *sdspi, u32 offset, u32 max_beats)
 {
     DBG_CHECK(max_beats != 0);
-    u32 addr = sdspi->dma_addr + sdspi->dma_offset;
-    u32 remaining = sdspi->data_len - sdspi->dma_offset;
+    u32 addr = sdspi->dma_addr + offset;
+    u32 remaining = sdspi->data_len - offset;
     u32 boundary = 0x1000u - (addr & 0xfffu);
     u32 max_bytes = max_beats * sizeof(u32);
     sdspi->burst_bytes = remaining;
@@ -403,6 +405,11 @@ static void sdspi_begin_burst(sdspi_t *sdspi, bool to_mem, u32 max_beats)
     sdspi->burst_beats = sdspi->burst_bytes / sizeof(u32);
     sdspi->burst_beat = 0;
     DBG_CHECK(sdspi->burst_beats != 0);
+}
+
+static void sdspi_begin_burst(sdspi_t *sdspi, bool to_mem, u32 max_beats)
+{
+    sdspi_prepare_burst(sdspi, sdspi->dma_offset, max_beats);
     sdspi->dma_state = to_mem ? SDSPI_DMA_TO_MEM_AW :
         SDSPI_DMA_FROM_MEM_AR;
 }
@@ -458,10 +465,63 @@ static void sdspi_dma_to_mem(sdspi_t *sdspi)
             return;
         }
         sdspi->dma_offset += sdspi->burst_bytes;
-        sdspi->dma_state = SDSPI_DMA_IDLE;
-        if (sdspi->dma_offset == sdspi->data_len &&
-            sdspi->read_input_done) {
-            sdspi_finish(sdspi, true, false, 0, 0);
+        if (sdspi->dma_offset == sdspi->data_len) {
+            sdspi->dma_sync_offset = 0;
+            sdspi_prepare_burst(sdspi, 0, SDSPI_DMA_MAX_BURST_BEATS);
+            sdspi->dma_state = SDSPI_DMA_TO_MEM_SYNC_AR;
+        } else {
+            sdspi->dma_state = SDSPI_DMA_IDLE;
+        }
+        return;
+    }
+
+    if (sdspi->dma_state == SDSPI_DMA_TO_MEM_SYNC_AR) {
+        if (itf_fifo_full(sdspi->dma_axi4_ar_mst)) {
+            return;
+        }
+        axi4_ar_if_t ar = {
+            .id = SDSPI_DMA_ID,
+            .addr = sdspi->dma_addr + sdspi->dma_sync_offset,
+            .len = (u8)(sdspi->burst_beats - 1u),
+            .size = AXI4_AR_SIZE_B4,
+            .burst = AXI4_AR_BURST_INCR,
+            .lock = false,
+            .cache = 0,
+            .prot = 0,
+            .qos = 0,
+            .user = 0
+        };
+        itf_write(sdspi->dma_axi4_ar_mst, &ar);
+        sdspi->dma_state = SDSPI_DMA_TO_MEM_SYNC_R;
+        return;
+    }
+
+    if (sdspi->dma_state == SDSPI_DMA_TO_MEM_SYNC_R &&
+        !itf_fifo_empty(sdspi->dma_axi4_r_slv)) {
+        axi4_r_if_t r;
+        itf_read(sdspi->dma_axi4_r_slv, &r);
+        bool expected_last = sdspi->burst_beat + 1u == sdspi->burst_beats;
+        if (r.id != SDSPI_DMA_ID || r.resp != AXI4_R_RESP_OKAY ||
+            r.last != expected_last) {
+            sdspi_dma_error(sdspi);
+            return;
+        }
+        sdspi->burst_beat++;
+        if (r.last) {
+            sdspi->dma_sync_offset += sdspi->burst_bytes;
+            if (sdspi->dma_sync_offset == sdspi->data_len) {
+                if (!sdspi->read_input_done) {
+                    sdspi->reset_pending = true;
+                    sdspi_finish(sdspi, true, true, 0,
+                        SDSPI_DATA_STATUS_IO_ERROR);
+                } else {
+                    sdspi_finish(sdspi, true, false, 0, 0);
+                }
+            } else {
+                sdspi_prepare_burst(sdspi, sdspi->dma_sync_offset,
+                    SDSPI_DMA_MAX_BURST_BEATS);
+                sdspi->dma_state = SDSPI_DMA_TO_MEM_SYNC_AR;
+            }
         }
     }
 }
@@ -517,6 +577,8 @@ static void sdspi_dma_proc(sdspi_t *sdspi)
     case SDSPI_DMA_TO_MEM_AW:
     case SDSPI_DMA_TO_MEM_W:
     case SDSPI_DMA_TO_MEM_B:
+    case SDSPI_DMA_TO_MEM_SYNC_AR:
+    case SDSPI_DMA_TO_MEM_SYNC_R:
         sdspi_dma_to_mem(sdspi);
         break;
     case SDSPI_DMA_FROM_MEM_AR:

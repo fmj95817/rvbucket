@@ -192,11 +192,22 @@ static void trap_handle_exception(trap_t *trap, const hart_expt_if_t *expt)
 
 static bool trap_proc_exception(trap_t *trap)
 {
-    itf_t *sources[] = { trap->ex_expt_slv, trap->fch_expt_slv, trap->ldst_expt_slv };
-    for (u32 i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
-        if (!itf_fifo_empty(sources[i])) {
+    itf_t *current_sources[] = { trap->ex_expt_slv, trap->ldst_expt_slv };
+    for (u32 i = 0; i < sizeof(current_sources) / sizeof(current_sources[0]); i++) {
+        itf_t *source = current_sources[i];
+        if (!itf_fifo_empty(source)) {
             hart_expt_if_t expt;
-            itf_read(sources[i], &expt);
+            itf_read(source, &expt);
+            trap_handle_exception(trap, &expt);
+            return true;
+        }
+    }
+
+    if (!trap->exu_state_i->trap_defer) {
+        itf_t *source = trap->fch_expt_slv;
+        if (!itf_fifo_empty(source)) {
+            hart_expt_if_t expt;
+            itf_read(source, &expt);
             trap_handle_exception(trap, &expt);
             return true;
         }
@@ -239,7 +250,7 @@ static int trap_pending_irq(const trap_t *trap)
 
 static void trap_proc_interrupt(trap_t *trap)
 {
-    if (trap->exu_state_i->irq_defer) {
+    if (trap->exu_state_i->trap_defer) {
         return;
     }
 

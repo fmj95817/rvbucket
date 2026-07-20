@@ -69,7 +69,7 @@ while IFS='|' read -r name expected_status expected_output; do
         continue
     fi
 
-    output=$(/bin/"$name" 2>&1)
+    output=$(/bin/"$name" </dev/null 2>&1)
     status=$?
 
     if [ "$status" -ne "$expected_status" ]; then

@@ -36,6 +36,7 @@ module hbi #(
     typedef struct packed {
         logic [31:0] addr;
         logic st;
+        ldst_req_cmo_t cmo;
         ldst_req_size_t size;
         logic [31:0] data;
         logic [3:0] strobe;
@@ -311,8 +312,19 @@ module hbi #(
 
     assign d_bti_req_mst.vld = ldst_fifo_rd_vld && d_ost_alloc_rdy;
     assign d_bti_req_mst.pkt.trans_id = `LDST_TRANS_ID;
-    assign d_bti_req_mst.pkt.cmd = ldst_req_pkt.st ?
-        BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
+    always_comb begin
+        unique case (ldst_req_pkt.cmo)
+        LDST_REQ_CMO_INVAL:
+            d_bti_req_mst.pkt.cmd = BTI_REQ_CMD_CBO_INVAL;
+        LDST_REQ_CMO_CLEAN:
+            d_bti_req_mst.pkt.cmd = BTI_REQ_CMD_CBO_CLEAN;
+        LDST_REQ_CMO_FLUSH:
+            d_bti_req_mst.pkt.cmd = BTI_REQ_CMD_CBO_FLUSH;
+        default:
+            d_bti_req_mst.pkt.cmd = ldst_req_pkt.st ?
+                BTI_REQ_CMD_WRITE : BTI_REQ_CMD_READ;
+        endcase
+    end
     assign d_bti_req_mst.pkt.addr = ldst_req_pkt.addr;
     assign d_bti_req_mst.pkt.size = bti_req_size_t'(ldst_req_pkt.size);
     assign d_bti_req_mst.pkt.data = ldst_req_pkt.data;

@@ -43,7 +43,8 @@ module trap(
         (exu_state_slv.pkt.priv == 2'b01 && csr_trap_state_slv.pkt.mstatus[1]);
     wire m_irq_valid = m_irq_enabled && |m_pending;
     wire s_irq_valid = s_irq_enabled && |s_pending;
-    wire irq_valid = !exu_state_slv.pkt.irq_defer && (m_irq_valid || s_irq_valid);
+    wire irq_valid = !exu_state_slv.pkt.trap_defer &&
+        (m_irq_valid || s_irq_valid);
     wire wfi_wakeup = state == IDLE && exu_state_slv.pkt.wfi && |pending && !irq_valid;
     wire irq_to_s = !m_irq_valid && s_irq_valid;
     wire [31:0] selected_pending = m_irq_valid ? m_pending : s_pending;
@@ -62,13 +63,13 @@ module trap(
     wire event_mret = ex_expt_slv.vld && ex_expt_slv.pkt.expt_type == HART_EXPT_TYPE_MRET;
     wire event_sret = ex_expt_slv.vld && ex_expt_slv.pkt.expt_type == HART_EXPT_TYPE_SRET;
     wire [1:0] expt_priv = ex_expt_slv.vld ? ex_expt_slv.pkt.priv :
-        (fch_expt_slv.vld ? fch_expt_slv.pkt.priv : ldst_expt_slv.pkt.priv);
+        (ldst_expt_slv.vld ? ldst_expt_slv.pkt.priv : fch_expt_slv.pkt.priv);
     wire [4:0] expt_cause = ex_expt_slv.vld ? ex_expt_slv.pkt.cause :
-        (fch_expt_slv.vld ? fch_expt_slv.pkt.cause : ldst_expt_slv.pkt.cause);
+        (ldst_expt_slv.vld ? ldst_expt_slv.pkt.cause : fch_expt_slv.pkt.cause);
     wire [31:0] expt_pc = ex_expt_slv.vld ? ex_expt_slv.pkt.pc :
-        (fch_expt_slv.vld ? fch_expt_slv.pkt.pc : ldst_expt_slv.pkt.pc);
+        (ldst_expt_slv.vld ? ldst_expt_slv.pkt.pc : fch_expt_slv.pkt.pc);
     wire [31:0] expt_tval = ex_expt_slv.vld ? ex_expt_slv.pkt.tval :
-        (fch_expt_slv.vld ? fch_expt_slv.pkt.tval : ldst_expt_slv.pkt.tval);
+        (ldst_expt_slv.vld ? ldst_expt_slv.pkt.tval : fch_expt_slv.pkt.tval);
     wire event_is_interrupt = irq_valid && !expt_valid;
     wire [1:0] event_source_priv = event_is_interrupt ?
         exu_state_slv.pkt.priv : expt_priv;

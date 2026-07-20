@@ -3,6 +3,7 @@
 `include "itf/axi4_ar_if.svh"
 `include "itf/axi4_b_if.svh"
 `include "itf/axi4_r_if.svh"
+`include "spec/core/cache.svh"
 `include "spec/core/hart.svh"
 
 module l1 #(
@@ -112,6 +113,13 @@ module l1 #(
         M_SERVE_USE,
         M_SERVE_WRITE,
         M_COMPLETE,
+        M_CMO_LOOKUP,
+        M_CMO_WB_AW,
+        M_CMO_WB_READ,
+        M_CMO_WB_SEND,
+        M_CMO_WB_B,
+        M_CMO_L2_AR,
+        M_CMO_L2_R,
         M_FLUSH_CHECK,
         M_FLUSH_WB_AW,
         M_FLUSH_WB_READ,
@@ -243,6 +251,7 @@ module l1 #(
     logic accept_req;
     logic flush_active;
     logic flush_start;
+    logic cmo_active;
     logic fast_port_blocked;
     logic hit_pipe_retire;
     logic hit_pipe_write_blocked;
@@ -324,6 +333,8 @@ module l1 #(
     wire front_is_bypass = lookup_rd.bypass;
     wire front_is_write = stg_req.cmd == BTI_REQ_CMD_WRITE;
     wire front_is_read = stg_req.cmd == BTI_REQ_CMD_READ;
+    wire front_is_cmo = req_is_cmo(stg_req.cmd);
+    wire front_is_normal = front_is_read || front_is_write;
     wire front_hit_current = lookup_rd.hit &&
         valid_ram[lookup_rd.way][lookup_rd.set] &&
         tag_ram[lookup_rd.way][lookup_rd.set] == lookup_rd.tag;
@@ -338,6 +349,33 @@ module l1 #(
         BTI_REQ_SIZE_B1: req_byte_num = 3'd1;
         BTI_REQ_SIZE_B2: req_byte_num = 3'd2;
         default: req_byte_num = 3'd4;
+        endcase
+    endfunction
+
+    function automatic logic req_is_cmo(input bti_req_cmd_t cmd);
+        req_is_cmo = cmd == BTI_REQ_CMD_CBO_INVAL ||
+            cmd == BTI_REQ_CMD_CBO_CLEAN ||
+            cmd == BTI_REQ_CMD_CBO_FLUSH;
+    endfunction
+
+    function automatic logic cmo_cleans(input bti_req_cmd_t cmd);
+        cmo_cleans = cmd == BTI_REQ_CMD_CBO_CLEAN ||
+            cmd == BTI_REQ_CMD_CBO_FLUSH;
+    endfunction
+
+    function automatic logic cmo_invalidates(input bti_req_cmd_t cmd);
+        cmo_invalidates = cmd == BTI_REQ_CMD_CBO_INVAL ||
+            cmd == BTI_REQ_CMD_CBO_FLUSH;
+    endfunction
+
+    function automatic logic [31:0] cmo_axi_user(input bti_req_cmd_t cmd);
+        unique case (cmd)
+        BTI_REQ_CMD_CBO_INVAL:
+            cmo_axi_user = `AXI4_USER_MAKE_CMO(`AXI4_USER_CMO_OP_INVAL);
+        BTI_REQ_CMD_CBO_CLEAN:
+            cmo_axi_user = `AXI4_USER_MAKE_CMO(`AXI4_USER_CMO_OP_CLEAN);
+        default:
+            cmo_axi_user = `AXI4_USER_MAKE_CMO(`AXI4_USER_CMO_OP_FLUSH);
         endcase
     endfunction
 
@@ -572,7 +610,8 @@ module l1 #(
 
         lookup_wr.req = req_pipe_req;
         lookup_wr.bypass = bypass_addr(req_pipe_req.addr);
-        lookup_wr.hit = !lookup_wr.bypass &&
+        lookup_wr.hit = (req_pipe_req.cmd == BTI_REQ_CMD_READ ||
+            req_pipe_req.cmd == BTI_REQ_CMD_WRITE) && !lookup_wr.bypass &&
             !(RO && req_pipe_req.cmd == BTI_REQ_CMD_WRITE) &&
             !lookup_cross_line && lookup_hit && !lookup_active_conflict;
         lookup_wr.way = lookup_way;
@@ -652,9 +691,11 @@ module l1 #(
     end
 
     assign flush_active = miss_state >= M_FLUSH_CHECK;
+    assign cmo_active = miss_state >= M_CMO_LOOKUP &&
+        miss_state <= M_CMO_L2_R;
     assign flush_start = miss_state == M_IDLE && flush_pending && ost_empty &&
         !hit_pipe_vld && !wr_issue_vld;
-    assign fast_port_blocked = flush_active ||
+    assign fast_port_blocked = flush_active || cmo_active ||
         miss_state == M_WB_READ || miss_state == M_WB_SEND ||
         miss_state == M_SERVE_READ || miss_state == M_SERVE_USE ||
         miss_state == M_SERVE_WRITE ||
@@ -668,10 +709,12 @@ module l1 #(
         bypass_r_ctx = ost_slot_ctx[bypass_r_slot];
         bypass_b_ctx = ost_slot_ctx[bypass_b_slot];
         bypass_r_candidate = miss_state != M_REFILL_R &&
+            miss_state != M_CMO_L2_R &&
             mem_axi4_r_slv.vld && ost_slot_vld[bypass_r_slot] &&
             bypass_r_ctx.kind == OST_BYPASS_RD &&
             bypass_r_ctx.rsp_idx < bypass_r_ctx.req_idx;
         bypass_b_candidate = miss_state != M_WB_B &&
+            miss_state != M_CMO_WB_B &&
             miss_state != M_FLUSH_WB_B && mem_axi4_b_slv.vld &&
             ost_slot_vld[bypass_b_slot] &&
             bypass_b_ctx.kind == OST_BYPASS_WR &&
@@ -699,7 +742,13 @@ module l1 #(
 
         if (stg_rd_vld && !flush_pending && !flush_active &&
             ost_alloc_rdy) begin
-            if (front_is_bypass) begin
+            if (front_is_cmo) begin
+                if (miss_state == M_IDLE && ost_empty && !hit_pipe_vld &&
+                    !wr_issue_vld && !has_bypass_ost)
+                    accept_active = 1'b1;
+            end else if (!front_is_normal) begin
+                accept_ro_error = 1'b1;
+            end else if (front_is_bypass) begin
                 if (RO && front_is_write) begin
                     accept_ro_error = 1'b1;
                 end else if (front_is_read) begin
@@ -759,9 +808,10 @@ module l1 #(
         mem_axi4_r_slv.rdy = 1'b0;
         mem_axi4_b_slv.rdy = 1'b0;
 
-        if (miss_state == M_REFILL_R) begin
+        if (miss_state == M_REFILL_R || miss_state == M_CMO_L2_R) begin
             mem_axi4_r_slv.rdy = 1'b1;
         end else if (miss_state == M_WB_B ||
+            miss_state == M_CMO_WB_B ||
             miss_state == M_FLUSH_WB_B) begin
             mem_axi4_b_slv.rdy = 1'b1;
         end else if (miss_complete_req) begin
@@ -856,7 +906,7 @@ module l1 #(
         read_word_idx = beat_idx;
         read_addr = stg_req.addr;
 
-        if (miss_state == M_WB_READ) begin
+        if (miss_state == M_WB_READ || miss_state == M_CMO_WB_READ) begin
             read_launch = 1'b1;
             read_all_ways = 1'b0;
             read_word_mode = 1'b1;
@@ -995,7 +1045,15 @@ module l1 #(
         mem_axi4_ar_mst.pkt.size = AXI4_AR_SIZE_B4;
         mem_axi4_ar_mst.pkt.burst = AXI4_AR_BURST_INCR;
 
-        if (miss_state == M_REFILL_AR) begin
+        if (miss_state == M_CMO_L2_AR) begin
+            mem_axi4_ar_mst.vld = 1'b1;
+            mem_axi4_ar_mst.pkt.id = 8'b0;
+            mem_axi4_ar_mst.pkt.addr = active_line_addr;
+            mem_axi4_ar_mst.pkt.len = 8'b0;
+            mem_axi4_ar_mst.pkt.burst = AXI4_AR_BURST_FIXED;
+            mem_axi4_ar_mst.pkt.cache = 4'hf;
+            mem_axi4_ar_mst.pkt.user = cmo_axi_user(active_req.cmd);
+        end else if (miss_state == M_REFILL_AR) begin
             mem_axi4_ar_mst.vld = 1'b1;
             mem_axi4_ar_mst.pkt.id = 8'b0;
             mem_axi4_ar_mst.pkt.addr = active_line_addr;
@@ -1020,7 +1078,8 @@ module l1 #(
         mem_axi4_w_mst.vld = 1'b0;
         mem_axi4_w_mst.pkt = '0;
 
-        if (miss_state == M_WB_AW || miss_state == M_FLUSH_WB_AW) begin
+        if (miss_state == M_WB_AW || miss_state == M_CMO_WB_AW ||
+            miss_state == M_FLUSH_WB_AW) begin
             mem_axi4_aw_mst.vld = 1'b1;
             mem_axi4_aw_mst.pkt.id = 8'b0;
             mem_axi4_aw_mst.pkt.addr = wb_line_addr;
@@ -1032,7 +1091,8 @@ module l1 #(
             mem_axi4_aw_mst.pkt.addr = bypass_beat_addr(wr_issue_ctx);
         end
 
-        if (miss_state == M_WB_SEND || miss_state == M_FLUSH_WB_SEND) begin
+        if (miss_state == M_WB_SEND || miss_state == M_CMO_WB_SEND ||
+            miss_state == M_FLUSH_WB_SEND) begin
             mem_axi4_w_mst.vld = 1'b1;
             mem_axi4_w_mst.pkt.data = wb_read_data;
             mem_axi4_w_mst.pkt.strb = 4'hf;
@@ -1148,7 +1208,8 @@ module l1 #(
                     active_rsp_data <= '0;
                     active_ok <= 1'b1;
                     active_precounted_hit <= 1'b0;
-                    miss_state <= M_LOOKUP;
+                    miss_state <= req_is_cmo(stg_req.cmd) ?
+                        M_CMO_LOOKUP : M_LOOKUP;
                 end
             end
             M_LOOKUP: begin
@@ -1264,6 +1325,69 @@ module l1 #(
                     miss_state <= M_IDLE;
                 end
             end
+            M_CMO_LOOKUP: begin
+                active_set <= active_cur_set;
+                active_tag <= active_cur_tag;
+                active_line_addr <= active_cur_line;
+                if (active_hit) begin
+                    active_way <= active_hit_way;
+                    active_way_vld <= 1'b1;
+                    if (cmo_cleans(active_req.cmd) &&
+                        dirty_ram[active_hit_way][active_cur_set] && !RO) begin
+                        wb_line_addr <= active_cur_line;
+                        beat_idx <= '0;
+                        miss_state <= M_CMO_WB_AW;
+                    end else begin
+                        dirty_ram[active_hit_way][active_cur_set] <= 1'b0;
+                        if (cmo_invalidates(active_req.cmd))
+                            valid_ram[active_hit_way][active_cur_set] <= 1'b0;
+                        miss_state <= M_CMO_L2_AR;
+                    end
+                end else begin
+                    active_way_vld <= 1'b0;
+                    miss_state <= M_CMO_L2_AR;
+                end
+            end
+            M_CMO_WB_AW: begin
+                if (aw_hsk) begin
+                    beat_idx <= '0;
+                    miss_state <= M_CMO_WB_READ;
+                end
+            end
+            M_CMO_WB_READ: miss_state <= M_CMO_WB_SEND;
+            M_CMO_WB_SEND: begin
+                if (w_hsk) begin
+                    if (beat_idx == LAST_BEAT) begin
+                        miss_state <= M_CMO_WB_B;
+                    end else begin
+                        beat_idx <= beat_idx + 1'b1;
+                        miss_state <= M_CMO_WB_READ;
+                    end
+                end
+            end
+            M_CMO_WB_B: begin
+                if (b_hsk) begin
+                    if (axi_resp_ok(mem_axi4_b_slv.pkt.resp)) begin
+                        dirty_ram[active_way][active_set] <= 1'b0;
+                        if (cmo_invalidates(active_req.cmd))
+                            valid_ram[active_way][active_set] <= 1'b0;
+                        miss_state <= M_CMO_L2_AR;
+                    end else begin
+                        active_ok <= 1'b0;
+                        miss_state <= M_COMPLETE;
+                    end
+                end
+            end
+            M_CMO_L2_AR: begin
+                if (ar_hsk)
+                    miss_state <= M_CMO_L2_R;
+            end
+            M_CMO_L2_R: begin
+                if (r_hsk) begin
+                    active_ok <= axi_resp_ok(mem_axi4_r_slv.pkt.resp);
+                    miss_state <= M_COMPLETE;
+                end
+            end
             M_FLUSH_CHECK: begin
                 if (valid_ram[flush_way][flush_set] &&
                     dirty_ram[flush_way][flush_set] && !RO) begin
@@ -1331,7 +1455,8 @@ module l1 #(
     assign perf_mst.pkt.bypass = accept_bypass_rd || accept_bypass_wr ||
         (accept_ro_error && front_is_bypass);
     assign perf_mst.pkt.writeback = aw_hsk &&
-        (miss_state == M_WB_AW || miss_state == M_FLUSH_WB_AW);
+        (miss_state == M_WB_AW || miss_state == M_CMO_WB_AW ||
+            miss_state == M_FLUSH_WB_AW);
     assign perf_mst.pkt.stg_full = host_bti_req_slv.vld &&
         !host_bti_req_slv.rdy;
     assign perf_mst.pkt.ost_full = stg_rd_vld && !flush_active && ost_full;
@@ -1342,12 +1467,14 @@ module l1 #(
 
 `ifndef SYNTHESIS
     always_ff @(posedge clk) begin
-        if (rst_n && mem_axi4_r_slv.vld && miss_state != M_REFILL_R) begin
+        if (rst_n && mem_axi4_r_slv.vld && miss_state != M_REFILL_R &&
+            miss_state != M_CMO_L2_R) begin
             assert (mem_axi4_r_slv.pkt.id < 8'(OST_DEPTH))
                 else $fatal(1, "L1 AXI R id outside OST range");
         end
         if (rst_n && mem_axi4_b_slv.vld &&
-            miss_state != M_WB_B && miss_state != M_FLUSH_WB_B) begin
+            miss_state != M_WB_B && miss_state != M_CMO_WB_B &&
+            miss_state != M_FLUSH_WB_B) begin
             assert (mem_axi4_b_slv.pkt.id < 8'(OST_DEPTH))
                 else $fatal(1, "L1 AXI B id outside OST range");
         end

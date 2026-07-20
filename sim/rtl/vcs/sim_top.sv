@@ -17,8 +17,14 @@ module sim_top;
     logic uart_stdin_tx_busy;
     int uart_stdin_ret;
     logic fast_load_linux_en = 1'b0;
+    logic boot_prog_en = 1'b0;
+    logic boot_sdcard_en = 1'b0;
+    logic boot_source_valid = 1'b0;
     logic program_valid = 1'b0;
+    logic sd_image_valid = 1'b0;
+    string boot_source;
     string program_path;
+    string sd_image_path;
 
     localparam logic [31:0] DDR_BASE = 32'h40000000;
     localparam logic [31:0] BIN_TYPE_LINUX = 32'd1;
@@ -41,8 +47,11 @@ module sim_top;
     axi4_b_if_t flash_axi4_b();
     axi4_ar_if_t flash_axi4_ar();
     axi4_r_if_t flash_axi4_r();
+    sdspi_cmd_if_t sdspi_cmd();
+    sdspi_data_if_t sdspi_data();
 
-    assign gpio_in = 24'b0;
+    assign gpio_in = (boot_prog_en ? 24'h100000 : 24'b0) |
+        (boot_sdcard_en ? 24'h200000 : 24'b0);
 
     clk_rst u_clk_rst(
         .clk     (clk),
@@ -66,7 +75,14 @@ module sim_top;
         .flash_axi4_w_mst  (flash_axi4_w),
         .flash_axi4_b_slv  (flash_axi4_b),
         .flash_axi4_ar_mst (flash_axi4_ar),
-        .flash_axi4_r_slv  (flash_axi4_r)
+        .flash_axi4_r_slv  (flash_axi4_r),
+        .sdspi_cmd_mst     (sdspi_cmd),
+        .sdspi_data_slv    (sdspi_data)
+    );
+
+    sdspi_vip u_sdspi_vip(
+        .clk(clk), .rst_n(rst_n), .cmd_slv(sdspi_cmd),
+        .data_mst(sdspi_data)
     );
 
     axi_ddr #(
@@ -266,7 +282,22 @@ module sim_top;
 
     always @(negedge rst_n) begin
         fast_load_linux_en = $test$plusargs("fast_load_linux");
+        boot_prog_en = $test$plusargs("boot_prog");
+        boot_source_valid = $value$plusargs("boot=%s", boot_source);
+        if (!boot_source_valid)
+            boot_source = "qspi";
+        boot_sdcard_en = boot_source == "sdcard";
         program_valid = $value$plusargs("program=%s", program_path);
+        sd_image_valid = $value$plusargs("sd_image=%s", sd_image_path);
+
+        if (boot_source != "qspi" && boot_source != "sdcard")
+            $fatal(1, "invalid boot source '%s'", boot_source);
+        if (!boot_sdcard_en && !program_valid)
+            $fatal(1, "qspi boot requires +program=<image.hex>");
+        if (boot_sdcard_en && !sd_image_valid)
+            $fatal(1, "sdcard boot requires +sd_image=<image>");
+        if (fast_load_linux_en && boot_sdcard_en)
+            $fatal(1, "+fast_load_linux requires qspi boot");
 
         if (program_valid)
             load_program_image(program_path);
