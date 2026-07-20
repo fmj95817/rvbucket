@@ -71,6 +71,22 @@ module axi_demux #(
     } axi4_r_pkt_t;
 
     typedef struct packed {
+        axi4_r_pkt_t pkt;
+        logic free_vld;
+        logic [OST_SLOT_W-1:0] free_slot;
+        logic from_gst;
+        logic [GST_IDX_W-1:0] gst_idx;
+    } axi4_r_meta_t;
+
+    typedef struct packed {
+        axi4_b_pkt_t pkt;
+        logic free_vld;
+        logic [OST_SLOT_W-1:0] free_slot;
+        logic from_gst;
+        logic [GST_IDX_W-1:0] gst_idx;
+    } axi4_b_meta_t;
+
+    typedef struct packed {
         logic [GST_IDX_W-1:0] gst_idx;
     } rd_ctx_t;
 
@@ -91,6 +107,8 @@ module axi_demux #(
     localparam int W_DW = $bits(axi4_w_pkt_t);
     localparam int B_DW = $bits(axi4_b_pkt_t);
     localparam int R_DW = $bits(axi4_r_pkt_t);
+    localparam int B_META_DW = $bits(axi4_b_meta_t);
+    localparam int R_META_DW = $bits(axi4_r_meta_t);
     localparam int RD_CTX_DW = $bits(rd_ctx_t);
     localparam int WR_DATA_CTX_DW = $bits(wr_data_ctx_t);
     localparam int WR_RSP_CTX_DW = $bits(wr_rsp_ctx_t);
@@ -180,8 +198,12 @@ module axi_demux #(
     logic [OST_SLOT_W-1:0] rd_free_slot;
     logic wr_free_vld;
     logic [OST_SLOT_W-1:0] wr_free_slot;
+    logic rd_free_pending;
+    logic wr_free_pending;
     logic decerr_b_sel_vld;
     logic [OST_SLOT_W-1:0] decerr_b_sel_slot;
+    logic [OST_DEPTH-1:0] decerr_b_candidate_pre_vld;
+    logic [OST_DEPTH-1:0] decerr_b_candidate_q_vld;
     logic [OST_DEPTH-1:0] decerr_b_candidate_vld;
     logic [OST_DEPTH-1:0] decerr_b_older_same_key[OST_DEPTH];
     logic ar_decerr_sel;
@@ -189,19 +211,33 @@ module axi_demux #(
     logic pre_host_r_vld;
     logic pre_host_r_rdy;
     axi4_r_pkt_t pre_host_r_pkt;
-    logic [R_DW-1:0] pre_host_r_data;
-    logic [R_DW-1:0] host_r_data;
+    axi4_r_meta_t pre_host_r_meta;
+    logic host_r_slice_rdy;
+    logic rd_rsp_stage_vld;
+    axi4_r_meta_t rd_rsp_stage_meta;
+    logic [R_META_DW-1:0] rd_rsp_stage_data;
+    axi4_r_meta_t host_r_meta;
+    logic [R_META_DW-1:0] pre_host_r_data;
+    logic [R_META_DW-1:0] host_r_data;
     logic pre_host_b_vld;
     logic pre_host_b_rdy;
     axi4_b_pkt_t pre_host_b_pkt;
-    logic [B_DW-1:0] pre_host_b_data;
-    logic [B_DW-1:0] host_b_data;
+    axi4_b_meta_t pre_host_b_meta;
+    logic host_b_slice_rdy;
+    logic wr_rsp_stage_vld;
+    axi4_b_meta_t wr_rsp_stage_meta;
+    logic [B_META_DW-1:0] wr_rsp_stage_data;
+    axi4_b_meta_t host_b_meta;
+    logic [B_META_DW-1:0] pre_host_b_data;
+    logic [B_META_DW-1:0] host_b_data;
 
     wire ar_hsk = ar_fifo_rd_vld && ar_fifo_rd_rdy;
     wire aw_hsk = aw_fifo_rd_vld && aw_fifo_rd_rdy;
     wire w_hsk = w_fifo_rd_vld && w_fifo_rd_rdy;
-    wire rd_rsp_hsk = pre_host_r_vld && pre_host_r_rdy;
-    wire wr_rsp_hsk = pre_host_b_vld && pre_host_b_rdy;
+    wire ar_issue_hsk = ar_fifo_rd_vld && ar_hit &&
+        rd_ost_alloc_rdy && gst_ar_rdy[ar_gst_idx];
+    wire rd_rsp_hsk = rd_rsp_stage_vld && host_r_slice_rdy;
+    wire wr_rsp_hsk = wr_rsp_stage_vld && host_b_slice_rdy;
 
     function automatic logic addr_in_range(
         input logic [31:0] addr,
@@ -281,7 +317,7 @@ module axi_demux #(
     ) u_rd_ost(
         .clk          (clk),
         .rst_n        (rst_n),
-        .alloc_vld    (ar_hsk && ar_hit),
+        .alloc_vld    (ar_issue_hsk),
         .alloc_rdy    (rd_ost_alloc_rdy),
         .alloc_key    (ar_pkt.id),
         .alloc_ctx    (rd_ctx_t'{gst_idx:ar_gst_idx}),
@@ -371,19 +407,31 @@ module axi_demux #(
                 wr_rsp_ost_older_flat[j * OST_DEPTH + i];
         end
 
-        assign decerr_b_candidate_vld[i] = wr_rsp_ost_slot_vld[i] &&
+        assign decerr_b_candidate_pre_vld[i] = wr_rsp_ost_slot_vld[i] &&
             wr_rsp_slot_ctx[i].decerr &&
             wr_rsp_slot_ctx[i].decerr_valid &&
             !(|decerr_b_older_same_key[i]);
+        assign decerr_b_candidate_vld[i] = decerr_b_candidate_q_vld[i] &&
+            wr_rsp_ost_slot_vld[i] &&
+            !(wr_free_pending && wr_rsp_stage_meta.free_slot == OST_SLOT_W'(i));
     end
+
+    assign rd_free_pending = rd_rsp_stage_vld &&
+        rd_rsp_stage_meta.free_vld;
+    assign wr_free_pending = wr_rsp_stage_vld &&
+        wr_rsp_stage_meta.free_vld;
 
     for (genvar i = 0; i < GST_NUM; i++) begin : gen_rsp_match
         for (genvar s = 0; s < OST_DEPTH; s++) begin : gen_candidate
             assign rd_rsp_match_candidate[i][s] = rd_ost_slot_vld[s] &&
-                rd_slot_key[s] == gst_r_id[i];
+                rd_slot_key[s] == gst_r_id[i] &&
+                !(rd_free_pending &&
+                rd_rsp_stage_meta.free_slot == OST_SLOT_W'(s));
             assign wr_rsp_match_candidate[i][s] =
                 wr_rsp_ost_slot_vld[s] &&
-                wr_rsp_slot_key[s] == gst_b_id[i];
+                wr_rsp_slot_key[s] == gst_b_id[i] &&
+                !(wr_free_pending &&
+                wr_rsp_stage_meta.free_slot == OST_SLOT_W'(s));
         end
 
         oldest_select #(
@@ -475,7 +523,7 @@ module axi_demux #(
         ar_issue_vld = '0;
         aw_issue_vld = '0;
         w_issue_vld = '0;
-        if (ar_fifo_rd_vld && ar_hit && rd_ost_alloc_rdy)
+        if (ar_issue_hsk)
             ar_issue_vld[ar_gst_idx] = 1'b1;
         if (aw_fifo_rd_vld && wr_data_ost_alloc_rdy &&
             wr_rsp_ost_alloc_rdy && aw_hit)
@@ -587,19 +635,20 @@ module axi_demux #(
         if (!rst_n) begin
             rd_rsp_rr_idx <= '0;
             wr_rsp_rr_idx <= '0;
+            decerr_b_candidate_q_vld <= '0;
         end else begin
-            if (rd_rsp_hsk && rd_rsp_sel_vld)
-                rd_rsp_rr_idx <= rd_rsp_sel_idx + 1'b1;
-            if (wr_rsp_hsk && !b_sel_decerr && wr_rsp_sel_vld)
-                wr_rsp_rr_idx <= wr_rsp_sel_idx + 1'b1;
+            decerr_b_candidate_q_vld <= decerr_b_candidate_pre_vld;
+            if (rd_rsp_hsk && rd_rsp_stage_meta.from_gst)
+                rd_rsp_rr_idx <= rd_rsp_stage_meta.gst_idx + 1'b1;
+            if (wr_rsp_hsk && wr_rsp_stage_meta.from_gst)
+                wr_rsp_rr_idx <= wr_rsp_stage_meta.gst_idx + 1'b1;
         end
     end
 
-    assign rd_free_vld = rd_rsp_hsk && rd_rsp_sel_vld &&
-        gst_r_last[rd_rsp_sel_idx];
-    assign rd_free_slot = rd_rsp_sel_slot;
-    assign wr_free_vld = wr_rsp_hsk;
-    assign wr_free_slot = b_sel_decerr ? decerr_b_sel_slot : wr_rsp_sel_slot;
+    assign rd_free_vld = rd_rsp_hsk && rd_rsp_stage_meta.free_vld;
+    assign rd_free_slot = rd_rsp_stage_meta.free_slot;
+    assign wr_free_vld = wr_rsp_hsk && wr_rsp_stage_meta.free_vld;
+    assign wr_free_slot = wr_rsp_stage_meta.free_slot;
 
     assign pre_host_r_vld = rd_rsp_sel_vld || ar_decerr_sel;
     assign pre_host_r_pkt.id = ar_decerr_sel ? ar_pkt.id :
@@ -610,46 +659,92 @@ module axi_demux #(
         gst_r_resp[rd_rsp_sel_idx];
     assign pre_host_r_pkt.last = ar_decerr_sel ? 1'b1 :
         gst_r_last[rd_rsp_sel_idx];
-    assign pre_host_r_data = pre_host_r_pkt;
+    assign pre_host_r_meta.pkt = pre_host_r_pkt;
+    assign pre_host_r_meta.free_vld = rd_rsp_sel_vld &&
+        gst_r_last[rd_rsp_sel_idx];
+    assign pre_host_r_meta.free_slot = rd_rsp_sel_slot;
+    assign pre_host_r_meta.from_gst = rd_rsp_sel_vld;
+    assign pre_host_r_meta.gst_idx = rd_rsp_sel_idx;
+    assign pre_host_r_data = pre_host_r_meta;
+    assign pre_host_r_rdy = !rd_rsp_stage_vld;
+    assign rd_rsp_stage_data = rd_rsp_stage_meta;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rd_rsp_stage_vld <= 1'b0;
+            rd_rsp_stage_meta <= '0;
+        end else begin
+            if (rd_rsp_hsk)
+                rd_rsp_stage_vld <= 1'b0;
+            if (!rd_rsp_stage_vld && pre_host_r_vld) begin
+                rd_rsp_stage_vld <= 1'b1;
+                rd_rsp_stage_meta <= pre_host_r_meta;
+            end
+        end
+    end
 
     vld_reg_slice #(
-        .DW (R_DW)
+        .DW (R_META_DW)
     ) u_host_r_reg_slice(
         .clk      (clk),
         .rst_n    (rst_n),
         .clear    (1'b0),
-        .src_vld  (pre_host_r_vld),
-        .src_rdy  (pre_host_r_rdy),
-        .src_data (pre_host_r_data),
+        .src_vld  (rd_rsp_stage_vld),
+        .src_rdy  (host_r_slice_rdy),
+        .src_data (rd_rsp_stage_data),
         .dst_vld  (host_axi4_r_mst.vld),
         .dst_rdy  (host_axi4_r_mst.rdy),
         .dst_data (host_r_data)
     );
 
-    assign host_axi4_r_mst.pkt = axi4_r_pkt_t'(host_r_data);
+    assign host_r_meta = axi4_r_meta_t'(host_r_data);
+    assign host_axi4_r_mst.pkt = host_r_meta.pkt;
 
     assign pre_host_b_vld = b_sel_decerr || wr_rsp_sel_vld;
     assign pre_host_b_pkt.id = b_sel_decerr ?
         wr_rsp_slot_key[decerr_b_sel_slot] : gst_b_id[wr_rsp_sel_idx];
     assign pre_host_b_pkt.resp = b_sel_decerr ? AXI4_B_RESP_DECERR :
         gst_b_resp[wr_rsp_sel_idx];
-    assign pre_host_b_data = pre_host_b_pkt;
+    assign pre_host_b_meta.pkt = pre_host_b_pkt;
+    assign pre_host_b_meta.free_vld = pre_host_b_vld;
+    assign pre_host_b_meta.free_slot = b_sel_decerr ?
+        decerr_b_sel_slot : wr_rsp_sel_slot;
+    assign pre_host_b_meta.from_gst = wr_rsp_sel_vld && !b_sel_decerr;
+    assign pre_host_b_meta.gst_idx = wr_rsp_sel_idx;
+    assign pre_host_b_data = pre_host_b_meta;
+    assign pre_host_b_rdy = !wr_rsp_stage_vld;
+    assign wr_rsp_stage_data = wr_rsp_stage_meta;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            wr_rsp_stage_vld <= 1'b0;
+            wr_rsp_stage_meta <= '0;
+        end else begin
+            if (wr_rsp_hsk)
+                wr_rsp_stage_vld <= 1'b0;
+            if (!wr_rsp_stage_vld && pre_host_b_vld) begin
+                wr_rsp_stage_vld <= 1'b1;
+                wr_rsp_stage_meta <= pre_host_b_meta;
+            end
+        end
+    end
 
     vld_reg_slice #(
-        .DW (B_DW)
+        .DW (B_META_DW)
     ) u_host_b_reg_slice(
         .clk      (clk),
         .rst_n    (rst_n),
         .clear    (1'b0),
-        .src_vld  (pre_host_b_vld),
-        .src_rdy  (pre_host_b_rdy),
-        .src_data (pre_host_b_data),
+        .src_vld  (wr_rsp_stage_vld),
+        .src_rdy  (host_b_slice_rdy),
+        .src_data (wr_rsp_stage_data),
         .dst_vld  (host_axi4_b_mst.vld),
         .dst_rdy  (host_axi4_b_mst.rdy),
         .dst_data (host_b_data)
     );
 
-    assign host_axi4_b_mst.pkt = axi4_b_pkt_t'(host_b_data);
+    assign host_b_meta = axi4_b_meta_t'(host_b_data);
+    assign host_axi4_b_mst.pkt = host_b_meta.pkt;
 
     wire unused = (|rd_ost_alloc_slot) | (|wr_data_ost_alloc_slot) |
         (|wr_data_head_slot);

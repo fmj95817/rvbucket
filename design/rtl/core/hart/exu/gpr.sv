@@ -45,8 +45,8 @@ module exu_gpr_rw_mux #(
     logic [`RV_XLEN-1:0]   w_data_arr[CHN_NUM];
 
     for (genvar i = 0; i < CHN_NUM; i++) begin
-        assign gpr_src_slvs[i].rd1 = {`RV_XLEN{chn_sels[i]}} & gpr_dst_mst.rd1;
-        assign gpr_src_slvs[i].rd2 = {`RV_XLEN{chn_sels[i]}} & gpr_dst_mst.rd2;
+        assign gpr_src_slvs[i].rd1 = gpr_dst_mst.rd1;
+        assign gpr_src_slvs[i].rd2 = gpr_dst_mst.rd2;
 
         assign r1_addr_arr[i] = gpr_src_slvs[i].ra1;
         assign r2_addr_arr[i] = gpr_src_slvs[i].ra2;
