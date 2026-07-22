@@ -27,6 +27,7 @@ module bti_mux2 #(
     } bti_rsp_pkt_t;
 
     localparam int BTI_REQ_DW = $bits(bti_req_pkt_t);
+    localparam int BTI_RSP_DW = $bits(bti_rsp_pkt_t);
     localparam int OST_SLOT_W = $clog2(OST_DEPTH);
 
     logic rr;
@@ -45,7 +46,11 @@ module bti_mux2 #(
     logic select1;
     bti_req_pkt_t issue_req_pkt;
     logic req_hsk;
-    wire gst_rsp_hsk = gst_rsp_slv.vld && gst_rsp_slv.rdy;
+    logic gst_rsp_vld;
+    logic gst_rsp_rdy;
+    logic [BTI_RSP_DW-1:0] gst_rsp_data;
+    bti_rsp_pkt_t gst_rsp_pkt;
+    wire gst_rsp_hsk = gst_rsp_vld && gst_rsp_rdy;
     wire host_rsp_hsk = (host0_rsp_mst.vld && host0_rsp_mst.rdy) ||
         (host1_rsp_mst.vld && host1_rsp_mst.rdy);
 
@@ -102,6 +107,22 @@ module bti_mux2 #(
         .full    ()
     );
 
+    vld_reg_slice #(
+        .DW (BTI_RSP_DW)
+    ) u_gst_rsp_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (1'b0),
+        .src_vld  (gst_rsp_slv.vld),
+        .src_rdy  (gst_rsp_slv.rdy),
+        .src_data (gst_rsp_slv.pkt),
+        .dst_vld  (gst_rsp_vld),
+        .dst_rdy  (gst_rsp_rdy),
+        .dst_data (gst_rsp_data)
+    );
+
+    assign gst_rsp_pkt = bti_rsp_pkt_t'(gst_rsp_data);
+
     ostk #(
         .KEY_W (16),
         .DW    (1),
@@ -114,7 +135,7 @@ module bti_mux2 #(
         .alloc_key   (issue_req_pkt.trans_id),
         .alloc_ctx   (select1),
         .alloc_slot  (ost_alloc_slot),
-        .lookup_key  (gst_rsp_slv.pkt.trans_id),
+        .lookup_key  (gst_rsp_pkt.trans_id),
         .lookup_vld  (ost_lookup_vld),
         .lookup_slot (ost_lookup_slot),
         .lookup_ctx  (ost_lookup_ctx),
@@ -145,7 +166,7 @@ module bti_mux2 #(
             if (gst_rsp_hsk) begin
                 rsp_vld_q <= 1'b1;
                 rsp_ctx_q <= ost_lookup_ctx;
-                rsp_pkt_q <= gst_rsp_slv.pkt;
+                rsp_pkt_q <= gst_rsp_pkt;
             end
         end
     end
@@ -156,7 +177,7 @@ module bti_mux2 #(
             assert (ost_alloc_rdy)
                 else $fatal(1, "bti_mux2 request issued without OST space");
         end
-        if (rst_n && gst_rsp_slv.vld) begin
+        if (rst_n && gst_rsp_vld) begin
             assert (ost_lookup_vld)
                 else $fatal(1, "bti_mux2 response has no OST entry");
         end
@@ -173,7 +194,7 @@ module bti_mux2 #(
     assign host0_rsp_mst.pkt = rsp_pkt_q;
     assign host1_rsp_mst.vld = rsp_vld_q && rsp_ctx_q;
     assign host1_rsp_mst.pkt = rsp_pkt_q;
-    assign gst_rsp_slv.rdy = !rsp_vld_q && ost_lookup_vld;
+    assign gst_rsp_rdy = !rsp_vld_q && ost_lookup_vld;
 
     wire unused_ost = ost_empty | ost_full | (|ost_alloc_slot);
 endmodule

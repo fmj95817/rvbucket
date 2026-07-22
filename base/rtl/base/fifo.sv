@@ -28,7 +28,6 @@ module fifo #(
     wire ptr_lsb_same = rptr[PTR_W-1:0] == wptr[PTR_W-1:0];
     wire wr_hsk;
     wire rd_hsk;
-    wire pass_hsk;
 
 `ifndef SYNTHESIS
     initial begin
@@ -45,13 +44,12 @@ module fifo #(
     assign wr_rdy = !full;
     assign wr_hsk = wr_vld & wr_rdy;
     assign rd_hsk = rd_vld & rd_rdy;
-    assign pass_hsk = FALL_THROUGH && empty && wr_hsk && rd_hsk;
     assign widx = wptr[PTR_W-1:0];
     assign rd_data = !empty ? mem[rptr[PTR_W-1:0]] :
         (FALL_THROUGH ? wr_data : {DW{1'b0}});
 
     always_ff @(posedge clk) begin
-        if (wr_hsk && !pass_hsk)
+        if (wr_hsk)
             mem[widx] <= wr_data;
     end
 
@@ -63,9 +61,9 @@ module fifo #(
             rptr <= '0;
             wptr <= '0;
         end else begin
-            if (wr_hsk && !pass_hsk)
+            if (wr_hsk)
                 wptr <= wptr + 1'b1;
-            if (rd_hsk && !pass_hsk)
+            if (rd_hsk)
                 rptr <= rptr + 1'b1;
         end
     end

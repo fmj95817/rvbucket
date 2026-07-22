@@ -16,10 +16,8 @@ module peri(
     ext_irq_if_t.mst    gtimer_irq_mst
 );
     localparam int PERI_APB_GST_NUM = 4;
-    localparam logic [31:0] PERI_APB_GST_BASE[PERI_APB_GST_NUM] = '{
-        32'h30000000, 32'h30001000, 32'h30002000, 32'h30003000};
-    localparam logic [31:0] PERI_APB_GST_SIZE[PERI_APB_GST_NUM] = '{
-        32'h00000010, 32'h00000010, 32'h00000010, 32'h00001000};
+    localparam logic [31:0] PERI_APB_GST_BASE[PERI_APB_GST_NUM] = '{32'h30000000, 32'h30001000, 32'h30002000, 32'h30003000};
+    localparam logic [31:0] PERI_APB_GST_SIZE[PERI_APB_GST_NUM] = '{32'h00000010, 32'h00000010, 32'h00000010, 32'h00001000};
 
     apb_req_if_t gst_req[4]();
     apb_rsp_if_t gst_rsp[4]();

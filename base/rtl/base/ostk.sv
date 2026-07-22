@@ -35,16 +35,18 @@ module ostk #(
     logic [DEPTH-1:0] vld_mem;
     logic [KEY_W-1:0] key_mem[DEPTH];
     logic [DW-1:0] ctx_mem[DEPTH];
+    logic [PTR_W-1:0] free_mem[DEPTH];
     // older_mem[i][j] is set while valid slot i was allocated before slot j.
     logic [DEPTH-1:0] older_mem[DEPTH];
-    logic [PTR_W-1:0] wptr;
+    logic [PTR_W:0] free_rptr;
+    logic [PTR_W:0] free_wptr;
     logic [PTR_W:0] entry_count;
 
-    logic alloc_found;
     logic [DEPTH-1:0] lookup_candidate;
     logic [DEPTH-1:0] lookup_head;
-    logic [PTR_W-1:0] wptr_next;
     logic [PTR_W:0] entry_count_next;
+    logic free_empty;
+    logic free_full;
 
     wire alloc_hsk = alloc_vld & alloc_rdy;
     wire free_hsk = free_vld;
@@ -58,18 +60,10 @@ module ostk #(
     end
 `endif
 
-    always_comb begin
-        alloc_found = 1'b0;
-        alloc_slot = wptr;
-        for (int i = 0; i < DEPTH; i++) begin
-            logic [PTR_W-1:0] idx;
-            idx = wptr + PTR_W'(i);
-            if (!alloc_found && !vld_mem[idx]) begin
-                alloc_found = 1'b1;
-                alloc_slot = idx;
-            end
-        end
-    end
+    assign free_empty = free_rptr == free_wptr;
+    assign free_full = free_rptr[PTR_W] != free_wptr[PTR_W] &&
+        free_rptr[PTR_W-1:0] == free_wptr[PTR_W-1:0];
+    assign alloc_slot = free_mem[free_rptr[PTR_W-1:0]];
 
     for (genvar i = 0; i < DEPTH; i++) begin : gen_lookup_candidate
         logic [DEPTH-1:0] older_candidate;
@@ -98,10 +92,6 @@ module ostk #(
     end
 
     always_comb begin
-        wptr_next = wptr;
-        if (alloc_hsk)
-            wptr_next = alloc_slot + 1'b1;
-
         entry_count_next = entry_count;
         unique case ({alloc_hsk, free_hsk})
             2'b10: entry_count_next = entry_count + 1'b1;
@@ -113,7 +103,7 @@ module ostk #(
 
     assign empty = entry_count == '0;
     assign full = entry_count == (PTR_W + 1)'(DEPTH);
-    assign alloc_rdy = alloc_found;
+    assign alloc_rdy = !free_empty;
     assign slot_vld = vld_mem;
 
     for (genvar i = 0; i < DEPTH; i++) begin
@@ -125,11 +115,20 @@ module ostk #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             vld_mem <= '0;
-            wptr <= '0;
+            free_rptr <= '0;
+            free_wptr <= (PTR_W + 1)'(DEPTH);
             entry_count <= '0;
-            for (int i = 0; i < DEPTH; i++)
+            for (int i = 0; i < DEPTH; i++) begin
+                free_mem[i] <= PTR_W'(i);
                 older_mem[i] <= '0;
+            end
         end else begin
+            if (alloc_hsk)
+                free_rptr <= free_rptr + 1'b1;
+            if (free_hsk) begin
+                free_mem[free_wptr[PTR_W-1:0]] <= free_slot;
+                free_wptr <= free_wptr + 1'b1;
+            end
             if (free_hsk) begin
                 for (int i = 0; i < DEPTH; i++) begin
                     older_mem[free_slot][i] <= 1'b0;
@@ -150,7 +149,6 @@ module ostk #(
                 ctx_mem[slot_wr_idx] <= slot_wr_ctx;
             if (free_hsk)
                 vld_mem[free_slot] <= 1'b0;
-            wptr <= wptr_next;
             entry_count <= entry_count_next;
         end
     end
@@ -161,6 +159,12 @@ module ostk #(
             assert (vld_mem[free_slot])
                 else $fatal(1, "ostk free invalid slot");
         end
+        if (rst_n && free_hsk) begin
+            assert (!free_full || alloc_hsk)
+                else $fatal(1, "ostk free-list overflow");
+        end
     end
 `endif
+
+    wire unused = free_full;
 endmodule

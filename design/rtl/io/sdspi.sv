@@ -23,6 +23,7 @@ module sdspi #(
 
     typedef enum logic [2:0] {
         STATE_IDLE,
+        STATE_CALC_LEN,
         STATE_WRITE_PREFETCH,
         STATE_SEND_CMD,
         STATE_WAIT_CMD_RSP,
@@ -68,6 +69,11 @@ module sdspi #(
     logic [31:0] protocol_offset;
     state_t state;
     dma_state_t dma_state;
+    logic calc_write_data;
+    logic [5:0] calc_bit;
+    logic [63:0] calc_multiplicand;
+    logic [31:0] calc_multiplier;
+    logic [63:0] calc_product;
     logic [31:0] dma_offset;
     logic [31:0] dma_sync_offset;
     logic [31:0] burst_bytes;
@@ -163,6 +169,11 @@ module sdspi #(
             protocol_offset <= '0;
             state <= STATE_IDLE;
             dma_state <= DMA_IDLE;
+            calc_write_data <= 1'b0;
+            calc_bit <= '0;
+            calc_multiplicand <= '0;
+            calc_multiplier <= '0;
+            calc_product <= '0;
             dma_offset <= '0;
             dma_sync_offset <= '0;
             burst_bytes <= '0;
@@ -580,6 +591,31 @@ module sdspi #(
                 end
             end
 
+            if (state == STATE_CALC_LEN) begin
+                logic [63:0] next_product;
+                next_product = calc_product;
+                if (calc_multiplier[0])
+                    next_product = next_product + calc_multiplicand;
+
+                calc_product <= next_product;
+                calc_multiplicand <= calc_multiplicand << 1;
+                calc_multiplier <= calc_multiplier >> 1;
+                calc_bit <= calc_bit + 1'b1;
+
+                if (calc_bit == 6'd31) begin
+                    if (next_product == 0 ||
+                        next_product > {32'b0, `SDSPI_MAX_DATA_SIZE} ||
+                        dma_addr[1:0] != 0 || next_product[1:0] != 0) begin
+                        finish_command(1'b1, 1'b1,
+                            `SDSPI_CMD_STATUS_PARAMETER, 0);
+                    end else begin
+                        data_len <= next_product[31:0];
+                        state <= calc_write_data ? STATE_WRITE_PREFETCH :
+                            STATE_SEND_CMD;
+                    end
+                end
+            end
+
             if (apb_req_hsk) begin
                 apb_rsp_pending <= 1'b1;
                 apb_rsp_data <= apb_read_data;
@@ -608,11 +644,9 @@ module sdspi #(
                             end else begin
                                 logic has_data;
                                 logic write_data;
-                                logic [63:0] length;
                                 has_data = |(apb_merged & `SDSPI_CMD_CTRL_DATA);
                                 write_data = |(apb_merged &
                                     `SDSPI_CMD_CTRL_WRITE);
-                                length = block_size * block_count;
                                 cmd_ctrl <= apb_merged &
                                     ~`SDSPI_CMD_CTRL_START;
                                 cmd_status <= 0;
@@ -625,6 +659,11 @@ module sdspi #(
                                 dma_offset <= 0;
                                 dma_sync_offset <= 0;
                                 dma_state <= DMA_IDLE;
+                                calc_write_data <= write_data;
+                                calc_bit <= '0;
+                                calc_multiplicand <= {32'b0, block_size};
+                                calc_multiplier <= block_count;
+                                calc_product <= '0;
                                 clear_fifo();
                                 if ((ctrl & `SDSPI_CTRL_ENABLE) == 0 ||
                                     !card_present) begin
@@ -633,16 +672,11 @@ module sdspi #(
                                 end else if (write_data && !has_data) begin
                                     finish_command(1'b0, 1'b1,
                                         `SDSPI_CMD_STATUS_PARAMETER, 0);
-                                end else if (has_data &&
-                                    (length == 0 ||
-                                     length > 64'd65536 ||
-                                     dma_addr[1:0] != 0 || length[1:0] != 0)) begin
-                                    finish_command(1'b1, 1'b1,
-                                        `SDSPI_CMD_STATUS_PARAMETER, 0);
+                                end else if (has_data) begin
+                                    state <= STATE_CALC_LEN;
                                 end else begin
-                                    data_len <= has_data ? length[31:0] : 0;
-                                    state <= write_data ? STATE_WRITE_PREFETCH :
-                                        STATE_SEND_CMD;
+                                    data_len <= '0;
+                                    state <= STATE_SEND_CMD;
                                 end
                             end
                         end

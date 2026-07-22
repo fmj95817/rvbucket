@@ -171,6 +171,10 @@ module axi2bti #(
     rd_ctx_t rd_out_ctx;
     logic wr_out_vld;
     wr_ctx_t wr_out_ctx;
+    logic ar_wrap_rsp_vld;
+    axi4_ar_pkt_t ar_wrap_rsp_pkt;
+    logic aw_wrap_rsp_vld;
+    axi4_aw_pkt_t aw_wrap_rsp_pkt;
 
     logic ar_wrap;
     logic aw_wrap;
@@ -180,6 +184,8 @@ module axi2bti #(
     logic bti_rsp_hsk;
     logic r_hsk;
     logic b_hsk;
+    logic ar_wrap_rsp_hsk;
+    logic aw_wrap_rsp_hsk;
 
     function automatic logic [31:0] next_addr(
         input logic [31:0] addr,
@@ -466,11 +472,9 @@ module axi2bti #(
     assign ar_alloc_hsk = ar_fifo_rd_vld && ar_fifo_rd_rdy && !ar_wrap;
     assign aw_alloc_hsk = aw_fifo_rd_vld && aw_fifo_rd_rdy && !aw_wrap;
 
-    assign ar_fifo_rd_rdy = ar_wrap ?
-        (axi4_r_mst.rdy && !rd_out_found) :
+    assign ar_fifo_rd_rdy = ar_wrap ? !ar_wrap_rsp_vld :
         rd_ost_alloc_rdy;
-    assign aw_fifo_rd_rdy = aw_wrap ?
-        (axi4_b_mst.rdy && !wr_out_vld) :
+    assign aw_fifo_rd_rdy = aw_wrap ? !aw_wrap_rsp_vld :
         wr_ost_alloc_rdy;
     assign w_fifo_rd_rdy = issue_sel_wr && issue_stage_rdy;
 
@@ -484,10 +488,9 @@ module axi2bti #(
 
     assign bti_rsp_slv.rdy = beat_ost_lookup_vld;
 
-    assign axi4_r_mst.vld = rd_out_found ||
-        (ar_fifo_rd_vld && ar_wrap && !rd_out_found);
+    assign axi4_r_mst.vld = rd_out_found || ar_wrap_rsp_vld;
     assign axi4_r_mst.pkt.id = rd_out_found ? rd_out_ctx.axid :
-        ar_pkt.id;
+        ar_wrap_rsp_pkt.id;
     assign axi4_r_mst.pkt.data = rd_out_found ?
         (rd_out_ctx.rsp_ok ? rd_out_ctx.rsp_data : 32'h0) : 32'h0;
     assign axi4_r_mst.pkt.resp = rd_out_found ?
@@ -497,12 +500,16 @@ module axi2bti #(
         (rd_out_ctx.beat_idx == rd_out_ctx.axlen || !rd_out_ctx.rsp_ok) :
         1'b1;
 
-    assign axi4_b_mst.vld = wr_out_vld ||
-        (aw_fifo_rd_vld && aw_wrap && !wr_out_vld);
-    assign axi4_b_mst.pkt.id = wr_out_vld ? wr_out_ctx.axid : aw_pkt.id;
+    assign axi4_b_mst.vld = wr_out_vld || aw_wrap_rsp_vld;
+    assign axi4_b_mst.pkt.id = wr_out_vld ? wr_out_ctx.axid :
+        aw_wrap_rsp_pkt.id;
     assign axi4_b_mst.pkt.resp = wr_out_vld ?
         (wr_out_ctx.b_ok ? AXI4_B_RESP_OKAY : AXI4_B_RESP_SLVERR) :
         AXI4_B_RESP_SLVERR;
+    assign ar_wrap_rsp_hsk = ar_wrap_rsp_vld && !rd_out_found &&
+        axi4_r_mst.rdy;
+    assign aw_wrap_rsp_hsk = aw_wrap_rsp_vld && !wr_out_vld &&
+        axi4_b_mst.rdy;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -514,7 +521,23 @@ module axi2bti #(
             rd_out_stage_vld <= 1'b0;
             rd_out_stage_slot <= '0;
             rd_out_stage_ctx <= '0;
+            ar_wrap_rsp_vld <= 1'b0;
+            ar_wrap_rsp_pkt <= '0;
+            aw_wrap_rsp_vld <= 1'b0;
+            aw_wrap_rsp_pkt <= '0;
         end else begin
+            if (ar_wrap_rsp_hsk)
+                ar_wrap_rsp_vld <= 1'b0;
+            if (!ar_wrap_rsp_vld && ar_fifo_rd_vld && ar_wrap) begin
+                ar_wrap_rsp_vld <= 1'b1;
+                ar_wrap_rsp_pkt <= ar_pkt;
+            end
+            if (aw_wrap_rsp_hsk)
+                aw_wrap_rsp_vld <= 1'b0;
+            if (!aw_wrap_rsp_vld && aw_fifo_rd_vld && aw_wrap) begin
+                aw_wrap_rsp_vld <= 1'b1;
+                aw_wrap_rsp_pkt <= aw_pkt;
+            end
             if (r_hsk)
                 rd_out_stage_vld <= 1'b0;
             if (rd_out_stage_fill_hsk) begin

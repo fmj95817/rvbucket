@@ -23,6 +23,14 @@ module soc(
     sdspi_cmd_if_t.mst sdspi_cmd_mst,
     sdspi_data_if_t.slv sdspi_data_slv
 );
+`ifdef VERILATOR
+    localparam logic [31:0] MM_GST_BASE[5] = '{32'h40000000, 32'h80000000, 32'h00000000, 32'h00000000, 32'h00000000};
+    localparam logic [31:0] MM_GST_SIZE[5] = '{32'h40000000, 32'h02000000, 32'h00000000, 32'h00000000, 32'h00000000};
+`else
+    localparam logic [31:0] MM_GST_BASE[2] = '{32'h40000000, 32'h80000000};
+    localparam logic [31:0] MM_GST_SIZE[2] = '{32'h40000000, 32'h02000000};
+`endif
+
     apb_req_if_t peri_req();
     apb_rsp_if_t peri_rsp();
     apb_req_if_t io_req();
@@ -37,6 +45,8 @@ module soc(
     axi4_b_if_t mm_gst_b[2]();
     axi4_ar_if_t mm_gst_ar[2]();
     axi4_r_if_t mm_gst_r[2]();
+    axi4_b_if_t ddr_mux_b();
+    axi4_r_if_t ddr_mux_r();
     axi4_aw_if_t io_dma_aw();
     axi4_w_if_t io_dma_w();
     axi4_b_if_t io_dma_b();
@@ -51,6 +61,7 @@ module soc(
     ext_irq_if_t gpio_irq();
     ext_irq_if_t gtimer_irq();
     ext_irq_if_t sdspi_irq();
+    sdspi_cmd_if_t sdspi_cmd();
     logic [`RVB_PCM_COUNTER_NUM-1:0] pcm_inc_en;
     perf_soc_if_t perf_soc_if();
     perf_rv32g_if_t perf_rv32g_if();
@@ -99,15 +110,8 @@ module soc(
         .GST_NUM  (2),
         .STG_FIFO_DEPTH (`SOC_BUS_STG_FIFO_DEPTH),
         .OST_DEPTH       (`SOC_BUS_OST_DEPTH),
-`ifdef VERILATOR
-        .GST_BASE ('{32'h40000000, 32'h80000000, 32'h00000000,
-            32'h00000000, 32'h00000000}),
-        .GST_SIZE ('{32'h40000000, 32'h02000000, 32'h00000000,
-            32'h00000000, 32'h00000000})
-`else
-        .GST_BASE ('{32'h40000000, 32'h80000000}),
-        .GST_SIZE ('{32'h40000000, 32'h02000000})
-`endif
+        .GST_BASE (MM_GST_BASE),
+        .GST_SIZE (MM_GST_SIZE)
     ) u_mm_axi_demux(
         .clk                (clk),
         .rst_n              (rst_n),
@@ -147,9 +151,37 @@ module soc(
         .host1_axi4_r_mst(io_dma_r),
         .gst_axi4_aw_mst  (ddr_axi4_aw_mst),
         .gst_axi4_w_mst   (ddr_axi4_w_mst),
-        .gst_axi4_b_slv   (ddr_axi4_b_slv),
+        .gst_axi4_b_slv   (ddr_mux_b),
         .gst_axi4_ar_mst  (ddr_axi4_ar_mst),
-        .gst_axi4_r_slv   (ddr_axi4_r_slv)
+        .gst_axi4_r_slv   (ddr_mux_r)
+    );
+
+    rdy_reg_slice #(
+        .DW ($bits(ddr_axi4_b_slv.pkt))
+    ) u_ddr_b_reg_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (1'b0),
+        .src_vld  (ddr_axi4_b_slv.vld),
+        .src_rdy  (ddr_axi4_b_slv.rdy),
+        .src_data (ddr_axi4_b_slv.pkt),
+        .dst_vld  (ddr_mux_b.vld),
+        .dst_rdy  (ddr_mux_b.rdy),
+        .dst_data (ddr_mux_b.pkt)
+    );
+
+    rdy_reg_slice #(
+        .DW ($bits(ddr_axi4_r_slv.pkt))
+    ) u_ddr_r_reg_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (1'b0),
+        .src_vld  (ddr_axi4_r_slv.vld),
+        .src_rdy  (ddr_axi4_r_slv.rdy),
+        .src_data (ddr_axi4_r_slv.pkt),
+        .dst_vld  (ddr_mux_r.vld),
+        .dst_rdy  (ddr_mux_r.rdy),
+        .dst_data (ddr_mux_r.pkt)
     );
 
     axi_link u_flash_axi_link(
@@ -189,7 +221,21 @@ module soc(
         .dma_axi4_aw_mst(io_dma_aw), .dma_axi4_w_mst(io_dma_w),
         .dma_axi4_b_slv(io_dma_b), .dma_axi4_ar_mst(io_dma_ar),
         .dma_axi4_r_slv(io_dma_r), .sdspi_irq_mst(sdspi_irq),
-        .sdspi_cmd_mst(sdspi_cmd_mst), .sdspi_data_slv(sdspi_data_slv)
+        .sdspi_cmd_mst(sdspi_cmd), .sdspi_data_slv(sdspi_data_slv)
+    );
+
+    bidir_reg_slice #(
+        .DW ($bits(sdspi_cmd_mst.pkt))
+    ) u_sdspi_cmd_reg_slice(
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .clear    (1'b0),
+        .src_vld  (sdspi_cmd.vld),
+        .src_rdy  (sdspi_cmd.rdy),
+        .src_data (sdspi_cmd.pkt),
+        .dst_vld  (sdspi_cmd_mst.vld),
+        .dst_rdy  (sdspi_cmd_mst.rdy),
+        .dst_data (sdspi_cmd_mst.pkt)
     );
 
     assign perf_soc_if.pkt.cycle = 1'b1;

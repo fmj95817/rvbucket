@@ -42,6 +42,19 @@ module cbi(
     localparam D_GST_NUM = 3;
     localparam logic [31:0] BOOT_ROM_SIZE =
         32'd1 << (`BOOT_ROM_WORD_AW + 2);
+`ifdef VERILATOR
+    localparam logic [31:0] I_AXI_GST_BASE[5] = '{32'h00000000, 32'h40000000, 32'h00000000, 32'h00000000, 32'h00000000};
+    localparam logic [31:0] I_AXI_GST_SIZE[5] = '{BOOT_ROM_SIZE, 32'h80000000, 32'h00000000, 32'h00000000, 32'h00000000};
+    localparam logic [31:0] D_AXI_GST_BASE[5] = '{32'h00000000, 32'h40000000, 32'h30000000, 32'h00000000, 32'h00000000};
+    localparam logic [31:0] D_AXI_GST_SIZE[5] = '{BOOT_ROM_SIZE, 32'h80000000, 32'h02000000, 32'h00000000, 32'h00000000};
+`else
+    localparam logic [31:0] I_AXI_GST_BASE[I_GST_NUM] = '{32'h00000000, 32'h40000000};
+    localparam logic [31:0] I_AXI_GST_SIZE[I_GST_NUM] = '{BOOT_ROM_SIZE, 32'h80000000};
+    localparam logic [31:0] D_AXI_GST_BASE[D_GST_NUM] = '{32'h00000000, 32'h40000000, 32'h30000000};
+    localparam logic [31:0] D_AXI_GST_SIZE[D_GST_NUM] = '{BOOT_ROM_SIZE, 32'h80000000, 32'h02000000};
+`endif
+    localparam logic [31:0] CFG_APB_GST_BASE[4] = '{`PERI_BASE, `IO_SUBSYS_BASE, `ACLINT_BASE, `PLIC_BASE};
+    localparam logic [31:0] CFG_APB_GST_SIZE[4] = '{`PERI_SIZE, `IO_SUBSYS_SIZE, `ACLINT_SIZE, `PLIC_SIZE};
 
     axi4_aw_if_t i_aw[I_GST_NUM]();
     axi4_w_if_t i_w[I_GST_NUM]();
@@ -93,15 +106,8 @@ module cbi(
         .GST_NUM    (I_GST_NUM),
         .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
         .OST_DEPTH       (`CORE_BUS_OST_DEPTH),
-`ifdef VERILATOR
-        .GST_BASE   ('{32'h00000000, 32'h40000000, 32'h00000000,
-            32'h00000000, 32'h00000000}),
-        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000, 32'h00000000,
-            32'h00000000, 32'h00000000})
-`else
-        .GST_BASE   ('{32'h00000000, 32'h40000000}),
-        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000})
-`endif
+        .GST_BASE   (I_AXI_GST_BASE),
+        .GST_SIZE   (I_AXI_GST_SIZE)
     ) u_i_axi_demux(
         .clk                (clk),
         .rst_n              (rst_n),
@@ -122,15 +128,8 @@ module cbi(
         .GST_NUM    (D_GST_NUM),
         .STG_FIFO_DEPTH (`CORE_BUS_STG_FIFO_DEPTH),
         .OST_DEPTH       (`CORE_BUS_OST_DEPTH),
-`ifdef VERILATOR
-        .GST_BASE   ('{32'h00000000, 32'h40000000, 32'h30000000,
-            32'h00000000, 32'h00000000}),
-        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000, 32'h02000000,
-            32'h00000000, 32'h00000000})
-`else
-        .GST_BASE   ('{32'h00000000, 32'h40000000, 32'h30000000}),
-        .GST_SIZE   ('{BOOT_ROM_SIZE, 32'h80000000, 32'h02000000})
-`endif
+        .GST_BASE   (D_AXI_GST_BASE),
+        .GST_SIZE   (D_AXI_GST_SIZE)
     ) u_d_axi_demux(
         .clk                (clk),
         .rst_n              (rst_n),
@@ -221,8 +220,8 @@ module cbi(
 
     apb_demux #(
         .GST_NUM  (4),
-        .GST_BASE ('{`PERI_BASE, `IO_SUBSYS_BASE, `ACLINT_BASE, `PLIC_BASE}),
-        .GST_SIZE ('{`PERI_SIZE, `IO_SUBSYS_SIZE, `ACLINT_SIZE, `PLIC_SIZE})
+        .GST_BASE (CFG_APB_GST_BASE),
+        .GST_SIZE (CFG_APB_GST_SIZE)
     ) u_cfg_apb_demux(
         .host_apb_req_slv (cfg_req),
         .host_apb_rsp_mst (cfg_rsp),

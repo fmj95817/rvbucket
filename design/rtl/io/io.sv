@@ -15,18 +15,21 @@ module io(
     sdspi_cmd_if_t.mst sdspi_cmd_mst,
     sdspi_data_if_t.slv sdspi_data_slv
 );
+`ifdef VERILATOR
+    localparam logic [31:0] SDSPI_GST_BASE[4] = '{`IO_SUBSYS_BASE + `IO_SDSPI_OFFSET, 0, 0, 0};
+    localparam logic [31:0] SDSPI_GST_SIZE[4] = '{`IO_SDSPI_SIZE, 0, 0, 0};
+`else
+    localparam logic [31:0] SDSPI_GST_BASE[1] = '{`IO_SUBSYS_BASE + `IO_SDSPI_OFFSET};
+    localparam logic [31:0] SDSPI_GST_SIZE[1] = '{`IO_SDSPI_SIZE};
+`endif
+
     apb_req_if_t sdspi_req[1]();
     apb_rsp_if_t sdspi_rsp[1]();
 
     apb_demux #(
         .GST_NUM(1),
-`ifdef VERILATOR
-        .GST_BASE('{`IO_SUBSYS_BASE + `IO_SDSPI_OFFSET, 0, 0, 0}),
-        .GST_SIZE('{`IO_SDSPI_SIZE, 0, 0, 0})
-`else
-        .GST_BASE('{`IO_SUBSYS_BASE + `IO_SDSPI_OFFSET}),
-        .GST_SIZE('{`IO_SDSPI_SIZE})
-`endif
+        .GST_BASE(SDSPI_GST_BASE),
+        .GST_SIZE(SDSPI_GST_SIZE)
     ) u_io_apb_demux(
         .host_apb_req_slv(apb_req_slv),
         .host_apb_rsp_mst(apb_rsp_mst),

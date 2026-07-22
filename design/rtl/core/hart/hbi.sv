@@ -25,6 +25,14 @@ module hbi #(
     } fch_req_pkt_t;
 
     typedef struct packed {
+        hart_expt_type_t expt_type;
+        hart_expt_cause_t cause;
+        logic [1:0] priv;
+        logic [31:0] pc;
+        logic [31:0] tval;
+    } hart_expt_pkt_t;
+
+    typedef struct packed {
         logic [31:0] ir;
         logic ok;
         logic expt;
@@ -93,6 +101,10 @@ module hbi #(
     logic i_wait_found;
     logic [I_OST_SLOT_W-1:0] i_wait_slot;
     i_ost_ctx_t i_wait_ctx;
+    logic i_expt_q_vld;
+    logic i_expt_take;
+    hart_expt_pkt_t i_expt_q_pkt;
+    hart_expt_pkt_t i_expt_pkt;
     logic i_expt_found;
     logic [I_OST_SLOT_W-1:0] i_expt_slot;
     i_ost_ctx_t i_expt_ctx;
@@ -118,7 +130,7 @@ module hbi #(
     wire d_req_hsk = d_bti_req_mst.vld && d_bti_req_mst.rdy;
     wire i_rsp_hsk = i_bti_rsp_slv.vld && i_bti_rsp_slv.rdy;
     wire d_rsp_hsk = d_bti_rsp_slv.vld && d_bti_rsp_slv.rdy;
-    wire i_expt_vld = mmu_fch_expt_slv.vld;
+    wire i_expt_vld = i_expt_q_vld;
     wire fch_rsp_hsk = fch_rsp_mst.vld && fch_rsp_mst.rdy;
     wire ldst_rsp_hsk = ldst_rsp_mst.vld && ldst_rsp_mst.rdy;
 
@@ -126,6 +138,7 @@ module hbi #(
     assign ldst_fifo_wr_data = ldst_req_slv.pkt;
     assign fch_req_pkt = fch_fifo_rd_data;
     assign ldst_req_pkt = ldst_fifo_rd_data;
+    assign i_expt_pkt = i_expt_q_pkt;
     assign i_ost_head_ctx = i_ost_head_ctx_raw;
     assign d_ost_head_ctx = d_ost_head_ctx_raw;
     assign i_ost_slot_wr_ctx_raw = i_ost_slot_wr_ctx;
@@ -228,6 +241,18 @@ module hbi #(
         .full          ()
     );
 
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            i_expt_q_vld <= 1'b0;
+            i_expt_q_pkt <= '0;
+        end else if (!i_expt_q_vld || i_expt_take) begin
+            i_expt_q_vld <= mmu_fch_expt_slv.vld;
+            if (mmu_fch_expt_slv.vld) begin
+                i_expt_q_pkt <= mmu_fch_expt_slv.pkt;
+            end
+        end
+    end
+
     always_comb begin
         i_wait_found = 1'b0;
         i_wait_slot = '0;
@@ -255,7 +280,7 @@ module hbi #(
             idx = i_ost_head_slot + I_OST_SLOT_W'(i);
             ctx = i_ctx_at(i_ost_slot_ctx_flat, idx);
             if (!i_expt_found && i_ost_slot_vld[idx] && !ctx.rsp_vld &&
-                ctx.pc == mmu_fch_expt_slv.pkt.pc) begin
+                ctx.pc == i_expt_pkt.pc) begin
                 i_expt_found = 1'b1;
                 i_expt_slot = idx;
                 i_expt_ctx = ctx;
@@ -291,6 +316,9 @@ module hbi #(
         if (rst_n && i_expt_vld) begin
             assert (i_expt_found)
                 else $fatal(1, "HBI I exception without outstanding entry");
+        end
+        if (rst_n && mmu_fch_expt_slv.vld && i_expt_q_vld && !i_expt_take) begin
+            $fatal(1, "HBI I exception stage overflow");
         end
         if (rst_n && d_bti_rsp_slv.vld) begin
             assert (d_bti_rsp_slv.pkt.trans_id == `LDST_TRANS_ID)
@@ -334,6 +362,7 @@ module hbi #(
     assign i_bti_rsp_slv.rdy = i_wait_found && !i_expt_vld;
     assign i_ost_slot_wr_vld = i_expt_vld || i_rsp_hsk;
     assign i_ost_slot_wr_idx = i_expt_vld ? i_expt_slot : i_wait_slot;
+    assign i_expt_take = i_expt_vld && i_expt_found;
     always_comb begin
         if (i_expt_vld) begin
             i_ost_slot_wr_ctx = i_expt_ctx;
@@ -341,10 +370,9 @@ module hbi #(
             i_ost_slot_wr_ctx.rsp.ir = '0;
             i_ost_slot_wr_ctx.rsp.ok = 1'b0;
             i_ost_slot_wr_ctx.rsp.expt = 1'b1;
-            i_ost_slot_wr_ctx.rsp.cause = {27'b0,
-                mmu_fch_expt_slv.pkt.cause};
-            i_ost_slot_wr_ctx.rsp.priv = mmu_fch_expt_slv.pkt.priv;
-            i_ost_slot_wr_ctx.rsp.tval = mmu_fch_expt_slv.pkt.tval;
+            i_ost_slot_wr_ctx.rsp.cause = {27'b0, i_expt_pkt.cause};
+            i_ost_slot_wr_ctx.rsp.priv = i_expt_pkt.priv;
+            i_ost_slot_wr_ctx.rsp.tval = i_expt_pkt.tval;
         end else begin
             i_ost_slot_wr_ctx = i_wait_ctx;
             i_ost_slot_wr_ctx.rsp_vld = 1'b1;

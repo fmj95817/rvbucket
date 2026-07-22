@@ -230,6 +230,8 @@ module l1 #(
     logic front_active_conflict;
     logic active_hit;
     logic [WAY_W-1:0] active_hit_way;
+    logic active_cmo_hit;
+    logic [WAY_W-1:0] active_cmo_hit_way;
     logic active_found_invalid;
     logic [WAY_W-1:0] active_victim_way;
     logic active_victim_dirty;
@@ -638,6 +640,8 @@ module l1 #(
     always_comb begin
         active_hit = 1'b0;
         active_hit_way = '0;
+        active_cmo_hit = 1'b0;
+        active_cmo_hit_way = '0;
         active_found_invalid = 1'b0;
         active_victim_way = replace_way[active_cur_set];
         for (int unsigned i = 0; i < WAY_NUM; i++) begin
@@ -649,6 +653,11 @@ module l1 #(
             if (!active_found_invalid && !valid_ram[i][active_cur_set]) begin
                 active_found_invalid = 1'b1;
                 active_victim_way = way_idx(i);
+            end
+            if (!active_cmo_hit && valid_ram[i][active_set] &&
+                tag_ram[i][active_set] == active_tag) begin
+                active_cmo_hit = 1'b1;
+                active_cmo_hit_way = way_idx(i);
             end
         end
         active_victim_dirty =
@@ -1229,6 +1238,11 @@ module l1 #(
                     active_rsp_data <= '0;
                     active_ok <= 1'b1;
                     active_precounted_hit <= 1'b0;
+                    active_set <= req_set(stg_req.addr);
+                    active_tag <= req_tag(stg_req.addr);
+                    active_line_addr <= line_addr(stg_req.addr);
+                    if (req_is_cmo(stg_req.cmd))
+                        wb_line_addr <= line_addr(stg_req.addr);
                     miss_state <= req_is_cmo(stg_req.cmd) ?
                         M_CMO_LOOKUP : M_LOOKUP;
                 end
@@ -1347,21 +1361,17 @@ module l1 #(
                 end
             end
             M_CMO_LOOKUP: begin
-                active_set <= active_cur_set;
-                active_tag <= active_cur_tag;
-                active_line_addr <= active_cur_line;
-                if (active_hit) begin
-                    active_way <= active_hit_way;
+                if (active_cmo_hit) begin
+                    active_way <= active_cmo_hit_way;
                     active_way_vld <= 1'b1;
                     if (cmo_cleans(active_req.cmd) &&
-                        dirty_ram[active_hit_way][active_cur_set] && !RO) begin
-                        wb_line_addr <= active_cur_line;
+                        dirty_ram[active_cmo_hit_way][active_set] && !RO) begin
                         beat_idx <= '0;
                         miss_state <= M_CMO_WB_AW;
                     end else begin
-                        dirty_ram[active_hit_way][active_cur_set] <= 1'b0;
+                        dirty_ram[active_cmo_hit_way][active_set] <= 1'b0;
                         if (cmo_invalidates(active_req.cmd))
-                            valid_ram[active_hit_way][active_cur_set] <= 1'b0;
+                            valid_ram[active_cmo_hit_way][active_set] <= 1'b0;
                         miss_state <= M_CMO_L2_AR;
                     end
                 end else begin

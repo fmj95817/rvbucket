@@ -204,11 +204,14 @@ if {${use_operating_conditions}} {
 set_fix_multiple_port_nets -all -buffer_constants
 set_fix_hold [get_clocks ${clock_name}]
 set_critical_range [expr ${critical_range_ratio} * ${clock_period}] [current_design]
+set_cost_priority -design_rules
 
-# This is a pre-synthesis sanity flow. Keep runtime predictable and preserve
-# enough hierarchy for RTL debug; use a separate PPA flow for final high-effort
-# compile_ultra exploration.
-dc_must_bool "compile failed" {compile -map_effort medium -area_effort none}
+# This is a pre-synthesis sanity flow. Keep hierarchy for RTL debug, but use
+# high map effort so DC has enough room to resolve borderline timing paths.
+dc_must_bool "compile failed" {compile -map_effort high -area_effort none}
+dc_must_bool "incremental compile failed" {
+    compile -incremental_mapping -map_effort high -area_effort none
+}
 
 redirect -file "${rpt_dir}/${top_module}.check_design.rpt" {
     check_design
